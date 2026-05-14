@@ -2,7 +2,7 @@
 
 /* User/profile avatar. */
 @recipe avatar {
-  inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-zinc-100 text-sm font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300
+  inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground
 }
 
 /* Small avatar. */

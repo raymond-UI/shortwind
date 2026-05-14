@@ -34,6 +34,47 @@ export function transformContent(
   });
 }
 
+// Recipe expansions only ever appear in build-time-transformed JSX/HTML, which
+// Tailwind v4's content scanner never reads — it walks files on disk. We hand
+// Tailwind the bounded candidate set via `@source inline(...)`, its official
+// safelist primitive for dynamic class generation. JIT still applies; we just
+// add registry-derived candidates to the scan results.
+export function computeSafelistTokens(registry: Registry): string[] {
+  const set = new Set<string>();
+  for (const tokens of Object.values(registry.flattened)) {
+    for (const t of tokens) set.add(t);
+  }
+  return [...set].sort();
+}
+
+export function buildSourceDirective(registry: Registry): string {
+  const tokens = computeSafelistTokens(registry);
+  if (tokens.length === 0) return "";
+  return `@source inline("${tokens.join(" ")}");`;
+}
+
+export const SHORTWIND_INJECT_MARKER = "/* shortwind:source-inject */";
+
+const TAILWIND_IMPORT_RE = /@import\s+["']tailwindcss["'][^;\n]*;?/;
+
+export function hasTailwindImport(css: string): boolean {
+  return TAILWIND_IMPORT_RE.test(css);
+}
+
+export function injectSourceDirective(css: string, registry: Registry): string {
+  if (css.includes(SHORTWIND_INJECT_MARKER)) return css;
+  const directive = buildSourceDirective(registry);
+  if (!directive) return css;
+  const m = css.match(TAILWIND_IMPORT_RE);
+  if (!m) return css;
+  const insertAt = (m.index ?? 0) + m[0].length;
+  return (
+    css.slice(0, insertAt) +
+    `\n${SHORTWIND_INJECT_MARKER}\n${directive}\n` +
+    css.slice(insertAt)
+  );
+}
+
 export function loadRegistryFromDir(recipesDir: string): Registry {
   if (!existsSync(recipesDir)) return { families: {}, flattened: {} };
   const files = readdirSync(recipesDir)

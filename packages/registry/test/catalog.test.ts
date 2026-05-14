@@ -97,7 +97,7 @@ describe("catalog", () => {
         // accept if the family is implied by family-specific vocabulary we know
         const familyKnown: Record<string, string[]> = {
           layout: ["stack", "row", "grid", "center", "full"],
-          text: ["heading", "body", "muted", "label", "caption", "link"],
+          text: ["heading", "body", "lead", "muted", "label", "caption", "link"],
           form: ["input", "textarea", "select", "checkbox", "radio", "field", "fieldset", "label", "help"],
           surface: ["surface", "container", "divider"],
           feedback: ["alert", "callout", "toast", "banner"],

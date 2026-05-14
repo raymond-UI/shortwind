@@ -24,6 +24,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.36.4",
     "@shortwind/vite": "workspace:*",
+    "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^25.7.0",
     "@types/react": "^19.2.14",

@@ -25,7 +25,19 @@ export const Route = createRootRoute({
           "Shortwind expands @recipe shortcuts into Tailwind class clusters at build time. Smaller LLM artifacts, identical CSS.",
       },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap",
+      },
+    ],
   }),
   component: RootComponent,
 });
@@ -46,9 +58,9 @@ function RootComponent() {
 
 function SiteHeader() {
   return (
-    <header className="@surface border-b border-zinc-200 dark:border-zinc-800">
+    <header className="@surface border-b border-border">
       <div className="@container @row-between py-4">
-        <Link to="/" className="@heading-sm text-lg tracking-tight hover:text-zinc-700 dark:hover:text-zinc-300">
+        <Link to="/" className="@heading-sm text-lg tracking-tight hover:text-primary">
           Shortwind
         </Link>
         <nav className="@nav">
@@ -69,15 +81,36 @@ function SiteHeader() {
           >
             GitHub
           </a>
+          <ThemeToggle />
         </nav>
       </div>
     </header>
   );
 }
 
+function ThemeToggle() {
+  return (
+    <button
+      type="button"
+      aria-label="Toggle theme"
+      className="@btn-ghost-sm"
+      onClick={() => {
+        const root = document.documentElement;
+        const next = root.classList.toggle("dark") ? "dark" : "light";
+        try {
+          localStorage.setItem("theme", next);
+        } catch {}
+      }}
+    >
+      <span className="hidden dark:inline">☀</span>
+      <span className="inline dark:hidden">☾</span>
+    </button>
+  );
+}
+
 function SiteFooter() {
   return (
-    <footer className="@surface-muted border-t border-zinc-200 dark:border-zinc-800">
+    <footer className="@surface-muted border-t border-border">
       <div className="@container flex flex-col items-start justify-between gap-3 py-6 sm:flex-row sm:items-center">
         <p className="@muted">© {new Date().getFullYear()} Shortwind</p>
         <nav className="@row gap-4">
@@ -103,6 +136,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var s=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;if(s==='dark'||(s==null&&m))document.documentElement.classList.add('dark')}catch(e){}})();",
+          }}
+        />
       </head>
       <body>
         {children}

@@ -2,17 +2,17 @@
 
 /* Default page/section surface. */
 @recipe surface {
-  bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100
+  bg-background text-foreground
 }
 
 /* Muted surface — secondary background. */
 @recipe surface-muted {
-  bg-zinc-50 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100
+  bg-muted text-foreground
 }
 
 /* Accent surface — soft brand background. */
 @recipe surface-accent {
-  bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-100
+  bg-accent text-accent-foreground
 }
 
 /* Standard content container with max width. */
@@ -27,10 +27,10 @@
 
 /* Horizontal divider line. */
 @recipe divider-h {
-  h-px w-full bg-zinc-200 dark:bg-zinc-800
+  h-px w-full bg-border
 }
 
 /* Vertical divider line. */
 @recipe divider-v {
-  h-full w-px bg-zinc-200 dark:bg-zinc-800
+  h-full w-px bg-border
 }

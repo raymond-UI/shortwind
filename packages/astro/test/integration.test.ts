@@ -55,7 +55,9 @@ describe("astro integration", () => {
     const integration = shortwind({ cwd: dir });
     const config = runSetup(integration, new URL(`file://${dir}/`));
     const names = config.vite.plugins.map((p) => p.name).sort();
-    expect(names).toEqual(["shortwind:transform", "shortwind:watcher"].sort());
+    expect(names).toEqual(
+      ["shortwind:transform", "shortwind:css-source", "shortwind:watcher"].sort(),
+    );
   });
 
   it("derives recipesDir from astro project root when not specified", async () => {

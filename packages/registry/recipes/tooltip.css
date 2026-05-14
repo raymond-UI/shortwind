@@ -2,5 +2,5 @@
 
 /* Floating tooltip bubble. */
 @recipe tooltip {
-  pointer-events-none z-50 rounded-md bg-zinc-900 px-2 py-1 text-xs font-medium text-white shadow-md dark:bg-zinc-100 dark:text-zinc-900
+  pointer-events-none z-50 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background shadow-md
 }

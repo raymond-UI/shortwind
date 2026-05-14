@@ -5,9 +5,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  buildSourceDirective,
+  computeSafelistTokens,
   detectTailwindMajor,
+  hasTailwindImport,
+  injectSourceDirective,
   loadRegistryFromDir,
   shortwindPlugin,
+  SHORTWIND_INJECT_MARKER,
   TailwindAdapterError,
   transformContent,
 } from "../src/index.js";
@@ -116,6 +121,65 @@ describe("transformContent", () => {
     const input = "// just a comment with @card in it but not in a class attribute\n";
     const after = transformContent(input, registry);
     expect(after).toBe(input);
+  });
+});
+
+describe("source directive injection", () => {
+  const registry = loadRegistryFromDir(REGISTRY_RECIPES);
+
+  it("collects unique sorted tokens across all flattened recipes", () => {
+    const tokens = computeSafelistTokens(registry);
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(new Set(tokens).size).toBe(tokens.length);
+    expect([...tokens]).toEqual([...tokens].sort());
+  });
+
+  it("builds a single @source inline(...) directive listing every token", () => {
+    const directive = buildSourceDirective(registry);
+    expect(directive.startsWith('@source inline("')).toBe(true);
+    expect(directive.endsWith('");')).toBe(true);
+    const tokens = computeSafelistTokens(registry);
+    for (const t of tokens) expect(directive).toContain(t);
+  });
+
+  it("returns empty string for an empty registry", () => {
+    expect(buildSourceDirective({ families: {}, flattened: {} })).toBe("");
+  });
+
+  it("detects a tailwindcss import regardless of quote style", () => {
+    expect(hasTailwindImport(`@import "tailwindcss";`)).toBe(true);
+    expect(hasTailwindImport(`@import 'tailwindcss';`)).toBe(true);
+    expect(hasTailwindImport(`@import "tailwindcss" source(none);`)).toBe(true);
+    expect(hasTailwindImport(`@import "./other.css";`)).toBe(false);
+  });
+
+  it("injects the directive immediately after the tailwindcss import", () => {
+    const before = `@import "tailwindcss";\n\n:root { --x: 1; }\n`;
+    const after = injectSourceDirective(before, registry);
+    expect(after).toContain(SHORTWIND_INJECT_MARKER);
+    const importIdx = after.indexOf(`@import "tailwindcss"`);
+    const markerIdx = after.indexOf(SHORTWIND_INJECT_MARKER);
+    const rootIdx = after.indexOf(":root");
+    expect(importIdx).toBeLessThan(markerIdx);
+    expect(markerIdx).toBeLessThan(rootIdx);
+  });
+
+  it("is idempotent — re-injecting on already-injected CSS is a no-op", () => {
+    const once = injectSourceDirective(`@import "tailwindcss";`, registry);
+    const twice = injectSourceDirective(once, registry);
+    expect(twice).toBe(once);
+  });
+
+  it("returns the input unchanged when there is no tailwindcss import", () => {
+    const input = `:root { --x: 1; }`;
+    expect(injectSourceDirective(input, registry)).toBe(input);
+  });
+
+  it("returns the input unchanged for an empty registry", () => {
+    const input = `@import "tailwindcss";`;
+    expect(injectSourceDirective(input, { families: {}, flattened: {} })).toBe(
+      input,
+    );
   });
 });
 

@@ -2,15 +2,15 @@
 
 /* Default rectangular skeleton placeholder. */
 @recipe skeleton {
-  animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800
+  animate-pulse rounded-md bg-muted
 }
 
 /* Single-line text skeleton. */
 @recipe skeleton-text {
-  h-4 w-full animate-pulse rounded bg-zinc-200 dark:bg-zinc-800
+  h-4 w-full animate-pulse rounded bg-muted
 }
 
 /* Circular skeleton (avatar/icon). */
 @recipe skeleton-circle {
-  h-10 w-10 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800
+  h-10 w-10 animate-pulse rounded-full bg-muted
 }

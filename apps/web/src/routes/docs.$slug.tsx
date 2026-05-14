@@ -38,7 +38,7 @@ function DocsDetail() {
       <p className="@muted font-medium uppercase tracking-wider">Docs</p>
       <h1 className="@heading-xl text-3xl font-semibold">{doc.title}</h1>
       {doc.description ? (
-        <p className="@body text-base text-zinc-600 dark:text-zinc-400">
+        <p className="@body text-base text-muted-foreground">
           {doc.description}
         </p>
       ) : null}

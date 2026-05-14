@@ -2,12 +2,12 @@
 
 /* Shared button base — sizing, focus ring, disabled state. */
 @recipe btn-base {
-  inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50
+  inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
 }
 
 /* Primary call-to-action button. */
 @recipe btn-primary {
-  @btn-base bg-blue-600 text-white hover:bg-blue-700 focus-visible:outline-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400
+  @btn-base bg-primary text-primary-foreground hover:bg-primary/90
 }
 
 /* Small primary button. */
@@ -22,7 +22,7 @@
 
 /* Secondary button — bordered surface tone. */
 @recipe btn-secondary {
-  @btn-base border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 focus-visible:outline-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800
+  @btn-base border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80
 }
 
 /* Small secondary button. */
@@ -37,7 +37,7 @@
 
 /* Ghost button — text only, no background. */
 @recipe btn-ghost {
-  @btn-base text-zinc-700 hover:bg-zinc-100 focus-visible:outline-zinc-500 dark:text-zinc-300 dark:hover:bg-zinc-800
+  @btn-base text-foreground hover:bg-muted
 }
 
 /* Small ghost button. */
@@ -52,15 +52,15 @@
 
 /* Destructive button. */
 @recipe btn-danger {
-  @btn-base bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-500 dark:bg-red-500 dark:hover:bg-red-400
+  @btn-base bg-destructive text-destructive-foreground hover:bg-destructive/90
 }
 
 /* Outline button — bordered without fill. */
 @recipe btn-outline {
-  @btn-base border border-current text-blue-600 hover:bg-blue-50 focus-visible:outline-blue-500 dark:text-blue-400 dark:hover:bg-blue-950
+  @btn-base border border-primary text-primary hover:bg-primary/10
 }
 
 /* Square icon-only button. */
 @recipe btn-icon {
-  inline-flex h-9 w-9 items-center justify-center rounded-md text-zinc-700 transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-800
+  inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
 }

@@ -2,15 +2,15 @@
 
 /* Progress bar track (background). */
 @recipe progress-track {
-  h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800
+  h-2 w-full overflow-hidden rounded-full bg-muted
 }
 
 /* Progress bar fill. */
 @recipe progress-bar {
-  h-full rounded-full bg-blue-600 transition-all dark:bg-blue-500
+  h-full rounded-full bg-primary transition-all
 }
 
 /* Indeterminate loading spinner. */
 @recipe spinner {
-  inline-block h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-blue-600 dark:border-zinc-700 dark:border-t-blue-400
+  inline-block h-4 w-4 animate-spin rounded-full border-2 border-border border-t-primary
 }

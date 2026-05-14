@@ -39,14 +39,16 @@ describe("vite plugin", () => {
     for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("returns two plugins (transform + watcher)", async () => {
+  it("returns three plugins (transform + css-source + watcher)", async () => {
     const dir = await makeProject({});
     dirs.push(dir);
     const plugins = shortwind({ cwd: dir });
-    expect(plugins).toHaveLength(2);
+    expect(plugins).toHaveLength(3);
     expect(plugins[0]?.name).toBe("shortwind:transform");
-    expect(plugins[1]?.name).toBe("shortwind:watcher");
+    expect(plugins[1]?.name).toBe("shortwind:css-source");
+    expect(plugins[2]?.name).toBe("shortwind:watcher");
     expect(plugins[0]?.enforce).toBe("pre");
+    expect(plugins[1]?.enforce).toBe("pre");
   });
 
   it("transforms @recipe tokens inside class= attributes of HTML", async () => {
@@ -113,10 +115,49 @@ describe("vite plugin", () => {
     expect(code).not.toMatch(/@card\b/);
   });
 
+  it("injects @source inline(...) into user CSS that imports tailwindcss", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [, cssPlugin] = shortwind({ cwd: dir });
+    const result = callTransform(
+      cssPlugin!,
+      `@import "tailwindcss";\n:root { --x: 1; }`,
+      path.join(dir, "src", "styles.css"),
+    );
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).not.toBeNull();
+    expect(code).toContain("@source inline(");
+    expect(code).toContain("/* shortwind:source-inject */");
+  });
+
+  it("leaves CSS without @import \"tailwindcss\" untouched", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [, cssPlugin] = shortwind({ cwd: dir });
+    const result = callTransform(
+      cssPlugin!,
+      `:root { --x: 1; }`,
+      path.join(dir, "src", "styles.css"),
+    );
+    expect(result).toBeNull();
+  });
+
+  it("does not inject into recipe CSS files even if they import tailwindcss", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [, cssPlugin] = shortwind({ cwd: dir });
+    const result = callTransform(
+      cssPlugin!,
+      `@import "tailwindcss";\n@recipe @card { ... }`,
+      path.join(dir, "recipes", "card.css"),
+    );
+    expect(result).toBeNull();
+  });
+
   it("watcher plugin registers chokidar listeners and emits full-reload on recipe change", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
-    const [, watcher] = shortwind({ cwd: dir });
+    const [, , watcher] = shortwind({ cwd: dir });
     const events: string[] = [];
     const handlers: Record<string, ((file: string) => void)[]> = {};
     const sent: { type: string }[] = [];

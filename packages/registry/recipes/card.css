@@ -2,27 +2,27 @@
 
 /* Default content card with border, padding, and surface color. */
 @recipe card {
-  rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900
+  rounded-lg border border-border bg-card text-card-foreground p-4
 }
 
 /* Card with raised shadow for emphasis. */
 @recipe card-elevated {
-  @card shadow-md dark:shadow-zinc-950/40
+  @card shadow-md
 }
 
 /* Card without border, on a muted surface. */
 @recipe card-flat {
-  rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900
+  rounded-lg bg-muted text-foreground p-4
 }
 
 /* Clickable card with hover and focus-visible states. */
 @recipe card-interactive {
-  @card cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500
+  @card cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
 }
 
 /* Card header region with bottom divider. */
 @recipe card-header {
-  mb-3 border-b border-zinc-200 pb-3 dark:border-zinc-800
+  mb-3 border-b border-border pb-3
 }
 
 /* Card body region. */
@@ -32,5 +32,5 @@
 
 /* Card footer with top divider and right-aligned actions. */
 @recipe card-footer {
-  mt-3 flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800
+  mt-3 flex items-center justify-end gap-2 border-t border-border pt-3
 }

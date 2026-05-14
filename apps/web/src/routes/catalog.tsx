@@ -35,7 +35,7 @@ function CatalogPage() {
     <section className="@container py-12">
       <header className="mb-10 @stack-md">
         <h1 className="@heading-lg text-3xl">Recipe catalog</h1>
-        <p className="@body text-base text-zinc-600 dark:text-zinc-400">
+        <p className="@body text-base text-muted-foreground">
           Every recipe in the default Shortwind registry, with its expanded
           Tailwind class list and a live preview.
         </p>
@@ -78,7 +78,7 @@ function FamilySidebar({ families }: { families: CatalogFamily[] }) {
             <li key={fam.name}>
               <a href={`#fam-${fam.name}`} className="@nav-link block">
                 {fam.name}{" "}
-                <span className="text-zinc-400 dark:text-zinc-500">
+                <span className="text-muted-foreground">
                   ({fam.recipes.length})
                 </span>
               </a>
@@ -109,8 +109,18 @@ function FamilySection({ family }: { family: CatalogFamily }) {
   );
 }
 
+// Recipes that anchor to the viewport (modals, overlays, tooltips) can't be
+// rendered inline as a plain `<div>` — `fixed inset-0` would yank the preview
+// out of its card and onto the page. Detect those and show a "no preview"
+// stub instead of breaking layout.
+const NON_PREVIEWABLE_TOKENS = ["fixed", "inset-0", "inset-y-0", "inset-x-0"];
+function isPreviewable(expansion: readonly string[]): boolean {
+  return !expansion.some((t) => NON_PREVIEWABLE_TOKENS.includes(t));
+}
+
 function RecipeCard({ recipe }: { recipe: CatalogRecipe }) {
   const expansion = recipe.expansion.join(" ");
+  const previewable = isPreviewable(recipe.expansion);
   return (
     <article className="@card p-5">
       <div className="@row-between flex-wrap items-baseline">
@@ -126,14 +136,20 @@ function RecipeCard({ recipe }: { recipe: CatalogRecipe }) {
         <p className="@body mt-1">{recipe.description}</p>
       ) : null}
 
-      <pre className="@code-block mt-4 px-3 py-2 text-xs leading-relaxed">
+      <pre className="@code-block mt-4 px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap wrap-break-word">
         {expansion}
       </pre>
 
       <div className="mt-4">
         <p className="@caption mb-2 uppercase tracking-wider">Preview</p>
-        <div className="rounded border border-dashed border-zinc-200 p-4 dark:border-zinc-800">
-          <div className={expansion}>Preview</div>
+        <div className="relative isolate overflow-hidden rounded border border-dashed border-border p-4">
+          {previewable ? (
+            <div className={expansion}>Preview</div>
+          ) : (
+            <p className="@muted text-sm italic">
+              Positioning recipe — preview not rendered inline.
+            </p>
+          )}
         </div>
       </div>
     </article>

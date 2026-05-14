@@ -1,6 +1,8 @@
 import path from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import {
+  hasTailwindImport,
+  injectSourceDirective,
   loadRegistryFromDir,
   transformContent,
   TailwindAdapterError,
@@ -83,6 +85,26 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     },
   };
 
+  // Recipe expansions live only in Vite's transformed JSX/HTML, which Tailwind
+  // v4's scanner never reads — it walks files on disk. We inject the
+  // registry-derived candidate set into the user's main CSS via
+  // `@source inline(...)` so Tailwind's JIT picks them up like any other
+  // candidate. Runs before `@tailwindcss/vite` because of `enforce: "pre"`.
+  const cssPlugin: MinimalVitePlugin = {
+    name: "shortwind:css-source",
+    enforce: "pre",
+    transform(code, id) {
+      const cleanId = id.split("?")[0] ?? id;
+      if (!cleanId.endsWith(".css")) return null;
+      if (registryFiles.has(cleanId)) return null;
+      if (Object.keys(registry.flattened).length === 0) return null;
+      if (!hasTailwindImport(code)) return null;
+      const out = injectSourceDirective(code, registry);
+      if (out === code) return null;
+      return { code: out, map: null };
+    },
+  };
+
   let installedListener:
     | { server: MinimalViteHmrServer; fn: (file: string) => void }
     | null = null;
@@ -126,7 +148,7 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     },
   };
 
-  return [transformPlugin, watcherPlugin];
+  return [transformPlugin, cssPlugin, watcherPlugin];
 }
 
 function loadRegistry(recipesDir: string): Registry {
