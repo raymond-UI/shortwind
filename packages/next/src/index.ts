@@ -28,6 +28,8 @@ type NextConfig = {
 };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// Resolves to the compiled ESM sibling. If we ever ship a dual CJS/ESM build,
+// the loader file name must remain stable for webpack/turbopack to resolve it.
 const LOADER_PATH = path.join(here, "loader.js");
 
 const SOURCE_TEST = /\.(?:tsx?|jsx?|mdx?)$/;

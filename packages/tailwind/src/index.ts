@@ -71,12 +71,22 @@ export function detectTailwindMajor(cwd: string): TailwindMajor | null {
   const range =
     pkg.dependencies?.["tailwindcss"] ?? pkg.devDependencies?.["tailwindcss"] ?? null;
   if (!range) return null;
+  // tailwindcss is declared but pinned with a non-semver range we can't read
+  // a major out of (e.g. "latest", "workspace:*", or "npm:tw-fork@*"). Silently
+  // returning null would surface the misleading "tailwindcss not found" error;
+  // throw so the user fixes the range explicitly.
   const m = range.match(/(\d+)/);
-  if (!m) return null;
+  if (!m) {
+    throw new TailwindAdapterError(
+      `tailwindcss is declared as "${range}" — pin a numeric major (^3 or ^4) so Shortwind can pick the right adapter.`,
+    );
+  }
   const major = Number(m[1]);
   if (major === 3) return 3;
   if (major === 4) return 4;
-  return null;
+  throw new TailwindAdapterError(
+    `tailwindcss major ${major} is not supported. Shortwind supports Tailwind v3 and v4.`,
+  );
 }
 
 export type ShortwindPluginOptions = {
@@ -90,6 +100,12 @@ export type ShortwindV3Plugin = {
   transform: (content: string) => string;
 };
 
+// Tailwind v4 collects utilities by parsing source files directly; it does not
+// invoke a JS plugin handler the way v3 did. Shortwind expands `@recipe` tokens
+// upstream of Tailwind's scan via the Vite/Next adapters (which call
+// `transform` on each source file). The `handler` field is kept as a no-op so
+// the returned object satisfies the v4 Plugin shape without claiming behavior
+// it doesn't deliver — users should not depend on it doing anything.
 export type ShortwindV4Plugin = {
   major: 4;
   handler: () => void;

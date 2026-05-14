@@ -17,18 +17,21 @@ type MinimalViteHmrServer = {
   watcher: {
     add: (paths: string | string[]) => void;
     on: (event: string, listener: (file: string) => void) => void;
+    off?: (event: string, listener: (file: string) => void) => void;
   };
   moduleGraph: {
     getModulesByFile: (file: string) => Set<{ file: string | null }> | undefined;
     invalidateModule: (mod: unknown) => void;
   };
   ws: { send: (payload: { type: "full-reload" }) => void };
+  httpServer?: { on: (event: "close", cb: () => void) => void } | null;
 };
 
 type MinimalVitePlugin = {
   name: string;
   enforce?: "pre" | "post";
   configureServer?: (server: MinimalViteHmrServer) => void | Promise<void>;
+  closeBundle?: () => void | Promise<void>;
   transform?: (
     code: string,
     id: string,
@@ -75,29 +78,55 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       const cleanId = id.split("?")[0] ?? id;
       if (!include.test(cleanId)) return null;
       if (registryFiles.has(cleanId)) return null;
+      // No families means nothing to expand — every file would round-trip
+      // identically; skip the per-file work entirely.
+      if (Object.keys(registry.flattened).length === 0) return null;
       const out = transformContent(code, registry, { mode: modeForId(cleanId) });
       if (out === code) return null;
       return { code: out, map: null };
     },
   };
 
+  let installedListener:
+    | { server: MinimalViteHmrServer; fn: (file: string) => void }
+    | null = null;
+
+  const detachListener = (): void => {
+    if (!installedListener) return;
+    const { server, fn } = installedListener;
+    if (server.watcher.off) {
+      server.watcher.off("add", fn);
+      server.watcher.off("change", fn);
+      server.watcher.off("unlink", fn);
+    }
+    installedListener = null;
+  };
+
   const watcherPlugin: MinimalVitePlugin = {
     name: "shortwind:watcher",
     configureServer(server) {
       if (!existsSync(recipesDir)) return;
+      // configureServer may fire more than once across restarts; tear down
+      // any prior listener before attaching a new one so handlers don't
+      // accumulate (each one re-runs reloadRegistry on every file event).
+      detachListener();
       server.watcher.add(recipesDir);
       const onRecipeEvent = (file: string): void => {
         const normalized = path.resolve(file);
-        if (!normalized.startsWith(path.resolve(recipesDir))) return;
+        const rel = path.relative(path.resolve(recipesDir), normalized);
+        if (rel.startsWith("..") || path.isAbsolute(rel)) return;
         if (!normalized.endsWith(".css")) return;
         reloadRegistry();
-        // invalidate every module that's been transformed by us by triggering a full reload —
-        // simpler and matches "recipes changed" being a global event.
         server.ws.send({ type: "full-reload" });
       };
       server.watcher.on("add", onRecipeEvent);
       server.watcher.on("change", onRecipeEvent);
       server.watcher.on("unlink", onRecipeEvent);
+      installedListener = { server, fn: onRecipeEvent };
+      server.httpServer?.on("close", detachListener);
+    },
+    closeBundle() {
+      detachListener();
     },
   };
 
