@@ -52,7 +52,10 @@ describe("build", () => {
       ["button", "card", "form", "layout", "text"].sort(),
     );
     const md = readFileSync(result.skillPath, "utf8");
-    for (const fam of result.families) expect(md).toContain(fam);
+    for (const fam of result.families) {
+      const cap = fam[0]!.toUpperCase() + fam.slice(1);
+      expect(md).toContain(`### ${cap} recipes`);
+    }
   });
 
   it("is a no-op when SKILL.md is already current", async () => {

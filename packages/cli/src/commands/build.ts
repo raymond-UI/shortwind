@@ -1,10 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildRegistry, parseRecipeFile } from "@shortwind/core";
+import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
 import type { Diagnostic, Recipe } from "@shortwind/core";
 import { installedFamilies, readConfig } from "../project.js";
-import { renderSkillMd } from "../skill-template.js";
 
 export type BuildOptions = {
   cwd: string;
@@ -56,7 +55,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   if (!resolved.ok) throw new BuildError(resolved.errors);
 
   const skillPath = path.join(cwd, config.outputPath);
-  const next = renderSkillMd(families);
+  const next = renderSkillMarkdown(resolved.value, { order: families });
   const current = existsSync(skillPath) ? readFileSync(skillPath, "utf8") : null;
   let changed = false;
   if (current !== next) {

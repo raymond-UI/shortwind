@@ -161,7 +161,8 @@ describe("init", () => {
     const md = readFileSync(result.skillPath, "utf8");
     expect(md).toContain("name: shortwind");
     for (const family of result.families) {
-      expect(md).toContain(family);
+      const cap = family[0]!.toUpperCase() + family.slice(1);
+      expect(md).toContain(`### ${cap} recipes`);
     }
   });
 

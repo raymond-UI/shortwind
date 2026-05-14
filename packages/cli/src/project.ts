@@ -1,9 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseRecipeFile } from "@shortwind/core";
-import type { Recipe } from "@shortwind/core";
-import { renderSkillMd } from "./skill-template.js";
+import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
+import type { Recipe, Registry } from "@shortwind/core";
 
 export type ShortwindConfig = {
   registry: string;
@@ -51,7 +50,19 @@ export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): P
   const skillPath = path.join(cwd, config.outputPath);
   const { mkdir } = await import("node:fs/promises");
   await mkdir(path.dirname(skillPath), { recursive: true });
-  await writeFile(skillPath, renderSkillMd(families));
+
+  const allRecipes: Recipe[] = [];
+  for (const family of families) {
+    const filePath = path.join(recipesDir, `${family}.css`);
+    const source = readFileSync(filePath, "utf8");
+    const parsed = parseRecipeFile(source, `${family}.css`);
+    if (parsed.ok) allRecipes.push(...parsed.value.recipes);
+  }
+  let registry: Registry = { families: {}, flattened: {} };
+  const resolved = buildRegistry(allRecipes);
+  if (resolved.ok) registry = resolved.value;
+  const order = families;
+  await writeFile(skillPath, renderSkillMarkdown(registry, { order }));
   return skillPath;
 }
 

@@ -68,8 +68,8 @@ describe("add", () => {
     });
 
     const md = readFileSync(result.skillPath, "utf8");
-    expect(md).toContain("- card");
-    expect(md).toContain("- button");
+    expect(md).toContain("### Card recipes");
+    expect(md).toContain("### Button recipes");
   });
 
   it("skips already-installed families and reports them", async () => {

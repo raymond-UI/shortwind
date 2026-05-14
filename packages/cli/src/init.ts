@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
-import { parseRecipeFile } from "@shortwind/core";
+import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
+import type { Recipe, Registry } from "@shortwind/core";
 import { detectProject, type PackageManager } from "./detect.js";
 import {
   createRegistrySource,
@@ -10,7 +11,6 @@ import {
   type RegistrySource,
 } from "./registry-source.js";
 import { readLockfile, writeLockfile } from "./lockfile.js";
-import { renderSkillMd } from "./skill-template.js";
 
 export const DEFAULT_REGISTRY = "https://shortwind.dev/registry";
 
@@ -70,7 +70,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
   await installHuskyHook(huskyPath);
 
   const skillPath = path.join(cwd, "skills", "shortwind", "SKILL.md");
-  await writeSkillMd(skillPath, families);
+  await writeSkillMd(skillPath, recipesDir, families);
 
   return {
     packageManager: shape.packageManager,
@@ -233,7 +233,22 @@ async function installHuskyHook(huskyPath: string): Promise<void> {
   await writeFile(huskyPath, next, { mode: 0o755 });
 }
 
-async function writeSkillMd(skillPath: string, families: string[]): Promise<void> {
+async function writeSkillMd(
+  skillPath: string,
+  recipesDir: string,
+  families: string[],
+): Promise<void> {
   await mkdir(path.dirname(skillPath), { recursive: true });
-  await writeFile(skillPath, renderSkillMd(families));
+  const allRecipes: Recipe[] = [];
+  for (const family of families) {
+    const filePath = path.join(recipesDir, `${family}.css`);
+    if (!existsSync(filePath)) continue;
+    const source = readFileSync(filePath, "utf8");
+    const parsed = parseRecipeFile(source, `${family}.css`);
+    if (parsed.ok) allRecipes.push(...parsed.value.recipes);
+  }
+  let registry: Registry = { families: {}, flattened: {} };
+  const resolved = buildRegistry(allRecipes);
+  if (resolved.ok) registry = resolved.value;
+  await writeFile(skillPath, renderSkillMarkdown(registry, { order: families }));
 }
