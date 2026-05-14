@@ -5,7 +5,16 @@ export type ExpandMode = "html" | "jsx";
 export type ExpandOptions = {
   mode?: ExpandMode;
   mergeConflicts?: boolean;
+  /**
+   * Top-level function names whose string/template arguments should be
+   * scanned for `@recipe` tokens. Defaults to ["cva", "tv"] in jsx mode,
+   * empty in html mode. Covers the cva/tailwind-variants UI pattern where
+   * variant definitions live in module scope outside any className=.
+   */
+  callExpanders?: readonly string[];
 };
+
+const DEFAULT_CALL_EXPANDERS_JSX: readonly string[] = ["cva", "tv"];
 
 export function expand(
   input: string,
@@ -36,6 +45,12 @@ export function expand(
       (_m, cls: string) => `className='${expandClassList(cls, registry, merge)}'`,
     );
     out = expandJsxBraced(out, registry, merge);
+    const callExpanders = options.callExpanders ?? DEFAULT_CALL_EXPANDERS_JSX;
+    if (callExpanders.length > 0) {
+      out = expandCallStringArgs(out, callExpanders, registry, merge);
+    }
+  } else if (options.callExpanders && options.callExpanders.length > 0) {
+    out = expandCallStringArgs(out, options.callExpanders, registry, merge);
   }
 
   return out;
@@ -131,6 +146,92 @@ function expandJsxBraced(input: string, registry: Registry, merge: boolean): str
     }
   }
   return out;
+}
+
+// expandCallStringArgs rewrites string/template literals appearing anywhere
+// inside the argument list of a recognized call like `cva(...)` or `tv(...)`.
+// Used to support cva-style variant maps that sit at module scope, outside
+// any className= attribute. Walks character-by-character (no JS parser),
+// skipping strings/templates while finding the matching close paren, then
+// hands the body to expandJsxExpression which already handles nested string
+// and template literal rewriting.
+function expandCallStringArgs(
+  input: string,
+  callNames: readonly string[],
+  registry: Registry,
+  merge: boolean,
+): string {
+  const escaped = callNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const re = new RegExp(`\\b(?:${escaped.join("|")})\\s*\\(`, "g");
+  let out = "";
+  let cursor = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(input)) !== null) {
+    const callStart = m.index;
+    out += input.slice(cursor, callStart);
+    const bodyStart = callStart + m[0].length;
+    const bodyEnd = findCallBodyEnd(input, bodyStart);
+    const body = input.slice(bodyStart, bodyEnd);
+    out += m[0] + expandJsxExpression(body, registry, merge);
+    if (bodyEnd < input.length) {
+      out += ")";
+      cursor = bodyEnd + 1;
+      re.lastIndex = cursor;
+    } else {
+      cursor = bodyEnd;
+      break;
+    }
+  }
+  out += input.slice(cursor);
+  return out;
+}
+
+function findCallBodyEnd(input: string, bodyStart: number): number {
+  let depth = 1;
+  let k = bodyStart;
+  while (k < input.length && depth > 0) {
+    const ch = input[k];
+    if (ch === '"' || ch === "'") {
+      const close = ch;
+      k++;
+      while (k < input.length && input[k] !== close) {
+        if (input[k] === "\\") k++;
+        k++;
+      }
+      k++;
+      continue;
+    }
+    if (ch === "`") {
+      k++;
+      while (k < input.length && input[k] !== "`") {
+        if (input[k] === "\\") {
+          k += 2;
+          continue;
+        }
+        if (input[k] === "$" && input[k + 1] === "{") {
+          let td = 1;
+          k += 2;
+          while (k < input.length && td > 0) {
+            const c = input[k];
+            if (c === "{") td++;
+            else if (c === "}") td--;
+            if (td === 0) break;
+            k++;
+          }
+          k++;
+          continue;
+        }
+        k++;
+      }
+      k++;
+      continue;
+    }
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (depth === 0) break;
+    k++;
+  }
+  return k;
 }
 
 function expandJsxExpression(expr: string, registry: Registry, merge: boolean): string {

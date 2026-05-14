@@ -1,7 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -11,8 +15,25 @@
     "declaration": false,
     "declarationMap": false,
     "incremental": false,
-    "types": ["node", "vite/client"]
+    "types": [
+      "node",
+      "vite/client"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/*"
+      ]
+    }
   },
-  "include": ["src/**/*", "vite.config.ts", "wrangler.jsonc"],
-  "references": [{ "path": "../../packages/core" }]
+  "include": [
+    "src/**/*",
+    "vite.config.ts",
+    "wrangler.jsonc"
+  ],
+  "references": [
+    {
+      "path": "../../packages/core"
+    }
+  ]
 }

@@ -6,7 +6,7 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
-import appCss from "../styles.css?url";
+import appCss from "../index.css?url";
 
 // Source of truth for cross-page references to the project's GitHub repo.
 // Update here when the repository moves; the placeholder `anthropics/shortwind`

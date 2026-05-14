@@ -1,0 +1,11 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": {
+    "btn-base": ["inline-flex", "rounded-md"],
+    "btn-primary": ["bg-primary", "text-primary-foreground"],
+    "btn-ghost": ["hover:bg-accent"]
+  },
+  "input": "const v = cva(\"@btn-base\", { variants: { variant: { default: \"@btn-primary\", ghost: \"@btn-ghost\" } } });",
+  "expected": "const v = cva(\"inline-flex rounded-md\", { variants: { variant: { default: \"bg-primary text-primary-foreground\", ghost: \"hover:bg-accent\" } } });"
+}

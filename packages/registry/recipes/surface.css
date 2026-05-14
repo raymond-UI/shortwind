@@ -27,10 +27,10 @@
 
 /* Horizontal divider line. */
 @recipe divider-h {
-  h-px w-full bg-border
+  shrink-0 h-px w-full bg-border
 }
 
 /* Vertical divider line. */
 @recipe divider-v {
-  h-full w-px bg-border
+  shrink-0 h-full w-px bg-border
 }

@@ -35,3 +35,38 @@ describe("expand (defaults)", () => {
     expect(out).toEqual(`<div className="@card"></div>`);
   });
 });
+
+describe("expand (callExpanders)", () => {
+  const registry: Registry = {
+    flattened: { "btn-base": ["inline-flex", "rounded-md"] },
+    families: {},
+  };
+
+  it("expands custom call names via option", () => {
+    const out = expand(`const x = styled("@btn-base");`, registry, {
+      mode: "jsx",
+      callExpanders: ["styled"],
+    });
+    expect(out).toEqual(`const x = styled("inline-flex rounded-md");`);
+  });
+
+  it("disables call expansion when callExpanders=[]", () => {
+    const out = expand(`const x = cva("@btn-base");`, registry, {
+      mode: "jsx",
+      callExpanders: [],
+    });
+    expect(out).toEqual(`const x = cva("@btn-base");`);
+  });
+
+  it("does not expand calls in html mode by default", () => {
+    const out = expand(`const x = cva("@btn-base");`, registry, { mode: "html" });
+    expect(out).toEqual(`const x = cva("@btn-base");`);
+  });
+
+  it("is idempotent across two passes", () => {
+    const src = `const v = cva("@btn-base", { variants: { variant: { default: "@btn-base" } } });`;
+    const once = expand(src, registry, { mode: "jsx" });
+    const twice = expand(once, registry, { mode: "jsx" });
+    expect(twice).toEqual(once);
+  });
+});

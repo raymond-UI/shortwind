@@ -1,0 +1,7 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": { "btn-base": ["inline-flex"] },
+  "input": "const v = somethingElse(\"@btn-base\");",
+  "expected": "const v = somethingElse(\"@btn-base\");"
+}

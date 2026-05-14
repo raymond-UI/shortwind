@@ -1,0 +1,7 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": { "badge": ["inline-flex", "rounded-full"] },
+  "input": "const b = tv({ base: \"@badge\" });",
+  "expected": "const b = tv({ base: \"inline-flex rounded-full\" });"
+}

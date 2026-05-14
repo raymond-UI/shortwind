@@ -1,0 +1,7 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": { "btn-base": ["inline-flex"] },
+  "input": "const v = mycva(\"@btn-base\");",
+  "expected": "const v = mycva(\"@btn-base\");"
+}
