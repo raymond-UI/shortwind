@@ -16,6 +16,26 @@ describe("isExactPin", () => {
     expect(isExactPin("latest")).toBe(false);
     expect(isExactPin("workspace:*")).toBe(false);
   });
+
+  it("rejects exotic ranges and specifiers", () => {
+    expect(isExactPin("1.0.0 || 2.0.0")).toBe(false);
+    expect(isExactPin("=1.0.0")).toBe(false);
+    expect(isExactPin(" 1.0.0")).toBe(false);
+    expect(isExactPin("1.0.0 ")).toBe(false);
+    expect(isExactPin("npm:@tanstack/react-router@1.0.0")).toBe(false);
+    expect(isExactPin("git+https://example.test/x.git")).toBe(false);
+    expect(isExactPin("file:./local")).toBe(false);
+    expect(isExactPin("*")).toBe(false);
+    expect(isExactPin("")).toBe(false);
+    expect(isExactPin("01.0.0")).toBe(false); // leading zero
+    expect(isExactPin("1.0")).toBe(false); // missing patch
+  });
+
+  it("accepts full semver with prerelease + build metadata", () => {
+    expect(isExactPin("1.0.0-rc.1")).toBe(true);
+    expect(isExactPin("1.0.0+build.7")).toBe(true);
+    expect(isExactPin("1.0.0-alpha.1+build.7")).toBe(true);
+  });
 });
 
 describe("findPinViolations", () => {

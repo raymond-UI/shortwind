@@ -62,8 +62,18 @@ export function findPinViolations(
   return violations;
 }
 
+// Strict semver: digits with no leading zeros, optional prerelease (-x.y),
+// optional build metadata (+x.y). Refuses range operators (^ ~ > < = || x *),
+// dist-tags, workspace specifiers, git/file URLs, npm: aliases, whitespace,
+// or anything else that is not an exact published version.
+const EXACT_SEMVER = new RegExp(
+  "^(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)" +
+    "(?:-(?:0|[1-9]\\d*|\\d*[a-zA-Z-][\\w-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][\\w-]*))*)?" +
+    "(?:\\+[\\w-]+(?:\\.[\\w-]+)*)?$",
+);
+
 export function isExactPin(range: string): boolean {
-  return /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(range);
+  return EXACT_SEMVER.test(range);
 }
 
 const isMain = (() => {
