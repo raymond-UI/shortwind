@@ -1,0 +1,36 @@
+/* shortwind: card@0.0.1 sha:000000 */
+
+/* Default content card with border, padding, and surface color. */
+@recipe card {
+  rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900
+}
+
+/* Card with raised shadow for emphasis. */
+@recipe card-elevated {
+  @card shadow-md dark:shadow-zinc-950/40
+}
+
+/* Card without border, on a muted surface. */
+@recipe card-flat {
+  rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900
+}
+
+/* Clickable card with hover and focus-visible states. */
+@recipe card-interactive {
+  @card cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500
+}
+
+/* Card header region with bottom divider. */
+@recipe card-header {
+  mb-3 border-b border-zinc-200 pb-3 dark:border-zinc-800
+}
+
+/* Card body region. */
+@recipe card-body {
+  py-1
+}
+
+/* Card footer with top divider and right-aligned actions. */
+@recipe card-footer {
+  mt-3 flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800
+}

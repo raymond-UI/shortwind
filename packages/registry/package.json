@@ -5,7 +5,12 @@
   "description": "Source-of-truth recipe files. Built into apps/web/public/registry/ before site deploy.",
   "type": "module",
   "scripts": {
-    "build": "tsx build.ts"
+    "build": "tsx build.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@shortwind/core": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.21.0"

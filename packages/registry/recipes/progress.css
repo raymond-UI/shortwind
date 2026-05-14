@@ -1,0 +1,16 @@
+/* shortwind: progress@0.0.1 sha:000000 */
+
+/* Progress bar track (background). */
+@recipe progress-track {
+  h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800
+}
+
+/* Progress bar fill. */
+@recipe progress-bar {
+  h-full rounded-full bg-blue-600 transition-all dark:bg-blue-500
+}
+
+/* Indeterminate loading spinner. */
+@recipe spinner {
+  inline-block h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-blue-600 dark:border-zinc-700 dark:border-t-blue-400
+}

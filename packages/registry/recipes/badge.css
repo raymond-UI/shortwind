@@ -1,0 +1,31 @@
+/* shortwind: badge@0.0.1 sha:000000 */
+
+/* Default neutral badge. */
+@recipe badge {
+  inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300
+}
+
+/* Success tone badge. */
+@recipe badge-success {
+  inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200
+}
+
+/* Warning tone badge. */
+@recipe badge-warning {
+  inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200
+}
+
+/* Danger tone badge. */
+@recipe badge-danger {
+  inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200
+}
+
+/* Info tone badge. */
+@recipe badge-info {
+  inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200
+}
+
+/* Outline badge — no fill. */
+@recipe badge-outline {
+  inline-flex items-center gap-1 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300
+}

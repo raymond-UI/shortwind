@@ -1,0 +1,31 @@
+/* shortwind: media@0.0.1 sha:000000 */
+
+/* User/profile avatar. */
+@recipe avatar {
+  inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-zinc-100 text-sm font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300
+}
+
+/* Small avatar. */
+@recipe avatar-sm {
+  @avatar h-6 w-6 text-xs
+}
+
+/* Large avatar. */
+@recipe avatar-lg {
+  @avatar h-14 w-14 text-base
+}
+
+/* Small image thumbnail. */
+@recipe thumb {
+  h-16 w-16 rounded-md object-cover
+}
+
+/* 1:1 aspect-ratio wrapper. */
+@recipe aspect-square {
+  aspect-square w-full overflow-hidden rounded-md
+}
+
+/* 16:9 aspect-ratio wrapper. */
+@recipe aspect-video {
+  aspect-video w-full overflow-hidden rounded-md
+}

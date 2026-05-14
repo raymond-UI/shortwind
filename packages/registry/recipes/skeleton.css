@@ -1,0 +1,16 @@
+/* shortwind: skeleton@0.0.1 sha:000000 */
+
+/* Default rectangular skeleton placeholder. */
+@recipe skeleton {
+  animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800
+}
+
+/* Single-line text skeleton. */
+@recipe skeleton-text {
+  h-4 w-full animate-pulse rounded bg-zinc-200 dark:bg-zinc-800
+}
+
+/* Circular skeleton (avatar/icon). */
+@recipe skeleton-circle {
+  h-10 w-10 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800
+}

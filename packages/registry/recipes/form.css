@@ -1,0 +1,51 @@
+/* shortwind: form@0.0.1 sha:000000 */
+
+/* Text input field. */
+@recipe input {
+  block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100
+}
+
+/* Input in error state. */
+@recipe input-error {
+  @input border-red-500 focus:border-red-500 focus:outline-red-500
+}
+
+/* Multi-line textarea. */
+@recipe textarea {
+  block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100
+}
+
+/* Native select control. */
+@recipe select {
+  block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100
+}
+
+/* Checkbox input. */
+@recipe checkbox {
+  h-4 w-4 rounded border-zinc-300 text-blue-600 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 dark:border-zinc-700 dark:bg-zinc-900
+}
+
+/* Radio input. */
+@recipe radio {
+  h-4 w-4 border-zinc-300 text-blue-600 focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 dark:border-zinc-700 dark:bg-zinc-900
+}
+
+/* Form field wrapper — label + input + help/error. */
+@recipe field {
+  flex flex-col gap-1.5
+}
+
+/* Form field in error state. */
+@recipe field-error {
+  flex flex-col gap-1.5
+}
+
+/* Grouped form section with optional legend. */
+@recipe fieldset {
+  flex flex-col gap-4 rounded-md border border-zinc-200 p-4 dark:border-zinc-800
+}
+
+/* Field-level helper text. */
+@recipe help {
+  text-xs text-zinc-500 dark:text-zinc-400
+}

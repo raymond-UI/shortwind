@@ -1,0 +1,26 @@
+/* shortwind: table@0.0.1 sha:000000 */
+
+/* Data table base. */
+@recipe table {
+  w-full border-collapse text-left text-sm text-zinc-900 dark:text-zinc-100
+}
+
+/* Table header cell. */
+@recipe th {
+  border-b border-zinc-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:text-zinc-400
+}
+
+/* Table body cell. */
+@recipe td {
+  border-b border-zinc-100 px-3 py-2 dark:border-zinc-900
+}
+
+/* Row hover state. */
+@recipe tr-hover {
+  transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900
+}
+
+/* Table with zebra striping on alternating rows. */
+@recipe table-zebra {
+  w-full border-collapse text-left text-sm text-zinc-900 [&_tbody_tr:nth-child(odd)]:bg-zinc-50 dark:text-zinc-100 dark:[&_tbody_tr:nth-child(odd)]:bg-zinc-900
+}

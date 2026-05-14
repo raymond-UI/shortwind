@@ -1,0 +1,66 @@
+/* shortwind: button@0.0.1 sha:000000 */
+
+/* Shared button base — sizing, focus ring, disabled state. */
+@recipe btn-base {
+  inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* Primary call-to-action button. */
+@recipe btn-primary {
+  @btn-base bg-blue-600 text-white hover:bg-blue-700 focus-visible:outline-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400
+}
+
+/* Small primary button. */
+@recipe btn-primary-sm {
+  @btn-primary px-3 py-1.5 text-xs
+}
+
+/* Large primary button. */
+@recipe btn-primary-lg {
+  @btn-primary px-6 py-3 text-base
+}
+
+/* Secondary button — bordered surface tone. */
+@recipe btn-secondary {
+  @btn-base border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 focus-visible:outline-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800
+}
+
+/* Small secondary button. */
+@recipe btn-secondary-sm {
+  @btn-secondary px-3 py-1.5 text-xs
+}
+
+/* Large secondary button. */
+@recipe btn-secondary-lg {
+  @btn-secondary px-6 py-3 text-base
+}
+
+/* Ghost button — text only, no background. */
+@recipe btn-ghost {
+  @btn-base text-zinc-700 hover:bg-zinc-100 focus-visible:outline-zinc-500 dark:text-zinc-300 dark:hover:bg-zinc-800
+}
+
+/* Small ghost button. */
+@recipe btn-ghost-sm {
+  @btn-ghost px-3 py-1.5 text-xs
+}
+
+/* Large ghost button. */
+@recipe btn-ghost-lg {
+  @btn-ghost px-6 py-3 text-base
+}
+
+/* Destructive button. */
+@recipe btn-danger {
+  @btn-base bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-500 dark:bg-red-500 dark:hover:bg-red-400
+}
+
+/* Outline button — bordered without fill. */
+@recipe btn-outline {
+  @btn-base border border-current text-blue-600 hover:bg-blue-50 focus-visible:outline-blue-500 dark:text-blue-400 dark:hover:bg-blue-950
+}
+
+/* Square icon-only button. */
+@recipe btn-icon {
+  inline-flex h-9 w-9 items-center justify-center rounded-md text-zinc-700 transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-800
+}
