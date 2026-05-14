@@ -192,6 +192,10 @@ importers:
       vite:
         specifier: '>=7.0.0'
         version: 8.0.12(@types/node@25.7.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)
+    devDependencies:
+      '@types/node':
+        specifier: ^25.7.0
+        version: 25.7.0
 
 packages:
 
