@@ -36,6 +36,24 @@ describe("docs data", () => {
     expect(pages[0]!.html).toContain("<h1>One</h1>");
   });
 
+  it("strips raw HTML from rendered docs (sanitization)", () => {
+    const sources = {
+      "a/danger.md": `---\ntitle: Danger\norder: 1\n---\n\n<script>alert(1)</script>\n\n<img src=x onerror="alert(2)">\n\n# Heading\n`,
+    };
+    const pages = loadDocsFromSources(sources);
+    expect(pages[0]!.html).not.toContain("<script>");
+    expect(pages[0]!.html).not.toMatch(/<img[^>]*onerror/i);
+    expect(pages[0]!.html).toContain("&lt;script&gt;");
+    expect(pages[0]!.html).toContain("<h1>Heading</h1>");
+  });
+
+  it("parses frontmatter with CRLF line endings", () => {
+    const raw = "---\r\ntitle: Win\r\norder: 1\r\n---\r\n\r\n# body\r\n";
+    const { meta, body } = parseFrontmatter(raw);
+    expect(meta["title"]).toBe("Win");
+    expect(body.trim()).toBe("# body");
+  });
+
   it("every internal /docs link in the loaded pages resolves to a real slug", () => {
     const sources = {
       "a/index.md": `---\ntitle: Home\norder: 0\n---\n\n[install](/docs/install)\n`,

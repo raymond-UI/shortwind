@@ -1,4 +1,21 @@
-import { marked } from "marked";
+import { Marked } from "marked";
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+const safeMarked = new Marked({
+  renderer: {
+    html({ text }: { text: string }): string {
+      return escapeHtml(text);
+    },
+  },
+});
 
 export type DocFrontmatter = {
   title: string;
@@ -22,8 +39,9 @@ const docSources = import.meta.glob("../content/docs/*.md", {
 let cached: DocPage[] | null = null;
 
 export function parseFrontmatter(raw: string): { meta: Record<string, string>; body: string } {
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!m) return { meta: {}, body: raw };
+  const normalized = raw.replace(/\r\n/g, "\n");
+  const m = normalized.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!m) return { meta: {}, body: normalized };
   const meta: Record<string, string> = {};
   for (const line of m[1]!.split("\n")) {
     const kv = line.match(/^(\w+):\s*(.*)$/);
@@ -49,7 +67,7 @@ export function loadDocsFromSources(sources: Record<string, string>): DocPage[] 
     const title = meta["title"] ?? slug;
     const description = meta["description"] ?? null;
     const order = meta["order"] ? Number(meta["order"]) : 999;
-    const html = marked.parse(body, { async: false }) as string;
+    const html = safeMarked.parse(body, { async: false }) as string;
     pages.push({ slug, frontmatter: { title, description, order }, body, html });
   }
   pages.sort((a, b) => {

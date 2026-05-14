@@ -5,23 +5,31 @@ on:
     branches: [main]
   pull_request:
 
+# socket.dev integration is deliberately deferred — tracked in SECURITY.md.
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   policy:
     name: Security policy checks
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: pnpm audit (fail on high/critical)
-        run: pnpm audit --audit-level=high --prod
+      - name: pnpm audit (fail on high/critical, including devDependencies)
+        run: pnpm audit --audit-level=high
       - name: Exact-pin policy (@tanstack/react-router, @tanstack/react-start)
         run: pnpm check:pins
       - name: Release-age policy (pnpm.minimumReleaseAge ≥ 72h)
@@ -34,10 +42,13 @@ jobs:
   build:
     name: Build, typecheck, test
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: pnpm
@@ -49,10 +60,13 @@ jobs:
   verify-recipes:
     name: Verify recipe lockfile (if present)
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: pnpm
