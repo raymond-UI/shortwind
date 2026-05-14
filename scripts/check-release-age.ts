@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-
-const ROOT = new URL("..", import.meta.url).pathname;
+import { fileURLToPath } from "node:url";
 
 export const MIN_RELEASE_AGE_HOURS = 72;
 export const MIN_RELEASE_AGE_MINUTES = MIN_RELEASE_AGE_HOURS * 60;
@@ -31,7 +30,7 @@ export function checkReleaseAge(pkg: RootPkg): { ok: true } | { ok: false; reaso
 
 const isMain = (() => {
   try {
-    return new URL(import.meta.url).pathname === process.argv[1];
+    return fileURLToPath(import.meta.url) === process.argv[1];
   } catch {
     return false;
   }

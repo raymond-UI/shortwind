@@ -30,3 +30,10 @@ describe("checkReleaseAge", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+// The CI workflow runs `pnpm check:release-age` directly against the repo
+// root before any other security gate, so a regression that broke the script
+// wrapper would fail the CI job — that's the end-to-end smoke test. We don't
+// duplicate it as a vitest spawn here because the script intentionally reads
+// the repo's own package.json (not a fixture), which makes process-spawn
+// tests hard to isolate without rewriting the script.

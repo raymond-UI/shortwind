@@ -38,6 +38,23 @@ CI gates that enforce the policy live in [`.github/workflows/ci.yml`](.github/wo
 Loosening any of these gates requires a deliberate PR with a written
 justification and at least one reviewer with security context.
 
+### `minimumReleaseAgeExclude`
+
+The root `package.json` exempts the in-repo `@shortwind/*` packages from the
+72-hour release-age cool-down. These names are consumed via `workspace:*`
+specifiers during local development; the exemption exists so a freshly
+published Shortwind release doesn't block its own release tooling.
+
+If a compromised npm publish token were used to push a malicious version of
+one of these packages, the exemption would let it install immediately rather
+than waiting 72 hours. Mitigations:
+
+- Workspace consumers use `workspace:*` and never read from the registry.
+- The exemption is scoped to a fixed allowlist; no glob or `@shortwind/*`
+  wildcard. Adding a new name requires a PR edit reviewable here.
+- Production releases additionally validate the `provenance` attestation
+  before going live (see release runbook).
+
 ## Disclosure
 
 We follow coordinated disclosure. Public advisories go out **after** users

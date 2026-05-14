@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 const PINNED_PACKAGES = ["@tanstack/react-router", "@tanstack/react-start"];
 
@@ -13,13 +14,45 @@ type Pkg = {
   peerDependencies?: Record<string, string>;
 };
 
+// Reads the `packages:` block from `pnpm-workspace.yaml` so a new workspace
+// group (e.g. `examples/*`) is picked up automatically. The previous
+// hardcoded `["packages", "apps"]` silently skipped any future group.
+function workspaceGroups(): string[] {
+  const yaml = readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
+  const lines = yaml.split(/\r?\n/);
+  const groups: string[] = [];
+  let inPackages = false;
+  for (const line of lines) {
+    if (/^packages\s*:/.test(line)) {
+      inPackages = true;
+      continue;
+    }
+    if (inPackages) {
+      const m = line.match(/^\s*-\s*['"]?([^'"]+)['"]?\s*$/);
+      if (m && m[1]) {
+        const trimmed = m[1].trim().replace(/\/\*$/, "");
+        if (trimmed && !trimmed.includes("*")) groups.push(trimmed);
+        continue;
+      }
+      if (/^\S/.test(line)) inPackages = false;
+    }
+  }
+  return groups;
+}
+
 function packageJsons(): { path: string; pkg: Pkg }[] {
   const result: { path: string; pkg: Pkg }[] = [];
   const rootPath = join(ROOT, "package.json");
   result.push({ path: rootPath, pkg: JSON.parse(readFileSync(rootPath, "utf8")) });
-  for (const group of ["packages", "apps"]) {
+  for (const group of workspaceGroups()) {
     const base = join(ROOT, group);
-    for (const name of readdirSync(base)) {
+    let entries: string[];
+    try {
+      entries = readdirSync(base);
+    } catch {
+      continue;
+    }
+    for (const name of entries) {
       const dir = join(base, name);
       if (!statSync(dir).isDirectory()) continue;
       const pkgPath = join(dir, "package.json");
@@ -78,7 +111,6 @@ export function isExactPin(range: string): boolean {
 
 const isMain = (() => {
   try {
-    const fileURLToPath = (u: string): string => new URL(u).pathname;
     return fileURLToPath(import.meta.url) === process.argv[1];
   } catch {
     return false;
