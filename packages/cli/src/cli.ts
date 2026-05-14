@@ -14,6 +14,7 @@ import {
   type UpgradeChoice,
 } from "./commands/upgrade.js";
 import { verify } from "./commands/verify.js";
+import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.js";
 import { init, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
@@ -231,6 +232,38 @@ export async function run(argv: string[] = process.argv): Promise<void> {
       }
       process.exit(1);
     });
+
+  cli
+    .command("lint", "Static analysis over source files and recipes")
+    .option("--fix", "Apply auto-fixes where supported")
+    .option("--rule <rule>", "Only run the named rule (repeatable)")
+    .option("--json", "Emit machine-readable JSON")
+    .option("--cwd <dir>", "Working directory")
+    .action(
+      async (opts: { fix?: boolean; rule?: string | string[]; json?: boolean; cwd?: string }) => {
+        const requested = opts.rule === undefined ? [] : Array.isArray(opts.rule) ? opts.rule : [opts.rule];
+        for (const r of requested) {
+          if (!ALL_RULES.includes(r as Rule)) {
+            process.stderr.write(`unknown rule: ${r}\n`);
+            process.stderr.write(`available: ${ALL_RULES.join(", ")}\n`);
+            process.exit(2);
+          }
+        }
+        const lintOptions: Parameters<typeof lint>[0] = { cwd: opts.cwd ?? process.cwd() };
+        if (opts.fix) lintOptions.fix = true;
+        if (requested.length > 0) lintOptions.rules = requested as Rule[];
+        const result = await lint(lintOptions);
+        if (opts.json) {
+          process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+        } else {
+          const text = formatFindingsText(result.findings);
+          if (text) process.stdout.write(text + "\n");
+          for (const f of result.filesFixed) p.log.success(`fixed ${f}`);
+          if (result.findings.length === 0) p.log.success("no findings");
+        }
+        if (!result.ok) process.exit(1);
+      },
+    );
 
   cli.help();
   cli.version("0.0.0");

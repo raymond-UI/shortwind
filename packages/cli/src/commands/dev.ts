@@ -52,6 +52,8 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
 
   watcher.on("add", schedule).on("change", schedule).on("unlink", schedule);
 
+  await new Promise<void>((resolve) => watcher.once("ready", () => resolve()));
+
   // initial build so SKILL.md is current at start
   await runBuild();
   status({ kind: "ready", recipesDir });
