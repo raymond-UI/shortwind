@@ -147,9 +147,15 @@ async function updateLockfile(
     if (!existsSync(target)) continue;
     const source = readFileSync(target, "utf8");
     const header = extractHeader(source);
-    if (header) {
-      lock.families[family] = { version: header.version, sha: header.sha };
+    if (!header) {
+      // Recipes without a fingerprint header are not lockable — fail
+      // loudly so the user can fix the recipe rather than discover
+      // later that `shortwind upgrade` skips this family silently.
+      throw new Error(
+        `recipe "${family}" has no fingerprint header — refusing to add to lockfile`,
+      );
     }
+    lock.families[family] = { version: header.version, sha: header.sha };
   }
   await writeLockfile(recipesDir, lock);
 }

@@ -53,6 +53,12 @@ export async function add(options: AddOptions): Promise<AddResult> {
   const overwritten: string[] = [];
   const missingDependencies: { family: string; references: string[] }[] = [];
 
+  // Scan the installed-recipe namespace once before the loop, then update
+  // it as each family lands. Previously collectMissingCrossFamilyDeps()
+  // re-walked the whole recipes dir for every requested family, which is
+  // O(n²) on `--all` installs.
+  const installedRecipeNames = readAllInstalledRecipeNames(recipesDir);
+
   for (const family of requested) {
     const targetName = options.as ?? family;
     const targetPath = path.join(recipesDir, `${targetName}.css`);
@@ -76,9 +82,24 @@ export async function add(options: AddOptions): Promise<AddResult> {
     if (exists) overwritten.push(targetName);
     else added.push(targetName);
 
-    const missing = collectMissingCrossFamilyDeps(recipesDir, targetName);
-    if (missing.length > 0) {
-      missingDependencies.push({ family: targetName, references: missing });
+    const parsed = parseInstalledFamily(recipesDir, targetName);
+    if (parsed) {
+      for (const r of parsed.recipes) installedRecipeNames.add(r.name);
+      const ownNames = new Set(parsed.recipes.map((r) => r.name));
+      const missing = new Set<string>();
+      for (const recipe of parsed.recipes) {
+        for (const ref of recipe.references) {
+          if (ownNames.has(ref)) continue;
+          if (installedRecipeNames.has(ref)) continue;
+          missing.add(ref);
+        }
+      }
+      if (missing.size > 0) {
+        missingDependencies.push({
+          family: targetName,
+          references: Array.from(missing).sort(),
+        });
+      }
     }
   }
 
@@ -88,25 +109,14 @@ export async function add(options: AddOptions): Promise<AddResult> {
   return { added, skipped, overwritten, missingDependencies, lockfile: lock, skillPath };
 }
 
-function collectMissingCrossFamilyDeps(recipesDir: string, family: string): string[] {
-  const parsed = parseInstalledFamily(recipesDir, family);
-  if (!parsed) return [];
-  const ownNames = new Set(parsed.recipes.map((r) => r.name));
-  const installedRecipeNames = new Set<string>();
+function readAllInstalledRecipeNames(recipesDir: string): Set<string> {
+  const names = new Set<string>();
   for (const fam of readDirFamilies(recipesDir)) {
     const p = parseInstalledFamily(recipesDir, fam);
     if (!p) continue;
-    for (const r of p.recipes) installedRecipeNames.add(r.name);
+    for (const r of p.recipes) names.add(r.name);
   }
-  const missing = new Set<string>();
-  for (const recipe of parsed.recipes) {
-    for (const ref of recipe.references) {
-      if (ownNames.has(ref)) continue;
-      if (installedRecipeNames.has(ref)) continue;
-      missing.add(ref);
-    }
-  }
-  return Array.from(missing).sort();
+  return names;
 }
 
 function readDirFamilies(recipesDir: string): string[] {

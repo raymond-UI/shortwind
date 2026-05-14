@@ -163,21 +163,35 @@ export async function run(argv: string[] = process.argv): Promise<void> {
         return;
       }
       const controller = new AbortController();
-      process.on("SIGINT", () => controller.abort());
-      await dev({
-        cwd: opts.cwd ?? process.cwd(),
-        signal: controller.signal,
-        onStatus: (status) => {
-          if (status.kind === "rebuilt") {
-            const msg = `✓ regenerated ${status.families.length} families${status.changed ? "" : " (no changes)"}`;
-            process.stdout.write(msg + "\n");
-          } else if (status.kind === "ready") {
-            process.stdout.write(`watching ${status.recipesDir}\n`);
-          } else {
-            process.stderr.write(status.message + "\n");
-          }
-        },
-      });
+      const onSigint = (): void => controller.abort();
+      process.on("SIGINT", onSigint);
+      try {
+        const { stop } = await dev({
+          cwd: opts.cwd ?? process.cwd(),
+          signal: controller.signal,
+          onStatus: (status) => {
+            if (status.kind === "rebuilt") {
+              const msg = `✓ regenerated ${status.families.length} families${status.changed ? "" : " (no changes)"}`;
+              process.stdout.write(msg + "\n");
+            } else if (status.kind === "ready") {
+              process.stdout.write(`watching ${status.recipesDir}\n`);
+            } else {
+              process.stderr.write(status.message + "\n");
+            }
+          },
+        });
+        // Block until SIGINT (or otherwise aborted), then close the watcher
+        // and exit cleanly — without this the listener stays attached and
+        // controller.abort() never returns control to the CLI.
+        await new Promise<void>((resolve) => {
+          if (controller.signal.aborted) resolve();
+          else controller.signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        await stop();
+      } finally {
+        process.off("SIGINT", onSigint);
+      }
+      process.exit(0);
     });
 
   cli

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { rename, writeFile } from "node:fs/promises";
+import { open, rename } from "node:fs/promises";
 import path from "node:path";
 import { createRegistrySource, type RegistrySource } from "../registry-source.js";
 import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
@@ -63,7 +63,11 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
   const installed = installedFamilies(recipesDir);
   const targets = options.families && options.families.length > 0 ? options.families : installed;
   const lock = await readLockfile(recipesDir);
-  if (!lock.registry) lock.registry = registry;
+  let lockfileDirty = false;
+  if (!lock.registry) {
+    lock.registry = registry;
+    lockfileDirty = true;
+  }
 
   const outcomes: FamilyOutcome[] = [];
   const errors: { family: string; message: string }[] = [];
@@ -178,16 +182,15 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
     });
     hasUpdates = true;
     anyWritten = true;
+    lockfileDirty = true;
   }
 
   if (errors.length > 0) throw new UpgradeError(errors);
 
   let skillPath: string | null = null;
-  if (!options.check && anyWritten) {
-    await writeLockfile(recipesDir, lock);
-    skillPath = await regenerateSkillMd(cwd, config);
-  } else if (!options.check) {
-    await writeLockfile(recipesDir, lock);
+  if (!options.check) {
+    if (lockfileDirty) await writeLockfile(recipesDir, lock);
+    if (anyWritten) skillPath = await regenerateSkillMd(cwd, config);
   }
 
   return { outcomes, hasUpdates, hasTouched, lockfile: lock, skillPath };
@@ -195,6 +198,12 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
 
 async function atomicWrite(filePath: string, body: string): Promise<void> {
   const tmp = filePath + ".tmp";
-  await writeFile(tmp, body);
+  const fh = await open(tmp, "w");
+  try {
+    await fh.writeFile(body);
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
   await rename(tmp, filePath);
 }

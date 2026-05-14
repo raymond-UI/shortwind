@@ -22,11 +22,33 @@ export async function readLockfile(recipesDir: string): Promise<Lockfile> {
     return { version: LOCK_VERSION, registry: "", families: {} };
   }
   const body = await readFile(p, "utf8");
-  const parsed = JSON.parse(body) as Partial<Lockfile>;
+  const raw = JSON.parse(body) as unknown;
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`${p}: lockfile must be a JSON object`);
+  }
+  const r = raw as Record<string, unknown>;
+  const families: Record<string, LockEntry> = {};
+  if (r["families"] !== undefined) {
+    if (typeof r["families"] !== "object" || r["families"] === null) {
+      throw new Error(`${p}: "families" must be an object`);
+    }
+    for (const [name, entry] of Object.entries(r["families"] as Record<string, unknown>)) {
+      if (typeof entry !== "object" || entry === null) {
+        throw new Error(`${p}: families["${name}"] must be an object`);
+      }
+      const e = entry as Record<string, unknown>;
+      if (typeof e["version"] !== "string" || typeof e["sha"] !== "string") {
+        throw new Error(
+          `${p}: families["${name}"] must have string "version" and "sha"`,
+        );
+      }
+      families[name] = { version: e["version"], sha: e["sha"] };
+    }
+  }
   return {
-    version: parsed.version ?? LOCK_VERSION,
-    registry: parsed.registry ?? "",
-    families: parsed.families ?? {},
+    version: typeof r["version"] === "number" ? r["version"] : LOCK_VERSION,
+    registry: typeof r["registry"] === "string" ? r["registry"] : "",
+    families,
   };
 }
 

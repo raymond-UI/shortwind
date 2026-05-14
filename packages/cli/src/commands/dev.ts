@@ -16,6 +16,7 @@ export type DevStatus =
   | { kind: "error"; message: string };
 
 export async function dev(options: DevOptions): Promise<{ stop: () => Promise<void> }> {
+  options.signal?.throwIfAborted();
   const cwd = path.resolve(options.cwd);
   const config = await readConfig(cwd);
   const recipesDir = path.join(cwd, config.recipesDir);
@@ -61,21 +62,29 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
 
   watcher.on("add", schedule).on("change", schedule).on("unlink", schedule);
 
-  await new Promise<void>((resolve) => watcher.once("ready", () => resolve()));
-
-  // initial build so SKILL.md is current at start
-  await runBuild();
-  status({ kind: "ready", recipesDir });
-
+  let stopped = false;
   const stop = async (): Promise<void> => {
+    if (stopped) return;
+    stopped = true;
     if (timer) clearTimeout(timer);
     await watcher.close();
   };
 
   if (options.signal) {
-    if (options.signal.aborted) await stop();
-    else options.signal.addEventListener("abort", () => void stop(), { once: true });
+    if (options.signal.aborted) {
+      await stop();
+      return { stop };
+    }
+    options.signal.addEventListener("abort", () => void stop(), { once: true });
   }
+
+  await new Promise<void>((resolve) => watcher.once("ready", () => resolve()));
+  if (stopped) return { stop };
+
+  // initial build so SKILL.md is current at start
+  await runBuild();
+  if (stopped) return { stop };
+  status({ kind: "ready", recipesDir });
 
   return { stop };
 }
