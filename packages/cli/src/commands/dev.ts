@@ -30,16 +30,25 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
 
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
+  let pending = false;
 
   const runBuild = async (): Promise<void> => {
-    if (running) return;
+    if (running) {
+      pending = true;
+      return;
+    }
     running = true;
     try {
-      const result = await build({ cwd });
-      status({ kind: "rebuilt", families: result.families, changed: result.changed });
-    } catch (err) {
-      if (err instanceof BuildError) status({ kind: "error", message: err.message });
-      else status({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      do {
+        pending = false;
+        try {
+          const result = await build({ cwd });
+          status({ kind: "rebuilt", families: result.families, changed: result.changed });
+        } catch (err) {
+          if (err instanceof BuildError) status({ kind: "error", message: err.message });
+          else status({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+        }
+      } while (pending);
     } finally {
       running = false;
     }

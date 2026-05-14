@@ -175,6 +175,11 @@ function loadRegistry(
 
 type ClassUsage = {
   fileOffset: number;
+  // Exact source offset of the first character inside the attribute value
+  // (just past the opening quote). raw.length characters from here is the
+  // closing quote. Used by the auto-fix writer; indexOf-based location
+  // hunting is unsafe because two attributes can share the same raw text.
+  valueStart: number;
   raw: string;
   tokens: Array<{ value: string; line: number; column: number }>;
   // Only string-literal attribute values can be auto-fixed in place;
@@ -195,6 +200,7 @@ export function extractClassUsages(source: string): ClassUsage[] {
     const valueStart = attrStart + m[0]!.length - 1 - value.length;
     usages.push({
       fileOffset: attrStart,
+      valueStart,
       raw: value,
       tokens: tokenizeClassString(source, value, valueStart),
       fixable: true,
@@ -215,6 +221,7 @@ export function extractClassUsages(source: string): ClassUsage[] {
       if (tokens.length === 0) continue;
       usages.push({
         fileOffset: literalStart,
+        valueStart,
         raw: value,
         tokens,
         fixable: false,
@@ -354,11 +361,12 @@ function checkRedundantUtility(
     }
 
     if (fixed !== null && usage.fixable) {
-      const valueStart = usage.fileOffset + (source.indexOf("=", usage.fileOffset) - usage.fileOffset);
-      const quoteIdx = source.indexOf(usage.raw, valueStart);
-      fixed += source.slice(cursor, quoteIdx);
+      // valueStart is the exact offset of the first content char (just past
+      // the opening quote); raw.length is the content length.
+      if (usage.valueStart < cursor) continue;
+      fixed += source.slice(cursor, usage.valueStart);
       fixed += kept.join(" ");
-      cursor = quoteIdx + usage.raw.length;
+      cursor = usage.valueStart + usage.raw.length;
     }
   }
   if (fixed !== null) fixed += source.slice(cursor);

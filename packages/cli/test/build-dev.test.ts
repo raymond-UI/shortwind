@@ -150,6 +150,40 @@ describe("dev", () => {
     expect(skill).toContain("card");
   });
 
+  it("coalesces events during an in-flight build into a follow-up rebuild", async () => {
+    const dir = await setupProject("none");
+    dirs.push(dir);
+
+    const events: DevStatus[] = [];
+    const { stop } = await dev({
+      cwd: dir,
+      debounceMs: 5,
+      onStatus: (s) => events.push(s),
+    });
+    stoppers.push(stop);
+
+    await waitFor(() => events.some((e) => e.kind === "ready"));
+
+    const cardCss = readFileSync(path.join(REGISTRY_PATH, "recipes", "card.css"), "utf8");
+    const buttonCss = readFileSync(path.join(REGISTRY_PATH, "recipes", "button.css"), "utf8");
+
+    // Two writes back-to-back: the second arrives while the first build is
+    // still running. The dropped-event bug would leave events containing
+    // only one "rebuilt" with families=[card] and miss "button" entirely
+    // until another file change came in.
+    await writeFile(path.join(dir, "recipes", "card.css"), cardCss);
+    await writeFile(path.join(dir, "recipes", "button.css"), buttonCss);
+
+    await waitFor(() =>
+      events.some(
+        (e) =>
+          e.kind === "rebuilt" &&
+          e.families.includes("card") &&
+          e.families.includes("button"),
+      ),
+    );
+  });
+
   it("emits error status on parse error but keeps watching", async () => {
     const dir = await setupProject("none");
     dirs.push(dir);

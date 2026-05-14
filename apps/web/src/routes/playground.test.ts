@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeShareHash, encodeShareHash } from "./playground";
+import { decodeShareHash, encodeShareHash, MAX_SHARE_HASH_BYTES } from "./playground";
 
 describe("playground share hash", () => {
   it("round-trips a multi-line UTF-8 input", () => {
@@ -14,5 +14,10 @@ describe("playground share hash", () => {
   it("returns null for a malformed share hash", () => {
     expect(decodeShareHash("")).toBeNull();
     expect(decodeShareHash("foo=bar")).toBeNull();
+  });
+
+  it("refuses to decode a share payload larger than the size cap", () => {
+    const oversize = "a".repeat(MAX_SHARE_HASH_BYTES + 1);
+    expect(decodeShareHash("share=" + oversize)).toBeNull();
   });
 });

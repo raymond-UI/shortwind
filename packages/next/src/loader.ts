@@ -56,12 +56,23 @@ type LoaderContext = {
   resourcePath: string;
   addDependency?: (file: string) => void;
   addContextDependency?: (dir: string) => void;
+  emitError?: (err: Error) => void;
 };
 
 export default function shortwindLoader(this: LoaderContext, source: string): string {
   const options = this.getOptions();
-  const entry = getRegistry(options.recipesDir);
   if (this.addContextDependency) this.addContextDependency(options.recipesDir);
+
+  let entry: CacheEntry;
+  try {
+    entry = getRegistry(options.recipesDir);
+  } catch (err) {
+    const wrapped =
+      err instanceof Error ? err : new Error(`shortwind: failed to load registry: ${String(err)}`);
+    if (this.emitError) this.emitError(wrapped);
+    return source;
+  }
+
   if (this.addDependency) {
     for (const file of entry.files) this.addDependency(file);
   }

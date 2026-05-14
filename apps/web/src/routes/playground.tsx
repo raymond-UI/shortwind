@@ -100,6 +100,7 @@ function PlaygroundPage() {
           <iframe
             title="Rendered preview"
             sandbox="allow-scripts"
+            referrerPolicy="no-referrer"
             srcDoc={renderIframe(output)}
             className="h-[28rem] w-full rounded-md border border-slate-200 bg-white"
           />
@@ -150,14 +151,20 @@ export function encodeShareHash(input: string): string {
   return "share=" + Buffer.from(input, "utf8").toString("base64");
 }
 
+// 50 KB encoded ceiling — well above any reasonable hand-typed snippet,
+// well below the multi-MB inputs that would freeze expand() in the tab.
+export const MAX_SHARE_HASH_BYTES = 50 * 1024;
+
 export function decodeShareHash(hash: string): string | null {
   const m = hash.match(/share=([^&]+)/);
   if (!m) return null;
+  const payload = m[1]!;
+  if (payload.length > MAX_SHARE_HASH_BYTES) return null;
   try {
     if (typeof atob !== "undefined") {
-      return decodeURIComponent(escape(atob(m[1]!)));
+      return decodeURIComponent(escape(atob(payload)));
     }
-    return Buffer.from(m[1]!, "base64").toString("utf8");
+    return Buffer.from(payload, "base64").toString("utf8");
   } catch {
     return null;
   }

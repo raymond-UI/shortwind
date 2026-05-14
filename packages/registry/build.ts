@@ -42,8 +42,13 @@ export type BuildResult = {
   manifestPath: string;
 };
 
+// Canonical header form (matches writeFamily output exactly):
+//   /* shortwind: <family>@<version> sha:<6 lowercase hex> */
+// We deliberately do NOT accept legacy "— DO NOT EDIT THIS LINE" trailers,
+// because writeFamily never emits them — accepting them silently round-trips
+// the header into the short form. sha is validated to a 6-hex shape.
 const HEADER_RE =
-  /^\/\*\s*shortwind:\s+(\S+)@(\S+)\s+sha:([^\s*]+)(?:\s+—\s+DO NOT EDIT THIS LINE)?\s*\*\//;
+  /^\/\*\s*shortwind:\s+(\S+)@(\S+)\s+sha:([0-9a-f]{6})\s*\*\//;
 
 function normalizeBody(body: string): string {
   return body.replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "");
