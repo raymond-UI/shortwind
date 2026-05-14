@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "value": {
+    "header": null,
+    "recipes": [
+      {
+        "name": "card-elevated",
+        "description": null,
+        "tokens": ["@card", "rounded-xl", "p-6", "hover:shadow-md", "transition-shadow"],
+        "references": ["card"],
+        "sourceFile": "input.css",
+        "sourceLine": 1
+      }
+    ]
+  }
+}

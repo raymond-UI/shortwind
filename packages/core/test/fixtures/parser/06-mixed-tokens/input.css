@@ -1,0 +1,3 @@
+@recipe card-elevated {
+  @card rounded-xl p-6 hover:shadow-md transition-shadow
+}

@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "value": {
+    "header": null,
+    "recipes": [
+      {
+        "name": "card",
+        "description": null,
+        "tokens": ["p-[13px]", "bg-[#abc]", "grid-cols-[1fr_2fr]"],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 1
+      }
+    ]
+  }
+}

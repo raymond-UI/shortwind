@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "parse/missing-name",
+      "message": "expected recipe name after '@recipe'",
+      "file": "input.css",
+      "line": 1,
+      "column": 9
+    }
+  ]
+}

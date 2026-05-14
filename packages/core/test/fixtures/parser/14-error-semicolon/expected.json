@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "parse/semicolon-in-body",
+      "message": "recipe bodies are class lists, not CSS — remove the ';'",
+      "file": "input.css",
+      "line": 2,
+      "column": 13
+    }
+  ]
+}

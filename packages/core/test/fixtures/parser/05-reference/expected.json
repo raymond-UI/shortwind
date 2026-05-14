@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "value": {
+    "header": null,
+    "recipes": [
+      {
+        "name": "card",
+        "description": null,
+        "tokens": ["rounded-lg", "border"],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 1
+      },
+      {
+        "name": "card-elevated",
+        "description": null,
+        "tokens": ["@card", "shadow-md"],
+        "references": ["card"],
+        "sourceFile": "input.css",
+        "sourceLine": 5
+      }
+    ]
+  }
+}

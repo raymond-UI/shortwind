@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "value": {
+    "header": null,
+    "recipes": [
+      {
+        "name": "noop",
+        "description": null,
+        "tokens": [],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 1
+      },
+      {
+        "name": "also-noop",
+        "description": null,
+        "tokens": [],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 4
+      }
+    ]
+  }
+}

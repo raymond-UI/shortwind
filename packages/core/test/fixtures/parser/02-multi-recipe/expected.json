@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "value": {
+    "header": null,
+    "recipes": [
+      {
+        "name": "card",
+        "description": null,
+        "tokens": ["rounded-lg"],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 1
+      },
+      {
+        "name": "btn",
+        "description": null,
+        "tokens": ["px-4", "py-2"],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 5
+      }
+    ]
+  }
+}

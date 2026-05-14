@@ -1,0 +1,8 @@
+/* Default content card. */
+@recipe card {
+  rounded-lg
+}
+
+@recipe btn {
+  px-4
+}

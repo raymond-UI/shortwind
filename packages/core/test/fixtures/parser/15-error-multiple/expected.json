@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "parse/missing-name",
+      "message": "expected recipe name after '@recipe'",
+      "file": "input.css",
+      "line": 1,
+      "column": 9
+    },
+    {
+      "code": "parse/semicolon-in-body",
+      "message": "recipe bodies are class lists, not CSS — remove the ';'",
+      "file": "input.css",
+      "line": 6,
+      "column": 7
+    }
+  ]
+}

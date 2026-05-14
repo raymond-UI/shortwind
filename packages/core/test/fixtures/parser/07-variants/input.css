@@ -1,0 +1,3 @@
+@recipe card {
+  rounded-lg hover:shadow-md dark:bg-zinc-900 md:grid-cols-2
+}

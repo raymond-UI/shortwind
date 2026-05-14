@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "parse/missing-brace",
+      "message": "missing closing '}' for recipe 'card'",
+      "file": "input.css",
+      "line": 1,
+      "column": 14
+    }
+  ]
+}

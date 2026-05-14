@@ -1,0 +1,3 @@
+@recipe card {
+  p-[13px] bg-[#abc] grid-cols-[1fr_2fr]
+}

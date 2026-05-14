@@ -1,0 +1,5 @@
+@recipe card {
+  rounded-lg /* inline */ border
+  /* full-line */
+  bg-white
+}

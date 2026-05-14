@@ -1,0 +1,11 @@
+/* shortwind: card@0.4.2 sha:b0a1c3 — DO NOT EDIT THIS LINE */
+
+/* Default content card. */
+@recipe card {
+  rounded-lg border border-zinc-200 bg-white p-4 shadow-sm
+}
+
+/* Raised card for primary content. Built on @card. */
+@recipe card-elevated {
+  @card rounded-xl p-6 hover:shadow-md transition-shadow
+}

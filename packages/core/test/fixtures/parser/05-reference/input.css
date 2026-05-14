@@ -1,0 +1,7 @@
+@recipe card {
+  rounded-lg border
+}
+
+@recipe card-elevated {
+  @card shadow-md
+}
