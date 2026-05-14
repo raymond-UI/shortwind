@@ -8,7 +8,11 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "check:deps": "tsx scripts/check-deps.ts"
+    "test:scripts": "vitest run --root .",
+    "check:deps": "tsx scripts/check-deps.ts",
+    "check:pins": "tsx scripts/check-pins.ts",
+    "check:release-age": "tsx scripts/check-release-age.ts",
+    "check:policy": "pnpm check:deps && pnpm check:pins && pnpm check:release-age"
   },
   "packageManager": "pnpm@11.1.1",
   "devDependencies": {

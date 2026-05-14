@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: Security policy checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm audit (fail on high/critical)
+        run: pnpm audit --audit-level=high --prod
+      - name: Exact-pin policy (@tanstack/react-router, @tanstack/react-start)
+        run: pnpm check:pins
+      - name: Release-age policy (pnpm.minimumReleaseAge ≥ 72h)
+        run: pnpm check:release-age
+      - name: Dependency-direction policy (layered arrows)
+        run: pnpm check:deps
+      - name: Policy script tests
+        run: pnpm test:scripts
+
+  build:
+    name: Build, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  verify-recipes:
+    name: Verify recipe lockfile (if present)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: shortwind verify
+        run: |
+          if [ -f recipes/.shortwind-lock.json ]; then
+            pnpm --filter shortwind exec shortwind verify
+          else
+            echo "No recipes/.shortwind-lock.json — skipping verify."
+          fi
