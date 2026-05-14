@@ -48,6 +48,7 @@ export function autostart(): void {
   }
 }
 
-if (typeof document !== "undefined") {
-  autostart();
-}
+// Autostart is intentionally not invoked on import. Consumers who want the
+// IIFE bundle to run on page load should import from `@shortwind/runtime/auto`,
+// which calls `autostart()` for them. Importing only `expandClassList` from
+// the main entry stays side-effect-free.

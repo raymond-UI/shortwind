@@ -196,6 +196,7 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
     copyFileSync(opts.presetsFile, path.join(registryOut, "presets.json"));
   }
 
+  validateExpansionTokens(manifest);
   validatePresets(manifest, path.join(registryOut, "presets.json"));
 
   if (opts.runtimeBundle && existsSync(opts.runtimeBundle)) {
@@ -207,6 +208,29 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
   }
 
   return { manifest, manifestPath };
+}
+
+// Tokens are concatenated into `className` in the catalog UI. React escapes
+// attribute values, so this is defense-in-depth rather than a live XSS fix —
+// but it ensures a third-party recipe can't sneak `" onload="alert(1)` into
+// the wire format that downstream tools also consume. Tailwind utilities
+// (including arbitrary values like `bg-[url('/x.png')]`) stay within this
+// alphabet; anything outside it is almost certainly a parsing bug or an
+// attempted injection.
+const EXPANSION_TOKEN_RE = /^[\w:\/\-\[\]\(\),.%@!#*+&'"=?]+$/;
+
+function validateExpansionTokens(manifest: Manifest): void {
+  for (const family of manifest.families) {
+    for (const recipe of family.recipes) {
+      for (const token of recipe.expansion) {
+        if (!EXPANSION_TOKEN_RE.test(token)) {
+          throw new Error(
+            `family "${family.name}" recipe "${recipe.name}" emits invalid token ${JSON.stringify(token)} — must match ${EXPANSION_TOKEN_RE}`,
+          );
+        }
+      }
+    }
+  }
 }
 
 function validatePresets(manifest: Manifest, presetsPath: string): void {

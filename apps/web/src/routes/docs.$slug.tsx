@@ -2,8 +2,15 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { findDoc } from "../lib/docs-data";
 
+const SLUG_RE = /^[a-z0-9-]{1,64}$/;
+
 const getDoc = createServerFn({ method: "GET" })
-  .inputValidator((data: { slug: string }) => data)
+  .inputValidator((data: { slug: string }) => {
+    if (typeof data.slug !== "string" || !SLUG_RE.test(data.slug)) {
+      throw new Error("invalid slug");
+    }
+    return data;
+  })
   .handler(({ data }) => {
     const doc = findDoc(data.slug);
     if (!doc) return null;

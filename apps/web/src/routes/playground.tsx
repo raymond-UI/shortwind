@@ -36,7 +36,15 @@ export const Route = createFileRoute("/playground")({
 
 function PlaygroundPage() {
   const registry = Route.useLoaderData() as Registry;
-  const [input, setInput] = useState<string>(() => readShareHash() ?? DEFAULT_INPUT);
+  // SSR has no window, so the initial state must match what the server
+  // rendered. We rehydrate the shared input from `location.hash` in an effect
+  // after mount.
+  const [input, setInput] = useState<string>(DEFAULT_INPUT);
+
+  useEffect(() => {
+    const fromHash = readShareHash();
+    if (fromHash !== null) setInput(fromHash);
+  }, []);
 
   const output = useMemo(() => expand(input, registry, { mode: "html" }), [
     input,
