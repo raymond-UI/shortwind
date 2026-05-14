@@ -136,7 +136,10 @@ describe("vite plugin", () => {
       ws: { send: (payload: { type: "full-reload" }) => sent.push(payload) },
     };
     await watcher!.configureServer?.(server);
-    expect(events.some((e) => e.startsWith("add:"))).toBe(true);
+    // The watcher must subscribe to the recipes directory specifically — a
+    // generic `add:` prefix lets a regression that registers an unrelated
+    // path slip through.
+    expect(events).toContain(`add:${path.join(dir, "recipes")}`);
     expect(handlers["change"]?.length ?? 0).toBeGreaterThan(0);
 
     handlers["change"]?.forEach((cb) =>

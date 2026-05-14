@@ -19,10 +19,6 @@ type MinimalViteHmrServer = {
     on: (event: string, listener: (file: string) => void) => void;
     off?: (event: string, listener: (file: string) => void) => void;
   };
-  moduleGraph: {
-    getModulesByFile: (file: string) => Set<{ file: string | null }> | undefined;
-    invalidateModule: (mod: unknown) => void;
-  };
   ws: { send: (payload: { type: "full-reload" }) => void };
   httpServer?: { on: (event: "close", cb: () => void) => void } | null;
 };

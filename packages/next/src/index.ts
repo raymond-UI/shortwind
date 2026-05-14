@@ -17,12 +17,19 @@ type WebpackContext = {
   isServer: boolean;
 };
 
+type TurbopackRule = {
+  loaders: Array<{ loader: string; options?: unknown }>;
+  [k: string]: unknown;
+};
+
+type TurbopackConfig = {
+  rules?: Record<string, TurbopackRule>;
+  [k: string]: unknown;
+};
+
 type NextConfig = {
   webpack?: (config: WebpackConfig, ctx: WebpackContext) => WebpackConfig;
-  turbopack?: {
-    rules?: Record<string, unknown>;
-    [k: string]: unknown;
-  };
+  turbopack?: TurbopackConfig;
   experimental?: Record<string, unknown>;
   [k: string]: unknown;
 };
@@ -62,8 +69,8 @@ export function withShortwind(
       },
     };
 
-    const turbo = nextConfig.turbopack ?? {};
-    const rules = { ...(turbo.rules ?? {}) } as Record<string, unknown>;
+    const turbo: TurbopackConfig = nextConfig.turbopack ?? {};
+    const rules: Record<string, TurbopackRule> = { ...(turbo.rules ?? {}) };
     rules["*.{tsx,ts,jsx,js,mdx,md}"] = {
       loaders: [{ loader: LOADER_PATH, options: loaderOptions }],
     };
