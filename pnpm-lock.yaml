@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@types/node':
+        specifier: ^25.7.0
+        version: 25.7.0
       '@vitest/coverage-v8':
         specifier: ^4.1.6
         version: 4.1.6(vitest@4.1.6)
@@ -127,6 +130,9 @@ importers:
         specifier: ^0.2.16
         version: 0.2.16
     devDependencies:
+      '@types/node':
+        specifier: ^25.7.0
+        version: 25.7.0
       '@types/semver':
         specifier: ^7.7.1
         version: 7.7.1
