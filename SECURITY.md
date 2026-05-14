@@ -8,6 +8,11 @@ Email **security@shortwind.dev** with:
 - Steps to reproduce, including affected versions.
 - Any proof-of-concept code (please do not file public issues for unpatched vulnerabilities).
 
+If you want to encrypt the report, fetch the latest PGP public key from
+<https://github.com/shortwind/shortwind/security/advisories> (linked at the
+top of the advisory list). The fingerprint is published there so that a
+mailbox compromise alone cannot trick reporters into using an attacker key.
+
 We will acknowledge within **3 business days** and aim to ship a fix or
 mitigation within **30 days** for high-severity issues. Once a fix is shipped
 we will publish an advisory on the GitHub Security tab and credit reporters

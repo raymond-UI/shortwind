@@ -104,9 +104,13 @@ export async function lint(options: LintOptions): Promise<LintResult> {
   }
 
   if (enabledRules.has("recipe/unused")) {
+    const recipesByName = new Map<string, Recipe>();
+    for (const recs of Object.values(registry.families)) {
+      for (const r of recs) recipesByName.set(r.name, r);
+    }
     for (const name of Object.keys(registry.flattened)) {
       if (usedRecipes.has(name)) continue;
-      const recipe = findRecipeByName(registry, name);
+      const recipe = recipesByName.get(name);
       if (!recipe) continue;
       findings.push({
         rule: "recipe/unused",
@@ -388,15 +392,6 @@ function checkRedundantUtility(
   }
   if (fixed !== null) fixed += source.slice(cursor);
   return { findings, fixed };
-}
-
-function findRecipeByName(registry: Registry, name: string): Recipe | null {
-  for (const recs of Object.values(registry.families)) {
-    for (const r of recs) {
-      if (r.name === name) return r;
-    }
-  }
-  return null;
 }
 
 export function formatFindingsText(findings: Finding[]): string {

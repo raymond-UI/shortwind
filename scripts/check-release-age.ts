@@ -47,5 +47,6 @@ if (isMain) {
     );
     process.exit(1);
   }
-  console.log(`OK — pnpm.minimumReleaseAge = ${pkg.pnpm!.minimumReleaseAge} (≥ ${MIN_RELEASE_AGE_MINUTES} minutes).`);
+  const age = pkg.pnpm?.minimumReleaseAge;
+  console.log(`OK — pnpm.minimumReleaseAge = ${age} (≥ ${MIN_RELEASE_AGE_MINUTES} minutes).`);
 }

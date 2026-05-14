@@ -90,7 +90,13 @@ function familyVersion(opts: BuildOptions, family: string, source: string): stri
     return readFileSync(versionFile, "utf8").trim();
   }
   const hdr = parseHeader(source);
-  return hdr?.version ?? "0.0.1";
+  if (hdr) return hdr.version;
+  // Per CLAUDE.md, family versions are mandatory and machine-checked. Surface
+  // the fallback rather than letting a stray new recipe quietly ship as 0.0.1.
+  console.warn(
+    `[registry] family "${family}" has no .version file and no header — defaulting to 0.0.1. Add a header (\`/* shortwind: ${family}@<version> sha:... */\`) to make this explicit.`,
+  );
+  return "0.0.1";
 }
 
 function writeFamily(
@@ -128,8 +134,22 @@ function copyChangelog(
   }
 }
 
+// Sort keys explicitly so output is reproducible across V8 versions and across
+// any code path that builds the manifest by mutating objects (which can defeat
+// V8's insertion-order guarantee for integer-like keys).
 function stableStringify(value: unknown): string {
-  return JSON.stringify(value, null, 2) + "\n";
+  const sortKeys = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sortKeys);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        out[k] = sortKeys((v as Record<string, unknown>)[k]);
+      }
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(sortKeys(value), null, 2) + "\n";
 }
 
 function ensureCleanDir(dir: string): void {
@@ -163,6 +183,18 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
       throw new Error(`Failed to parse ${file}:\n${messages}`);
     }
     const family = file.replace(/\.css$/, "");
+    // Defense-in-depth: readdirSync returns basenames so a traversal payload
+    // would have to be planted by a hostile filesystem, but we still refuse to
+    // path.join() anything that escapes the recipes dir or contains separators.
+    if (
+      family.length === 0 ||
+      family.includes("/") ||
+      family.includes("\\") ||
+      family.includes("..") ||
+      family.startsWith(".")
+    ) {
+      throw new Error(`refusing to build recipe with unsafe family name ${JSON.stringify(family)} (from ${file})`);
+    }
     const version = familyVersion(opts, family, source);
     const body = bodyWithoutHeader(source);
     const sha = computeSha(body);
