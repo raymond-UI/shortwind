@@ -177,31 +177,132 @@ type ClassUsage = {
   fileOffset: number;
   raw: string;
   tokens: Array<{ value: string; line: number; column: number }>;
+  // Only string-literal attribute values can be auto-fixed in place;
+  // JSX expression containers (className={...}) may wrap clsx() / template
+  // literals where blind substring writes would be unsafe.
+  fixable: boolean;
 };
 
-const CLASS_ATTR_RE = /\b(?:class|className)\s*=\s*(["'])([^"']*)\1/g;
+const CLASS_ATTR_STR_RE = /\b(?:class|className)\s*=\s*(["'])([^"']*)\1/g;
+const CLASS_ATTR_BRACE_RE = /\b(?:class|className)\s*=\s*\{/g;
+const STRING_LITERAL_RE = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/g;
 
 export function extractClassUsages(source: string): ClassUsage[] {
   const usages: ClassUsage[] = [];
-  for (const m of source.matchAll(CLASS_ATTR_RE)) {
+  for (const m of source.matchAll(CLASS_ATTR_STR_RE)) {
     const value = m[2] ?? "";
     const attrStart = m.index ?? 0;
     const valueStart = attrStart + m[0]!.length - 1 - value.length;
-    const tokens: ClassUsage["tokens"] = [];
-    let offset = 0;
-    for (const piece of value.split(/(\s+)/)) {
-      if (/^\s+$/.test(piece) || piece.length === 0) {
-        offset += piece.length;
-        continue;
-      }
-      const abs = valueStart + offset;
-      const { line, column } = offsetToLineCol(source, abs);
-      tokens.push({ value: piece, line, column });
-      offset += piece.length;
-    }
-    usages.push({ fileOffset: attrStart, raw: value, tokens });
+    usages.push({
+      fileOffset: attrStart,
+      raw: value,
+      tokens: tokenizeClassString(source, value, valueStart),
+      fixable: true,
+    });
   }
+
+  for (const m of source.matchAll(CLASS_ATTR_BRACE_RE)) {
+    const openBrace = (m.index ?? 0) + m[0]!.length - 1;
+    const close = findMatchingBrace(source, openBrace);
+    if (close === -1) continue;
+    const inner = source.slice(openBrace + 1, close);
+    for (const sm of inner.matchAll(STRING_LITERAL_RE)) {
+      const value = sm[2] ?? "";
+      if (value.length === 0) continue;
+      const literalStart = openBrace + 1 + (sm.index ?? 0);
+      const valueStart = literalStart + 1;
+      const tokens = tokenizeClassString(source, value, valueStart);
+      if (tokens.length === 0) continue;
+      usages.push({
+        fileOffset: literalStart,
+        raw: value,
+        tokens,
+        fixable: false,
+      });
+    }
+  }
+
   return usages;
+}
+
+function tokenizeClassString(
+  source: string,
+  value: string,
+  valueStart: number,
+): Array<{ value: string; line: number; column: number }> {
+  const tokens: Array<{ value: string; line: number; column: number }> = [];
+  let offset = 0;
+  for (const piece of value.split(/(\s+)/)) {
+    if (/^\s+$/.test(piece) || piece.length === 0) {
+      offset += piece.length;
+      continue;
+    }
+    // Inside template literals the regex captures `${expr}` as part of
+    // the value; treat any token containing an interpolation marker as
+    // opaque so we don't try to lint dynamic content.
+    if (piece.includes("${")) {
+      offset += piece.length;
+      continue;
+    }
+    const abs = valueStart + offset;
+    const { line, column } = offsetToLineCol(source, abs);
+    tokens.push({ value: piece, line, column });
+    offset += piece.length;
+  }
+  return tokens;
+}
+
+function findMatchingBrace(source: string, openIdx: number): number {
+  let depth = 1;
+  let i = openIdx + 1;
+  while (i < source.length && depth > 0) {
+    const ch = source[i];
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      i++;
+      while (i < source.length) {
+        if (source[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (source[i] === quote) {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (ch === "`") {
+      i++;
+      while (i < source.length) {
+        if (source[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (source[i] === "`") {
+          i++;
+          break;
+        }
+        if (source[i] === "$" && source[i + 1] === "{") {
+          i += 2;
+          let exprDepth = 1;
+          while (i < source.length && exprDepth > 0) {
+            if (source[i] === "{") exprDepth++;
+            else if (source[i] === "}") exprDepth--;
+            i++;
+          }
+          continue;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    i++;
+  }
+  return depth === 0 ? i - 1 : -1;
 }
 
 function offsetToLineCol(source: string, offset: number): { line: number; column: number } {
@@ -225,7 +326,7 @@ function checkRedundantUtility(
   const findings: Finding[] = [];
   let fixed: string | null = applyFix ? "" : null;
   let cursor = 0;
-  const usages = extractClassUsages(source);
+  const usages = extractClassUsages(source).sort((a, b) => a.fileOffset - b.fileOffset);
   for (const usage of usages) {
     const expansions = new Set<string>();
     for (const tok of usage.tokens) {
@@ -252,7 +353,7 @@ function checkRedundantUtility(
       kept.push(tok.value);
     }
 
-    if (fixed !== null) {
+    if (fixed !== null && usage.fixable) {
       const valueStart = usage.fileOffset + (source.indexOf("=", usage.fileOffset) - usage.fileOffset);
       const quoteIdx = source.indexOf(usage.raw, valueStart);
       fixed += source.slice(cursor, quoteIdx);

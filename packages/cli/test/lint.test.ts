@@ -120,6 +120,59 @@ describe("lint", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("detects @-recipes inside JSX className={...} expressions (string literal, clsx, template literal)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await writeSource(
+      dir,
+      "src/page.tsx",
+      [
+        `import clsx from "clsx";`,
+        `export const A = () => <div className={"@ghost"} />;`,
+        `export const B = ({ on }: { on: boolean }) => <div className={clsx("@phantom", on && "@card")} />;`,
+        `export const C = ({ k }: { k: string }) => <div className={` + "`@spectre ${k}`" + `} />;`,
+        ``,
+      ].join("\n"),
+    );
+
+    const result = await lint({ cwd: dir, rules: ["recipe/unknown"] });
+    const unknown = result.findings.filter((f) => f.rule === "recipe/unknown").map((f) => f.message);
+    expect(unknown).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("@ghost"),
+        expect.stringContaining("@phantom"),
+        expect.stringContaining("@spectre"),
+      ]),
+    );
+  });
+
+  it("counts @-recipes inside className={...} as used (recipe/unused)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await writeSource(
+      dir,
+      "src/page.tsx",
+      `import clsx from "clsx";\nexport default () => <div className={clsx("@card")} />;\n`,
+    );
+
+    const result = await lint({ cwd: dir, rules: ["recipe/unused"] });
+    const unused = result.findings.filter((f) => f.rule === "recipe/unused").map((f) => f.message);
+    expect(unused.some((m) => m.includes("@card "))).toBe(false);
+  });
+
+  it("does NOT rewrite JSX className={...} during --fix (only reports)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    const original = `import clsx from "clsx";\nexport default () => <div className={clsx("@card rounded-lg p-4")} />;\n`;
+    const file = await writeSource(dir, "src/page.tsx", original);
+
+    const result = await lint({ cwd: dir, rules: ["recipe/no-redundant-utility"], fix: true });
+    const redundant = result.findings.filter((f) => f.rule === "recipe/no-redundant-utility");
+    expect(redundant.length).toBeGreaterThan(0);
+    expect(result.filesFixed).not.toContain(file);
+    expect(await readFile(file, "utf8")).toBe(original);
+  });
+
   it("formatFindingsText emits eslint-compatible lines", () => {
     const text = formatFindingsText([
       {
