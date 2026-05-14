@@ -1,6 +1,8 @@
 import * as p from "@clack/prompts";
 import { cac } from "cac";
 import { add } from "./commands/add.js";
+import { build, BuildError } from "./commands/build.js";
+import { dev } from "./commands/dev.js";
 import { remove } from "./commands/remove.js";
 import { preset as runPreset } from "./commands/preset.js";
 import { ls, formatLsText } from "./commands/ls.js";
@@ -116,6 +118,58 @@ export async function run(argv: string[] = process.argv): Promise<void> {
         }
       },
     );
+
+  cli
+    .command("build", "Regenerate SKILL.md from ./recipes/")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (opts: { cwd?: string }) => {
+      try {
+        const result = await build({ cwd: opts.cwd ?? process.cwd() });
+        if (result.changed) p.log.success(`regenerated ${result.families.length} families`);
+        else p.log.info(`up to date (${result.families.length} families)`);
+      } catch (err) {
+        if (err instanceof BuildError) {
+          process.stderr.write(err.message + "\n");
+          process.exit(1);
+        }
+        throw err;
+      }
+    });
+
+  cli
+    .command("dev", "Watch ./recipes/ and regenerate SKILL.md on change")
+    .option("--cwd <dir>", "Working directory")
+    .option("--once", "Run build once and exit")
+    .action(async (opts: { cwd?: string; once?: boolean }) => {
+      if (opts.once) {
+        try {
+          await build({ cwd: opts.cwd ?? process.cwd() });
+        } catch (err) {
+          if (err instanceof BuildError) {
+            process.stderr.write(err.message + "\n");
+            process.exit(1);
+          }
+          throw err;
+        }
+        return;
+      }
+      const controller = new AbortController();
+      process.on("SIGINT", () => controller.abort());
+      await dev({
+        cwd: opts.cwd ?? process.cwd(),
+        signal: controller.signal,
+        onStatus: (status) => {
+          if (status.kind === "rebuilt") {
+            const msg = `✓ regenerated ${status.families.length} families${status.changed ? "" : " (no changes)"}`;
+            process.stdout.write(msg + "\n");
+          } else if (status.kind === "ready") {
+            process.stdout.write(`watching ${status.recipesDir}\n`);
+          } else {
+            process.stderr.write(status.message + "\n");
+          }
+        },
+      });
+    });
 
   cli.help();
   cli.version("0.0.0");
