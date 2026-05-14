@@ -157,6 +157,10 @@ importers:
       next:
         specifier: '>=14.0.0'
         version: 16.2.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+    devDependencies:
+      '@types/node':
+        specifier: ^25.7.0
+        version: 25.7.0
 
   packages/registry:
     dependencies:

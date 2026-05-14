@@ -1,0 +1,138 @@
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { realpathSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { withShortwind, shortwindLoader } from "../src/index.js";
+import { clearRegistryCache } from "../src/loader.js";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const REGISTRY = path.resolve(here, "..", "..", "registry");
+const CARD_CSS = readFileSync(path.join(REGISTRY, "recipes", "card.css"), "utf8");
+
+async function makeProject(recipes: Record<string, string> = {}): Promise<string> {
+  const raw = await mkdtemp(path.join(tmpdir(), "shortwind-next-"));
+  const dir = realpathSync(raw);
+  await writeFile(path.join(dir, "package.json"), JSON.stringify({ name: "x" }, null, 2));
+  const recipesDir = path.join(dir, "recipes");
+  await mkdir(recipesDir, { recursive: true });
+  for (const [name, body] of Object.entries(recipes)) {
+    await writeFile(path.join(recipesDir, name), body);
+  }
+  return dir;
+}
+
+describe("withShortwind", () => {
+  let dirs: string[] = [];
+  beforeEach(() => {
+    dirs = [];
+    clearRegistryCache();
+  });
+  afterEach(async () => {
+    for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("wraps an existing Next config and adds a webpack hook", async () => {
+    const dir = await makeProject();
+    dirs.push(dir);
+    const wrapped = withShortwind({ cwd: dir })({ reactStrictMode: true });
+    expect(wrapped.reactStrictMode).toBe(true);
+    expect(typeof wrapped.webpack).toBe("function");
+  });
+
+  it("webpack hook prepends a pre-loader rule for source files", async () => {
+    const dir = await makeProject();
+    dirs.push(dir);
+    const wrapped = withShortwind({ cwd: dir })({});
+    const cfg = wrapped.webpack!({ module: { rules: [{ existing: true }] } }, {
+      dev: false,
+      isServer: false,
+    });
+    const rules = cfg.module?.rules as Array<Record<string, unknown>>;
+    expect(rules?.length).toBe(2);
+    const first = rules[0]!;
+    expect(first["enforce"]).toBe("pre");
+    expect(String((first["test"] as RegExp).source)).toContain("tsx?");
+    const use = first["use"] as Array<{ loader: string; options: { recipesDir: string } }>;
+    expect(use[0]?.loader).toMatch(/loader\.js$/);
+    expect(use[0]?.options.recipesDir).toBe(path.join(dir, "recipes"));
+  });
+
+  it("preserves a caller-supplied webpack function", async () => {
+    const dir = await makeProject();
+    dirs.push(dir);
+    const calls: string[] = [];
+    const userWebpack = (config: { module?: { rules?: unknown[] } }) => {
+      calls.push("user");
+      config.module ??= { rules: [] };
+      (config.module.rules as unknown[]).push({ userRule: true });
+      return config;
+    };
+    const wrapped = withShortwind({ cwd: dir })({ webpack: userWebpack });
+    const cfg = wrapped.webpack!(
+      { module: { rules: [] } },
+      { dev: false, isServer: false },
+    );
+    expect(calls).toEqual(["user"]);
+    const rules = cfg.module?.rules as Array<Record<string, unknown>>;
+    // user rule got appended, our rule got unshifted at index 0
+    expect(rules[0]?.["enforce"]).toBe("pre");
+    expect(rules.find((r) => r["userRule"] === true)).toBeTruthy();
+  });
+
+  it("registers a turbopack rule for source extensions", async () => {
+    const dir = await makeProject();
+    dirs.push(dir);
+    const wrapped = withShortwind({ cwd: dir })({});
+    const rules = (wrapped.turbopack?.rules ?? {}) as Record<string, unknown>;
+    const key = Object.keys(rules).find((k) => k.includes("tsx"));
+    expect(key).toBeTruthy();
+    expect(rules[key!]).toMatchObject({
+      loaders: [{ loader: expect.stringMatching(/loader\.js$/), options: { recipesDir: path.join(dir, "recipes") } }],
+    });
+  });
+
+  it("preserves caller-supplied turbopack rules", async () => {
+    const dir = await makeProject();
+    dirs.push(dir);
+    const wrapped = withShortwind({ cwd: dir })({
+      turbopack: { rules: { "*.svg": { loaders: ["custom-svg"] } } },
+    });
+    const rules = wrapped.turbopack?.rules ?? {};
+    expect(rules["*.svg"]).toBeTruthy();
+    expect(Object.keys(rules).some((k) => k.includes("tsx"))).toBe(true);
+  });
+
+  it("loader expands @recipe tokens in source", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const ctx = {
+      getOptions: () => ({ recipesDir: path.join(dir, "recipes") }),
+      resourcePath: path.join(dir, "src", "App.tsx"),
+    };
+    const out = shortwindLoader.call(ctx, `<div className="@card"></div>`);
+    expect(out).not.toMatch(/@card\b/);
+    expect(out).toContain("rounded-lg");
+  });
+
+  it("clearRegistryCache forces a recipes re-read", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const ctx = {
+      getOptions: () => ({ recipesDir: path.join(dir, "recipes") }),
+      resourcePath: path.join(dir, "src", "App.tsx"),
+    };
+    const first = shortwindLoader.call(ctx, `<div className="@card"></div>`);
+    // change the recipe body
+    await writeFile(
+      path.join(dir, "recipes", "card.css"),
+      "/* shortwind: card@0.0.1 sha:000000 */\n\n/* card. */\n@recipe card { glow }\n",
+    );
+    const stale = shortwindLoader.call(ctx, `<div className="@card"></div>`);
+    expect(stale).toBe(first); // cached
+    clearRegistryCache();
+    const fresh = shortwindLoader.call(ctx, `<div className="@card"></div>`);
+    expect(fresh).toContain("glow");
+  });
+});

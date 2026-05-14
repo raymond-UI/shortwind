@@ -17,5 +17,8 @@
   "dependencies": {
     "@shortwind/core": "workspace:*",
     "@shortwind/tailwind": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0"
   }
 }
