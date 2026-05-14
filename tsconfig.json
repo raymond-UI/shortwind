@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/tailwind" },
+    { "path": "./packages/vite" },
+    { "path": "./packages/next" },
+    { "path": "./packages/astro" },
+    { "path": "./packages/cli" },
+    { "path": "./apps/web" }
+  ]
+}
