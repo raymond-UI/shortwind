@@ -16,6 +16,27 @@ export { build, BuildError } from "./commands/build.js";
 export type { BuildOptions, BuildResult } from "./commands/build.js";
 export { dev } from "./commands/dev.js";
 export type { DevOptions, DevStatus } from "./commands/dev.js";
+export { upgrade, UpgradeError } from "./commands/upgrade.js";
+export type {
+  UpgradeOptions,
+  UpgradeResult,
+  UpgradeChoice,
+  UpgradeResolver,
+  TouchedContext,
+  FamilyOutcome,
+  FamilyState,
+} from "./commands/upgrade.js";
+export { verify } from "./commands/verify.js";
+export type { VerifyOptions, VerifyResult, VerifyIssue } from "./commands/verify.js";
 export { readLockfile, writeLockfile } from "./lockfile.js";
 export type { Lockfile, LockEntry } from "./lockfile.js";
+export {
+  computeBodySha,
+  extractHeader,
+  rewriteHeaderSha,
+  sealRecipeFile,
+  buildHeaderLine,
+  normalizeBody,
+} from "./fingerprint.js";
+export type { RecipeHeader } from "./fingerprint.js";
 export { renameFamilyInSource } from "./project.js";

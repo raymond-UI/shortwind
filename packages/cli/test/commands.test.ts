@@ -54,7 +54,8 @@ describe("add", () => {
     expect(result.added).toEqual(["card"]);
     expect(existsSync(path.join(dir, "recipes", "card.css"))).toBe(true);
     expect(result.lockfile.families["card"]?.version).toBe("0.0.1");
-    expect(result.lockfile.families["card"]?.sha).toBe("000000");
+    expect(result.lockfile.families["card"]?.sha).toMatch(/^[a-f0-9]{6}$/);
+    expect(result.lockfile.families["card"]?.sha).not.toBe("000000");
   });
 
   it("regenerates SKILL.md with the newly installed family", async () => {

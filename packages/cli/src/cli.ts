@@ -1,4 +1,5 @@
 import * as p from "@clack/prompts";
+import pc from "picocolors";
 import { cac } from "cac";
 import { add } from "./commands/add.js";
 import { build, BuildError } from "./commands/build.js";
@@ -6,6 +7,13 @@ import { dev } from "./commands/dev.js";
 import { remove } from "./commands/remove.js";
 import { preset as runPreset } from "./commands/preset.js";
 import { ls, formatLsText } from "./commands/ls.js";
+import {
+  upgrade,
+  UpgradeError,
+  type TouchedContext,
+  type UpgradeChoice,
+} from "./commands/upgrade.js";
+import { verify } from "./commands/verify.js";
 import { init, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
@@ -171,9 +179,111 @@ export async function run(argv: string[] = process.argv): Promise<void> {
       });
     });
 
+  cli
+    .command("upgrade [...families]", "Pull registry updates into ./recipes")
+    .option("--check", "Read-only — print drift summary and exit nonzero on updates")
+    .option("--force", "Skip touched-detection; overwrite local edits")
+    .option("--registry <url>", "Registry origin")
+    .option("--cwd <dir>", "Working directory")
+    .action(
+      async (
+        families: string[],
+        opts: { check?: boolean; force?: boolean; registry?: string; cwd?: string },
+      ) => {
+        try {
+          const upgradeOptions: Parameters<typeof upgrade>[0] = {
+            cwd: opts.cwd ?? process.cwd(),
+            families,
+          };
+          if (opts.check) upgradeOptions.check = true;
+          if (opts.force) upgradeOptions.force = true;
+          if (opts.registry !== undefined) upgradeOptions.registry = opts.registry;
+          if (!opts.check && !opts.force) {
+            upgradeOptions.resolver = makeInteractiveResolver();
+          }
+          const result = await upgrade(upgradeOptions);
+          printUpgradeSummary(result.outcomes);
+          if (opts.check) {
+            if (result.hasUpdates || result.hasTouched) process.exit(1);
+          }
+        } catch (err) {
+          if (err instanceof UpgradeError) {
+            process.stderr.write(err.message + "\n");
+            process.exit(2);
+          }
+          throw err;
+        }
+      },
+    );
+
+  cli
+    .command("verify", "Check installed recipes against fingerprint headers and lockfile")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (opts: { cwd?: string }) => {
+      const result = await verify({ cwd: opts.cwd ?? process.cwd() });
+      if (result.ok) {
+        p.log.success(`verified ${result.checked.length} families`);
+        return;
+      }
+      for (const issue of result.issues) {
+        const desc = describeVerifyIssue(issue);
+        process.stderr.write(`${issue.family}: ${desc}\n`);
+      }
+      process.exit(1);
+    });
+
   cli.help();
   cli.version("0.0.0");
   cli.parse(argv);
+}
+
+function makeInteractiveResolver() {
+  return async (ctx: TouchedContext): Promise<UpgradeChoice> => {
+    process.stdout.write(
+      pc.yellow(`\n${ctx.family}: locally modified — incoming ${ctx.incoming.version}\n`),
+    );
+    const choice = await p.select({
+      message: `Resolve ${ctx.family}`,
+      options: [
+        { value: "accept", label: "Accept new (discard local edits)" },
+        { value: "keep", label: "Keep yours" },
+        { value: "skip", label: "Skip for now" },
+      ],
+    });
+    if (p.isCancel(choice)) return "skip";
+    return choice as UpgradeChoice;
+  };
+}
+
+function printUpgradeSummary(outcomes: Awaited<ReturnType<typeof upgrade>>["outcomes"]): void {
+  for (const o of outcomes) {
+    if (o.action === "updated") {
+      process.stdout.write(pc.green(`✓ ${o.family} ${o.from} → ${o.to}\n`));
+    } else if (o.action === "would-update") {
+      process.stdout.write(pc.cyan(`→ ${o.family} ${o.from} → ${o.to} (available)\n`));
+    } else if (o.action === "would-review") {
+      process.stdout.write(pc.yellow(`! ${o.family} ${o.from} → ${o.to} (touched; needs review)\n`));
+    } else if (o.action === "kept" && o.reason === "user-chose-keep") {
+      process.stdout.write(pc.dim(`  ${o.family} kept local\n`));
+    } else if (o.action === "skipped") {
+      process.stdout.write(pc.dim(`  ${o.family} skipped (${o.reason})\n`));
+    }
+  }
+}
+
+function describeVerifyIssue(issue: import("./commands/verify.js").VerifyIssue): string {
+  switch (issue.kind) {
+    case "missing-header":
+      return "no fingerprint header — recipe was hand-stripped";
+    case "header-tampered":
+      return `header sha ${issue.recorded} but body hashes to ${issue.actual}`;
+    case "lockfile-mismatch":
+      return `lockfile expects ${issue.locked} but body hashes to ${issue.actual}`;
+    case "missing-lock-entry":
+      return "installed but not recorded in lockfile";
+    case "missing-file":
+      return "in lockfile but file is missing";
+  }
 }
 
 async function promptForPreset(): Promise<string> {

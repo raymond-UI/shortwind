@@ -1,8 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseRecipeFile } from "@shortwind/core";
 import { createRegistrySource } from "../registry-source.js";
+import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
 import { readLockfile, writeLockfile, type Lockfile } from "../lockfile.js";
 import {
   readConfig,
@@ -63,15 +63,14 @@ export async function add(options: AddOptions): Promise<AddResult> {
     }
 
     const sourceCss = await source.loadFamily(family);
-    const finalCss = options.as ? renameFamilyInSource(sourceCss, family, options.as) : sourceCss;
+    const renamed = options.as ? renameFamilyInSource(sourceCss, family, options.as) : sourceCss;
+    const sha = computeBodySha(renamed);
+    const finalCss = rewriteHeaderSha(renamed, sha);
     await writeFile(targetPath, finalCss);
 
-    const parsed = parseRecipeFile(finalCss, `${targetName}.css`);
-    if (parsed.ok && parsed.value.header) {
-      lock.families[targetName] = {
-        version: parsed.value.header.version,
-        sha: parsed.value.header.sha,
-      };
+    const header = extractHeader(finalCss);
+    if (header) {
+      lock.families[targetName] = { version: header.version, sha };
     }
 
     if (exists) overwritten.push(targetName);

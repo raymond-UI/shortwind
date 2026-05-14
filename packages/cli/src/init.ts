@@ -4,6 +4,7 @@ import path from "node:path";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
+import { computeBodySha, extractHeader, rewriteHeaderSha } from "./fingerprint.js";
 import { detectProject, type PackageManager } from "./detect.js";
 import {
   createRegistrySource,
@@ -145,12 +146,9 @@ async function updateLockfile(
     const target = path.join(recipesDir, `${family}.css`);
     if (!existsSync(target)) continue;
     const source = readFileSync(target, "utf8");
-    const parsed = parseRecipeFile(source, `${family}.css`);
-    if (parsed.ok && parsed.value.header) {
-      lock.families[family] = {
-        version: parsed.value.header.version,
-        sha: parsed.value.header.sha,
-      };
+    const header = extractHeader(source);
+    if (header) {
+      lock.families[family] = { version: header.version, sha: header.sha };
     }
   }
   await writeLockfile(recipesDir, lock);
@@ -171,7 +169,9 @@ async function copyRecipes(
       continue;
     }
     const body = await source.loadFamily(family);
-    await writeFile(target, body);
+    const sha = computeBodySha(body);
+    const sealed = rewriteHeaderSha(body, sha);
+    await writeFile(target, sealed);
     installed.push(family);
   }
   return { installed, skipped };
