@@ -42,7 +42,7 @@ Total: ~115 recipes. Adjust as authoring reveals duplication or gaps.
 - Names follow `@<family>[-<intent>][-<size>]` order strictly.
 - Recipes that have interactive states (hover/focus) bake them in (e.g. `@card-interactive` includes `hover:`, `focus-visible:`).
 - Recipes work in both light and dark mode (use Tailwind's `dark:` variants where needed).
-- Each file begins with a fingerprint header (`/* shortwind: <family>@0.0.1 sha:<6> ... */`) — `packages/registry/build.ts` generates the sha; authors write `0.0.1` and let CI lock it.
+- Each file begins with a fingerprint header (`/* shortwind: <family>@0.0.1 sha:<6> ... */`) — authors write `0.0.1` and leave the sha as a placeholder (`sha:000000`). The sha is computed and rewritten by `packages/registry/build.ts` (issue 19) on every build; CI verifies the rewritten output is committed (gate lives in issue 21).
 - Cross-family references are permitted but used sparingly (e.g. `@card-interactive` may reference `@card`).
 
 ## Presets (defined in this issue)
