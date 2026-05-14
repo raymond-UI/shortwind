@@ -1,13 +1,15 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
+import { parseRecipeFile } from "@shortwind/core";
 import { detectProject, type PackageManager } from "./detect.js";
 import {
   createRegistrySource,
   resolvePresetFamilies,
   type RegistrySource,
 } from "./registry-source.js";
+import { readLockfile, writeLockfile } from "./lockfile.js";
 import { renderSkillMd } from "./skill-template.js";
 
 export const DEFAULT_REGISTRY = "https://shortwind.dev/registry";
@@ -56,6 +58,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
 
   const recipesDir = path.join(cwd, "recipes");
   const { installed, skipped } = await copyRecipes(source, families, recipesDir);
+  await updateLockfile(recipesDir, registry, installed);
 
   const configPath = path.join(cwd, "shortwind.config.json");
   await writeConfig(configPath, { registry, recipesDir: "recipes" });
@@ -129,6 +132,28 @@ function installArgs(pm: PackageManager, packages: string[]): string[] {
     default:
       return ["install", "-D", ...packages];
   }
+}
+
+async function updateLockfile(
+  recipesDir: string,
+  registry: string,
+  newlyInstalled: string[],
+): Promise<void> {
+  const lock = await readLockfile(recipesDir);
+  if (!lock.registry) lock.registry = registry;
+  for (const family of newlyInstalled) {
+    const target = path.join(recipesDir, `${family}.css`);
+    if (!existsSync(target)) continue;
+    const source = readFileSync(target, "utf8");
+    const parsed = parseRecipeFile(source, `${family}.css`);
+    if (parsed.ok && parsed.value.header) {
+      lock.families[family] = {
+        version: parsed.value.header.version,
+        sha: parsed.value.header.sha,
+      };
+    }
+  }
+  await writeLockfile(recipesDir, lock);
 }
 
 async function copyRecipes(

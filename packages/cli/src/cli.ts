@@ -1,5 +1,9 @@
 import * as p from "@clack/prompts";
 import { cac } from "cac";
+import { add } from "./commands/add.js";
+import { remove } from "./commands/remove.js";
+import { preset as runPreset } from "./commands/preset.js";
+import { ls, formatLsText } from "./commands/ls.js";
 import { init, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
@@ -20,8 +24,98 @@ export async function run(argv: string[] = process.argv): Promise<void> {
       };
       if (opts.registry !== undefined) options.registry = opts.registry;
       const result = await init(options);
-      printSummary(result);
+      printInitSummary(result);
     });
+
+  cli
+    .command("add <...families>", "Install one or more families")
+    .option("--as <name>", "Rename the family on install (requires a single family)")
+    .option("--all", "Install every family in the registry")
+    .option("--force", "Overwrite existing files")
+    .option("--registry <url>", "Registry origin")
+    .option("--cwd <dir>", "Working directory")
+    .action(
+      async (
+        families: string[],
+        opts: { as?: string; all?: boolean; force?: boolean; registry?: string; cwd?: string },
+      ) => {
+        const addOptions: Parameters<typeof add>[0] = {
+          cwd: opts.cwd ?? process.cwd(),
+          families,
+        };
+        if (opts.as !== undefined) addOptions.as = opts.as;
+        if (opts.all) addOptions.all = true;
+        if (opts.force) addOptions.force = true;
+        if (opts.registry !== undefined) addOptions.registry = opts.registry;
+        const result = await add(addOptions);
+        for (const fam of result.added) p.log.success(`added ${fam}`);
+        for (const fam of result.overwritten) p.log.success(`overwrote ${fam}`);
+        for (const fam of result.skipped) p.log.warn(`${fam} already exists (use --force)`);
+        for (const missing of result.missingDependencies) {
+          p.log.warn(
+            `${missing.family} references unknown recipes: ${missing.references.join(", ")}`,
+          );
+        }
+      },
+    );
+
+  cli
+    .command("remove <...families>", "Remove installed families")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (families: string[], opts: { cwd?: string }) => {
+      const result = await remove({ cwd: opts.cwd ?? process.cwd(), families });
+      for (const fam of result.removed) p.log.success(`removed ${fam}`);
+      for (const fam of result.notFound) p.log.warn(`${fam} is not installed`);
+      for (const broken of result.brokenDependents) {
+        p.log.warn(
+          `${broken.dependent} references removed recipes: ${broken.references.join(", ")}`,
+        );
+      }
+    });
+
+  cli
+    .command("preset <name>", "Install every family in the named preset (additive)")
+    .option("--registry <url>", "Registry origin")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (name: string, opts: { registry?: string; cwd?: string }) => {
+      const presetOptions: Parameters<typeof runPreset>[0] = {
+        cwd: opts.cwd ?? process.cwd(),
+        name,
+      };
+      if (opts.registry !== undefined) presetOptions.registry = opts.registry;
+      const result = await runPreset(presetOptions);
+      p.log.info(`preset ${name}: ${result.added.length} added, ${result.skipped.length} already present`);
+    });
+
+  cli
+    .command("ls", "List installed and available families")
+    .option("--installed", "Only installed")
+    .option("--available", "Only available")
+    .option("--json", "Emit JSON")
+    .option("--registry <url>", "Registry origin")
+    .option("--cwd <dir>", "Working directory")
+    .action(
+      async (opts: {
+        installed?: boolean;
+        available?: boolean;
+        json?: boolean;
+        registry?: string;
+        cwd?: string;
+      }) => {
+        const lsOptions: Parameters<typeof ls>[0] = {
+          cwd: opts.cwd ?? process.cwd(),
+        };
+        if (opts.installed) lsOptions.installedOnly = true;
+        if (opts.available) lsOptions.availableOnly = true;
+        if (opts.registry !== undefined) lsOptions.registry = opts.registry;
+        const result = await ls(lsOptions);
+        if (opts.json) {
+          process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+        } else {
+          process.stdout.write(formatLsText(result) + "\n");
+        }
+      },
+    );
 
   cli.help();
   cli.version("0.0.0");
@@ -40,7 +134,7 @@ async function promptForPreset(): Promise<string> {
   return choice;
 }
 
-function printSummary(result: Awaited<ReturnType<typeof init>>): void {
+function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
   p.note(
     [
       `preset:            ${result.preset}`,
