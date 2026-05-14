@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 import {
   loadRegistryFromDir,
   transformContent,
@@ -10,15 +12,39 @@ export type ShortwindLoaderOptions = {
   mode?: TransformOptions["mode"];
 };
 
-const registryCache = new Map<string, Registry>();
+type CacheEntry = {
+  registry: Registry;
+  files: string[];
+  signature: string;
+};
 
-function getRegistry(recipesDir: string): Registry {
-  let cached = registryCache.get(recipesDir);
-  if (!cached) {
-    cached = loadRegistryFromDir(recipesDir);
-    registryCache.set(recipesDir, cached);
+const registryCache = new Map<string, CacheEntry>();
+
+function recipesSignature(recipesDir: string): { signature: string; files: string[] } {
+  if (!existsSync(recipesDir)) return { signature: "", files: [] };
+  const files = readdirSync(recipesDir)
+    .filter((f) => f.endsWith(".css"))
+    .sort()
+    .map((f) => path.join(recipesDir, f));
+  const parts: string[] = [];
+  for (const full of files) {
+    const st = statSync(full);
+    parts.push(`${full}:${st.size}:${st.mtimeMs}`);
   }
-  return cached;
+  return { signature: parts.join("|"), files };
+}
+
+function getRegistry(recipesDir: string): CacheEntry {
+  const { signature, files } = recipesSignature(recipesDir);
+  const cached = registryCache.get(recipesDir);
+  if (cached && cached.signature === signature) return cached;
+  const entry: CacheEntry = {
+    registry: loadRegistryFromDir(recipesDir),
+    files,
+    signature,
+  };
+  registryCache.set(recipesDir, entry);
+  return entry;
 }
 
 export function clearRegistryCache(): void {
@@ -29,11 +55,16 @@ type LoaderContext = {
   getOptions: () => ShortwindLoaderOptions;
   resourcePath: string;
   addDependency?: (file: string) => void;
+  addContextDependency?: (dir: string) => void;
 };
 
 export default function shortwindLoader(this: LoaderContext, source: string): string {
   const options = this.getOptions();
-  const registry = getRegistry(options.recipesDir);
+  const entry = getRegistry(options.recipesDir);
+  if (this.addContextDependency) this.addContextDependency(options.recipesDir);
+  if (this.addDependency) {
+    for (const file of entry.files) this.addDependency(file);
+  }
   const mode = options.mode ?? (this.resourcePath.endsWith(".html") ? "html" : "jsx");
-  return transformContent(source, registry, { mode });
+  return transformContent(source, entry.registry, { mode });
 }

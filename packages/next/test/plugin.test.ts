@@ -116,7 +116,7 @@ describe("withShortwind", () => {
     expect(out).toContain("rounded-lg");
   });
 
-  it("clearRegistryCache forces a recipes re-read", async () => {
+  it("loader invalidates its cache when a recipe file changes on disk", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
     const ctx = {
@@ -124,15 +124,37 @@ describe("withShortwind", () => {
       resourcePath: path.join(dir, "src", "App.tsx"),
     };
     const first = shortwindLoader.call(ctx, `<div className="@card"></div>`);
-    // change the recipe body
+    expect(first).toContain("rounded-lg");
+
+    // Force a distinct mtime — some filesystems have second granularity.
+    const cardPath = path.join(dir, "recipes", "card.css");
+    await new Promise((r) => setTimeout(r, 20));
     await writeFile(
-      path.join(dir, "recipes", "card.css"),
+      cardPath,
       "/* shortwind: card@0.0.1 sha:000000 */\n\n/* card. */\n@recipe card { glow }\n",
     );
-    const stale = shortwindLoader.call(ctx, `<div className="@card"></div>`);
-    expect(stale).toBe(first); // cached
-    clearRegistryCache();
+    const future = Date.now() / 1000 + 1;
+    (await import("node:fs/promises")).utimes(cardPath, future, future);
+
     const fresh = shortwindLoader.call(ctx, `<div className="@card"></div>`);
     expect(fresh).toContain("glow");
+    expect(fresh).not.toContain("rounded-lg");
+  });
+
+  it("loader registers each recipe file as a webpack dependency", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const recipesDir = path.join(dir, "recipes");
+    const deps: string[] = [];
+    const ctxDeps: string[] = [];
+    const ctx = {
+      getOptions: () => ({ recipesDir }),
+      resourcePath: path.join(dir, "src", "App.tsx"),
+      addDependency: (f: string) => deps.push(f),
+      addContextDependency: (d: string) => ctxDeps.push(d),
+    };
+    shortwindLoader.call(ctx, `<div className="@card"></div>`);
+    expect(deps).toContain(path.join(recipesDir, "card.css"));
+    expect(ctxDeps).toContain(recipesDir);
   });
 });
