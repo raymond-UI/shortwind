@@ -93,9 +93,16 @@ importers:
       '@shortwind/tailwind':
         specifier: workspace:*
         version: link:../tailwind
+      '@shortwind/vite':
+        specifier: workspace:*
+        version: link:../vite
       astro:
         specifier: '>=4.0.0'
         version: 6.3.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.3)(tsx@4.21.0)
+    devDependencies:
+      '@types/node':
+        specifier: ^25.7.0
+        version: 25.7.0
 
   packages/cli:
     dependencies:

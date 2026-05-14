@@ -16,6 +16,10 @@
   },
   "dependencies": {
     "@shortwind/core": "workspace:*",
-    "@shortwind/tailwind": "workspace:*"
+    "@shortwind/tailwind": "workspace:*",
+    "@shortwind/vite": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0"
   }
 }
