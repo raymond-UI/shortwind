@@ -252,7 +252,15 @@ export function parseRecipeFile(
       line,
       column: col,
     });
-    advance();
+    // Skip ahead to the next syntactically meaningful boundary so a
+    // garbage run of N bytes produces one diagnostic, not N.
+    while (pos < end) {
+      const c = source[pos] ?? "";
+      if (isWS(c)) break;
+      if (c === "/" && source[pos + 1] === "*") break;
+      if (c === "@" && starts(RECIPE_KW)) break;
+      advance();
+    }
     pendingDescription = null;
   }
 

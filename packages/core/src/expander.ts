@@ -61,18 +61,17 @@ export function expandClassList(
   return mergeConflicts ? twMerge(joined) : joined;
 }
 
-export function expandDOM(root: Element, registry: Registry): void {
-  const all: Element[] = [root, ...Array.from(root.querySelectorAll("*"))];
-  for (const el of all) {
-    const cls = el.getAttribute("class");
-    if (cls === null) continue;
-    const expanded = expandClassList(cls, registry, true);
-    if (expanded !== cls) el.setAttribute("class", expanded);
-  }
-}
-
 const CLASSNAME_KW = "className";
 
+// expandJsxBraced operates as a text rewriter, not a JS parser. Inside
+// className={ ... } expressions it only rewrites string literals and
+// template literals at the top level of the expression — it does not
+// skip JS comments or regex literals. Code like
+//   className={ /"/.test(x) ? "@foo" : "" }
+// or
+//   className={ /* @foo */ ... }
+// is therefore *out of contract* — wrap such expressions in a helper or
+// stick to literal strings / template literals at the top level.
 function expandJsxBraced(input: string, registry: Registry, merge: boolean): string {
   let out = "";
   let i = 0;

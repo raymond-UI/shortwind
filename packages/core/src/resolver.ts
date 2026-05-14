@@ -119,6 +119,6 @@ export function buildRegistry(
 }
 
 function familyOf(sourceFile: string): string {
-  const base = sourceFile.split("/").pop() ?? sourceFile;
+  const base = sourceFile.split(/[\\/]/).pop() ?? sourceFile;
   return base.endsWith(".css") ? base.slice(0, -4) : base;
 }
