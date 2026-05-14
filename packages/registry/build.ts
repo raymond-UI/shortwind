@@ -43,19 +43,30 @@ export type BuildResult = {
 };
 
 // Canonical header form (matches writeFamily output exactly):
-//   /* shortwind: <family>@<version> sha:<6 lowercase hex> */
+//   /* shortwind: <family>@<version> sha:<16 lowercase hex> */
 // We deliberately do NOT accept legacy "— DO NOT EDIT THIS LINE" trailers,
 // because writeFamily never emits them — accepting them silently round-trips
-// the header into the short form. sha is validated to a 6-hex shape.
+// the header into the short form.
+// 6 hex (24 bits) is also accepted as the historical placeholder shape
+// (e.g. `sha:000000` in source recipes); writeFamily always emits 16 hex.
 const HEADER_RE =
-  /^\/\*\s*shortwind:\s+(\S+)@(\S+)\s+sha:([0-9a-f]{6})\s*\*\//;
+  /^\/\*\s*shortwind:\s+(\S+)@(\S+)\s+sha:(?:[0-9a-f]{6}|[0-9a-f]{16})\s*\*\//;
 
 function normalizeBody(body: string): string {
-  return body.replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "");
+  // Two recipes that differ only in whether the file ends with `\n` should
+  // hash identically — the writer always re-emits with a trailing newline, so
+  // strip them all before hashing.
+  return body
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n+$/g, "");
 }
 
 function computeSha(body: string): string {
-  return createHash("sha256").update(normalizeBody(body)).digest("hex").slice(0, 6);
+  // 16 hex chars = 64 bits of collision resistance. Long enough that
+  // accidental fingerprint collisions across recipe edits are effectively
+  // impossible while staying readable in the file header.
+  return createHash("sha256").update(normalizeBody(body)).digest("hex").slice(0, 16);
 }
 
 function parseHeader(source: string): { family: string; version: string } | null {
@@ -192,9 +203,12 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
   const manifestPath = path.join(registryOut, "manifest.json");
   writeFileSync(manifestPath, stableStringify(manifest));
 
-  if (existsSync(opts.presetsFile)) {
-    copyFileSync(opts.presetsFile, path.join(registryOut, "presets.json"));
+  if (!existsSync(opts.presetsFile)) {
+    throw new Error(
+      `presets file missing at ${opts.presetsFile} — registries must ship a presets.json (use {} for an empty map)`,
+    );
   }
+  copyFileSync(opts.presetsFile, path.join(registryOut, "presets.json"));
 
   validateExpansionTokens(manifest);
   validatePresets(manifest, path.join(registryOut, "presets.json"));
@@ -234,12 +248,24 @@ function validateExpansionTokens(manifest: Manifest): void {
 }
 
 function validatePresets(manifest: Manifest, presetsPath: string): void {
-  if (!existsSync(presetsPath)) return;
   const familyNames = new Set(manifest.families.map((f) => f.name));
-  const raw = JSON.parse(readFileSync(presetsPath, "utf8")) as Record<string, string[] | "*">;
-  for (const [preset, families] of Object.entries(raw)) {
-    if (families === "*") continue;
-    for (const family of families) {
+  const raw: unknown = JSON.parse(readFileSync(presetsPath, "utf8"));
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`${presetsPath}: presets.json must be a JSON object`);
+  }
+  for (const [preset, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (entry === "*") continue;
+    if (!Array.isArray(entry)) {
+      throw new Error(
+        `${presetsPath}: preset "${preset}" must be "*" or an array of family names`,
+      );
+    }
+    for (const family of entry) {
+      if (typeof family !== "string") {
+        throw new Error(
+          `${presetsPath}: preset "${preset}" contains a non-string entry ${JSON.stringify(family)}`,
+        );
+      }
       if (!familyNames.has(family)) {
         throw new Error(
           `preset "${preset}" references family "${family}" which is not in the manifest`,

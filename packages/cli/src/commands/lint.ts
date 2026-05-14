@@ -55,11 +55,18 @@ export async function lint(options: LintOptions): Promise<LintResult> {
   findings.push(...parseFindings);
 
   const contentGlobs = options.content ?? DEFAULT_CONTENT;
+  // tinyglobby evaluates ignore patterns relative to `cwd`; an absolute
+  // recipesDir path passed verbatim would either fail to match or match by
+  // accident on case-folded filesystems. Use the project-relative form.
+  const recipesIgnore = path.posix.join(
+    path.relative(cwd, recipesDir).split(path.sep).join("/") || ".",
+    "**",
+  );
   const files = await glob(contentGlobs, {
     cwd,
     absolute: true,
     onlyFiles: true,
-    ignore: ["**/node_modules/**", "**/dist/**", "**/.next/**", recipesDir + "/**"],
+    ignore: ["**/node_modules/**", "**/dist/**", "**/.next/**", recipesIgnore],
   });
 
   const usedRecipes = new Set<string>();
@@ -153,11 +160,7 @@ function loadRegistry(
   const built = buildRegistry(allRecipes);
   if (!built.ok) {
     for (const err of built.errors) {
-      const rule: Rule = err.code.includes("cycle")
-        ? "recipe/cycle"
-        : err.code.includes("duplicate")
-          ? "recipe/duplicate"
-          : "recipe/unknown";
+      const rule = mapErrorCodeToRule(err.code);
       if (!rules.has(rule)) continue;
       parseFindings.push({
         rule,
@@ -171,6 +174,19 @@ function loadRegistry(
     return { registry: { flattened: {}, families: {} }, parseFindings };
   }
   return { registry: built.value, parseFindings };
+}
+
+// Explicit table from core's diagnostic codes to lint rules. Keeps the
+// mapping debuggable and prevents a typo in `err.code` from silently being
+// classified as `recipe/unknown`.
+const ERROR_CODE_RULE: Record<string, Rule> = {
+  "resolve/cycle": "recipe/cycle",
+  "resolve/duplicate-name": "recipe/duplicate",
+  "resolve/unknown-reference": "recipe/unknown",
+};
+
+function mapErrorCodeToRule(code: string): Rule {
+  return ERROR_CODE_RULE[code] ?? "recipe/unknown";
 }
 
 type ClassUsage = {
@@ -313,9 +329,10 @@ function findMatchingBrace(source: string, openIdx: number): number {
 }
 
 function offsetToLineCol(source: string, offset: number): { line: number; column: number } {
+  const limit = Math.min(offset, source.length);
   let line = 1;
   let lastNl = -1;
-  for (let i = 0; i < offset && i < source.length; i++) {
+  for (let i = 0; i < limit; i++) {
     if (source[i] === "\n") {
       line++;
       lastNl = i;
