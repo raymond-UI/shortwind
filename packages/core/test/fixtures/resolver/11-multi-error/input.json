@@ -1,0 +1,5 @@
+[
+  { "name": "a", "description": null, "tokens": ["t1"], "references": [], "sourceFile": "a.css", "sourceLine": 1 },
+  { "name": "a", "description": null, "tokens": ["t2"], "references": [], "sourceFile": "a.css", "sourceLine": 5 },
+  { "name": "b", "description": null, "tokens": ["@nope"], "references": ["nope"], "sourceFile": "a.css", "sourceLine": 10 }
+]

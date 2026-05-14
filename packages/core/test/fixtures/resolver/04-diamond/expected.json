@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "flattened": {
+    "a": ["base", "bg-b", "base", "bg-c"],
+    "b": ["base", "bg-b"],
+    "c": ["base", "bg-c"],
+    "d": ["base"]
+  },
+  "families": { "diamond": ["a", "b", "c", "d"] }
+}

@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "resolve/duplicate-name",
+      "message": "recipe 'a' is defined in both a.css:1 and a.css:5",
+      "file": "a.css",
+      "line": 5
+    },
+    {
+      "code": "resolve/unknown-reference",
+      "message": "recipe 'b' references unknown recipe '@nope'",
+      "file": "a.css",
+      "line": 10
+    }
+  ]
+}

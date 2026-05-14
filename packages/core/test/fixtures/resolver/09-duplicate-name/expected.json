@@ -1,0 +1,11 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "resolve/duplicate-name",
+      "message": "recipe 'card' is defined in both a.css:1 and b.css:5",
+      "file": "b.css",
+      "line": 5
+    }
+  ]
+}

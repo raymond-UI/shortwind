@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "flattened": { "card": ["rounded-lg", "border"] },
+  "families": { "card": ["card"] }
+}

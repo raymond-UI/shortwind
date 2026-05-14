@@ -1,0 +1,3 @@
+[
+  { "name": "a", "description": null, "tokens": ["@nope", "p-1"], "references": ["nope"], "sourceFile": "test.css", "sourceLine": 1 }
+]

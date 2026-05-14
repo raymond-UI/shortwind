@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "flattened": {
+    "card": ["rounded-lg"],
+    "card-elevated": ["rounded-lg", "shadow-md"]
+  },
+  "families": { "card": ["card", "card-elevated"] }
+}

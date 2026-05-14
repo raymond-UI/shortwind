@@ -1,0 +1,4 @@
+[
+  { "name": "card", "description": null, "tokens": ["rounded-lg"], "references": [], "sourceFile": "card.css", "sourceLine": 1 },
+  { "name": "card-elevated", "description": null, "tokens": ["@card", "shadow-md"], "references": ["card"], "sourceFile": "card.css", "sourceLine": 3 }
+]

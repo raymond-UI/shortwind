@@ -1,0 +1,6 @@
+[
+  { "name": "a", "description": null, "tokens": ["@b", "@c"], "references": ["b", "c"], "sourceFile": "diamond.css", "sourceLine": 1 },
+  { "name": "b", "description": null, "tokens": ["@d", "bg-b"], "references": ["d"], "sourceFile": "diamond.css", "sourceLine": 5 },
+  { "name": "c", "description": null, "tokens": ["@d", "bg-c"], "references": ["d"], "sourceFile": "diamond.css", "sourceLine": 9 },
+  { "name": "d", "description": null, "tokens": ["base"], "references": [], "sourceFile": "diamond.css", "sourceLine": 13 }
+]

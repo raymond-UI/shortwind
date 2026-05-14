@@ -1,0 +1,5 @@
+[
+  { "name": "a", "description": null, "tokens": ["p-1", "@b", "p-2", "@c", "p-3"], "references": ["b", "c"], "sourceFile": "order.css", "sourceLine": 1 },
+  { "name": "b", "description": null, "tokens": ["bg-b"], "references": [], "sourceFile": "order.css", "sourceLine": 5 },
+  { "name": "c", "description": null, "tokens": ["bg-c"], "references": [], "sourceFile": "order.css", "sourceLine": 9 }
+]

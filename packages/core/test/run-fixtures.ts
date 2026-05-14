@@ -1,28 +1,36 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Recipe } from "../src/types.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-export type Fixture = {
+export type Fixture<T> = {
   name: string;
-  input: string;
+  input: T;
   expected: unknown;
 };
 
-export function loadFixtures(suite: string): Fixture[] {
-  const dir = path.join(here, "fixtures", suite);
-  const entries = readdirSync(dir)
-    .filter((n) => statSync(path.join(dir, n)).isDirectory())
-    .sort();
+function listFixtures(suite: string): { name: string; dir: string }[] {
+  const root = path.join(here, "fixtures", suite);
+  return readdirSync(root)
+    .filter((n) => statSync(path.join(root, n)).isDirectory())
+    .sort()
+    .map((name) => ({ name, dir: path.join(root, name) }));
+}
 
-  return entries.map((name) => {
-    const inputPath = path.join(dir, name, "input.css");
-    const expectedPath = path.join(dir, name, "expected.json");
-    return {
-      name,
-      input: readFileSync(inputPath, "utf8"),
-      expected: JSON.parse(readFileSync(expectedPath, "utf8")),
-    };
-  });
+export function loadParserFixtures(): Fixture<string>[] {
+  return listFixtures("parser").map(({ name, dir }) => ({
+    name,
+    input: readFileSync(path.join(dir, "input.css"), "utf8"),
+    expected: JSON.parse(readFileSync(path.join(dir, "expected.json"), "utf8")),
+  }));
+}
+
+export function loadResolverFixtures(): Fixture<Recipe[]>[] {
+  return listFixtures("resolver").map(({ name, dir }) => ({
+    name,
+    input: JSON.parse(readFileSync(path.join(dir, "input.json"), "utf8")) as Recipe[],
+    expected: JSON.parse(readFileSync(path.join(dir, "expected.json"), "utf8")),
+  }));
 }

@@ -1,0 +1,11 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "resolve/unknown-reference",
+      "message": "recipe 'a' references unknown recipe '@nope'",
+      "file": "test.css",
+      "line": 1
+    }
+  ]
+}

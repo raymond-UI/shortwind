@@ -1,0 +1,5 @@
+[
+  { "name": "a", "description": null, "tokens": ["@b", "p-1"], "references": ["b"], "sourceFile": "chain.css", "sourceLine": 1 },
+  { "name": "b", "description": null, "tokens": ["@c", "p-2"], "references": ["c"], "sourceFile": "chain.css", "sourceLine": 5 },
+  { "name": "c", "description": null, "tokens": ["p-3"], "references": [], "sourceFile": "chain.css", "sourceLine": 9 }
+]

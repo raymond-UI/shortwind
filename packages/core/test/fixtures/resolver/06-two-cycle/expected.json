@@ -1,0 +1,11 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "resolve/cycle",
+      "message": "cycle: a → b → a",
+      "file": "test.css",
+      "line": 1
+    }
+  ]
+}

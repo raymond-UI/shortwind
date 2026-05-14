@@ -1,0 +1,4 @@
+[
+  { "name": "card", "description": null, "tokens": ["t1"], "references": [], "sourceFile": "a.css", "sourceLine": 1 },
+  { "name": "card", "description": null, "tokens": ["t2"], "references": [], "sourceFile": "b.css", "sourceLine": 5 }
+]

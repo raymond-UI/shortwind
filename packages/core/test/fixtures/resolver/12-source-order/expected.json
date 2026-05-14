@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "flattened": {
+    "a": ["p-1", "bg-b", "p-2", "bg-c", "p-3"],
+    "b": ["bg-b"],
+    "c": ["bg-c"]
+  },
+  "families": { "order": ["a", "b", "c"] }
+}

@@ -28,3 +28,8 @@ export type ParsedRecipeFile = {
   header: RecipeFileHeader | null;
   recipes: Recipe[];
 };
+
+export type Registry = {
+  flattened: Record<string, string[]>;
+  families: Record<string, Recipe[]>;
+};
