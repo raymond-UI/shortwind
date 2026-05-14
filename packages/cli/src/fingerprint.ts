@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 
+// Accept either the canonical short form or the legacy em-dash trailer
+// `— DO NOT EDIT THIS LINE`. The two-hyphen ASCII variant (`-- DO NOT…`) is
+// rejected on purpose: writeFamily has never emitted it, so accepting it would
+// let hand-edited files silently round-trip into the canonical form.
 const HEADER_PATTERN = /^\/\*\s*shortwind:\s+(\S+)@(\S+)\s+sha:([^\s*]+)(?:\s+—\s+DO NOT EDIT THIS LINE)?\s*\*\/\s*$/;
 
 export type RecipeHeader = {
@@ -13,7 +17,10 @@ export function extractHeader(source: string): RecipeHeader | null {
   const firstLine = (eol === -1 ? source : source.slice(0, eol)).replace(/\r$/, "");
   const m = firstLine.match(HEADER_PATTERN);
   if (!m) return null;
-  return { family: m[1] ?? "", version: m[2] ?? "", sha: m[3] ?? "" };
+  // All three capture groups are guaranteed non-empty when the regex matches
+  // (the pattern uses `\S+`/`[^\s*]+`); the `!` asserts what the regex shape
+  // already requires so we don't paper over an impossible-null with "".
+  return { family: m[1]!, version: m[2]!, sha: m[3]! };
 }
 
 export function bodyAfterHeader(source: string): string {

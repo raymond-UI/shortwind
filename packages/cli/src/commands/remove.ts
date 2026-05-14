@@ -30,12 +30,21 @@ export async function remove(options: RemoveOptions): Promise<RemoveResult> {
   const lock = await readLockfile(recipesDir);
   const removed: string[] = [];
   const notFound: string[] = [];
+  // Snapshot every recipe name in each family *before* deleting the file, so
+  // broken-dependent detection can look for exact ref matches instead of
+  // splitting the ref on the first `-` (which mis-classifies hyphenated
+  // family names like `text-stack`).
+  const removedRecipeNames = new Set<string>();
 
   for (const family of options.families) {
     const target = path.join(recipesDir, `${family}.css`);
     if (!existsSync(target)) {
       notFound.push(family);
       continue;
+    }
+    const parsed = parseInstalledFamily(recipesDir, family);
+    if (parsed) {
+      for (const r of parsed.recipes) removedRecipeNames.add(r.name);
     }
     await rm(target);
     delete lock.families[family];
@@ -44,7 +53,7 @@ export async function remove(options: RemoveOptions): Promise<RemoveResult> {
 
   await writeLockfile(recipesDir, lock);
 
-  const brokenDependents = collectBrokenDependents(recipesDir, removed);
+  const brokenDependents = collectBrokenDependents(recipesDir, removedRecipeNames);
   const skillPath = await regenerateSkillMd(cwd, config);
 
   return { removed, notFound, brokenDependents, lockfile: lock, skillPath };
@@ -52,12 +61,9 @@ export async function remove(options: RemoveOptions): Promise<RemoveResult> {
 
 function collectBrokenDependents(
   recipesDir: string,
-  removed: string[],
+  removedRecipeNames: Set<string>,
 ): { dependent: string; references: string[] }[] {
-  if (removed.length === 0) return [];
-  // gather the set of recipe names that *were* in the removed families. we approximate
-  // by treating any reference matching `<removed-family>` or `<removed-family>-*` as a hit.
-  const removedSet = new Set(removed);
+  if (removedRecipeNames.size === 0) return [];
   const out: { dependent: string; references: string[] }[] = [];
   for (const family of installedFamilies(recipesDir)) {
     const parsed = parseInstalledFamily(recipesDir, family);
@@ -65,8 +71,7 @@ function collectBrokenDependents(
     const broken = new Set<string>();
     for (const recipe of parsed.recipes) {
       for (const ref of recipe.references) {
-        const refRoot = ref.split("-")[0] ?? "";
-        if (removedSet.has(ref) || removedSet.has(refRoot)) broken.add(ref);
+        if (removedRecipeNames.has(ref)) broken.add(ref);
       }
     }
     if (broken.size > 0) out.push({ dependent: family, references: Array.from(broken).sort() });

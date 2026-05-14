@@ -20,7 +20,14 @@ export async function readConfig(cwd: string): Promise<ShortwindConfig> {
   const configPath = path.join(cwd, "shortwind.config.json");
   if (!existsSync(configPath)) return DEFAULT_CONFIG;
   const body = await readFile(configPath, "utf8");
-  const parsed = JSON.parse(body) as Partial<ShortwindConfig>;
+  let parsed: Partial<ShortwindConfig>;
+  try {
+    parsed = JSON.parse(body) as Partial<ShortwindConfig>;
+  } catch (err) {
+    throw new Error(
+      `${configPath}: invalid JSON — ${(err as Error).message}`,
+    );
+  }
   return { ...DEFAULT_CONFIG, ...parsed };
 }
 

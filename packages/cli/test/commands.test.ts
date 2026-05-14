@@ -122,6 +122,20 @@ describe("add", () => {
     expect(file).toContain("@tile shadow-md");
     expect(file).not.toMatch(/@recipe card\b/);
     expect(file).not.toMatch(/@card\b/);
+
+    // Locks the contract that the rewritten header's sha matches the rewritten
+    // body sha and that the lockfile records the rename target — guarding
+    // against future regressions where the header is rewritten but the lock
+    // still tracks the original name (or vice versa).
+    const headerMatch = file.match(/shortwind: tile@(\S+) sha:([0-9a-f]+)/);
+    expect(headerMatch).not.toBeNull();
+    const renamedVersion = headerMatch![1]!;
+    const renamedSha = headerMatch![2]!;
+    expect(result.lockfile.families["tile"]).toEqual({
+      version: renamedVersion,
+      sha: renamedSha,
+    });
+    expect(result.lockfile.families["card"]).toBeUndefined();
   });
 
   it("--all installs every family in the registry", async () => {
