@@ -8,6 +8,11 @@ import {
 } from "@tanstack/react-router";
 import appCss from "../styles.css?url";
 
+// Source of truth for cross-page references to the project's GitHub repo.
+// Update here when the repository moves; the placeholder `anthropics/shortwind`
+// org was wrong and quietly 404'd from the header link.
+export const GITHUB_REPO_URL = "https://github.com/shortwind/shortwind";
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -60,7 +65,7 @@ function SiteHeader() {
             Docs
           </Link>
           <a
-            href="https://github.com/anthropics/shortwind"
+            href={GITHUB_REPO_URL}
             className="hover:text-slate-900"
             target="_blank"
             rel="noreferrer"
@@ -83,7 +88,7 @@ function SiteFooter() {
             Docs
           </Link>
           <a
-            href="https://github.com/anthropics/shortwind"
+            href={GITHUB_REPO_URL}
             className="hover:text-slate-700"
             target="_blank"
             rel="noreferrer"

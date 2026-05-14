@@ -23,6 +23,10 @@ const recipeSources = import.meta.glob(
   { eager: true, query: "?raw", import: "default" },
 ) as Record<string, string>;
 
+// Module-level cache. Safe on Cloudflare Workers — each isolate gets its own
+// module instance, and the source globs are bundled at build time so the
+// cache holds derived state, not request-scoped data. Tests that need a
+// fresh build should call `buildCatalogFromSources` directly.
 let cached: CatalogData | null = null;
 
 export function buildCatalogFromSources(

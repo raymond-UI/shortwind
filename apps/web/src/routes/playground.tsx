@@ -61,8 +61,12 @@ function PlaygroundPage() {
 
   const inputChars = input.length;
   const outputChars = output.length;
-  const inputTokens = Math.max(1, Math.ceil(inputChars / 4));
-  const outputTokens = Math.max(1, Math.ceil(outputChars / 4));
+  // Rule-of-thumb token estimate. OpenAI/Anthropic tokenizers average ~4
+  // characters per token for English/code mixes; we use it for display only,
+  // so we don't ship an actual tokenizer to the browser.
+  const CHARS_PER_TOKEN = 4;
+  const inputTokens = Math.max(1, Math.ceil(inputChars / CHARS_PER_TOKEN));
+  const outputTokens = Math.max(1, Math.ceil(outputChars / CHARS_PER_TOKEN));
   const savings =
     outputTokens > inputTokens
       ? `${Math.round(((outputTokens - inputTokens) / outputTokens) * 100)}% smaller`
@@ -152,11 +156,31 @@ function renderIframe(html: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><script src="https://unpkg.com/@tailwindcss/browser@4"></script><style>body{font-family:ui-sans-serif,system-ui,sans-serif;margin:16px}</style></head><body>${html}</body></html>`;
 }
 
-export function encodeShareHash(input: string): string {
-  if (typeof btoa !== "undefined") {
-    return "share=" + btoa(unescape(encodeURIComponent(input)));
+function toBase64(utf8: string): string {
+  // Round-trip via `TextEncoder` so unicode characters survive base64 — the
+  // legacy `unescape(encodeURIComponent(...))` trick is deprecated and lints
+  // poorly in modern toolchains.
+  if (typeof btoa !== "undefined" && typeof TextEncoder !== "undefined") {
+    const bytes = new TextEncoder().encode(utf8);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+    return btoa(bin);
   }
-  return "share=" + Buffer.from(input, "utf8").toString("base64");
+  return Buffer.from(utf8, "utf8").toString("base64");
+}
+
+function fromBase64(b64: string): string {
+  if (typeof atob !== "undefined" && typeof TextDecoder !== "undefined") {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  return Buffer.from(b64, "base64").toString("utf8");
+}
+
+export function encodeShareHash(input: string): string {
+  return "share=" + toBase64(input);
 }
 
 // 50 KB encoded ceiling — well above any reasonable hand-typed snippet,
@@ -169,10 +193,7 @@ export function decodeShareHash(hash: string): string | null {
   const payload = m[1]!;
   if (payload.length > MAX_SHARE_HASH_BYTES) return null;
   try {
-    if (typeof atob !== "undefined") {
-      return decodeURIComponent(escape(atob(payload)));
-    }
-    return Buffer.from(payload, "base64").toString("utf8");
+    return fromBase64(payload);
   } catch {
     return null;
   }

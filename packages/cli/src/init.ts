@@ -201,11 +201,11 @@ async function writeConfig(
   await writeFile(configPath, JSON.stringify(merged, null, 2) + "\n");
 }
 
-const CLASS_REGEX_KEY = ["tailwindCSS.experimental.classRegex"] as const;
+const CLASS_REGEX_KEY = ["tailwindCSS.experimental.classRegex"];
 const CLASS_REGEX_VALUE = [
   ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
   ["className\\s*=\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
-] as const;
+];
 
 async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
   await mkdir(path.dirname(vscodePath), { recursive: true });

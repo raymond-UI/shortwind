@@ -36,6 +36,8 @@ const docSources = import.meta.glob("../content/docs/*.md", {
   import: "default",
 }) as Record<string, string>;
 
+// Module-level cache — see the matching note in `catalog-data.ts`. Safe on
+// Cloudflare Workers; tests should call the inner builder directly.
 let cached: DocPage[] | null = null;
 
 export function parseFrontmatter(raw: string): { meta: Record<string, string>; body: string } {

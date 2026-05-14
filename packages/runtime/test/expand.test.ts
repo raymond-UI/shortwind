@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import { expand } from "@shortwind/core";
 import {
   DEFAULT_REGISTRY,
   createGlobal,
@@ -75,5 +76,25 @@ describe("@shortwind/runtime", () => {
   it("expandClassList passes through fastpath when no @ tokens are present", () => {
     const input = "text-base font-bold hover:bg-gray-100";
     expect(expandClassList(input, DEFAULT_REGISTRY)).toBe(input);
+  });
+
+  // Pins the contract that `expandClassList` agrees with the full `expand()`
+  // from @shortwind/core for a single recipe in isolation. We don't compare
+  // multi-recipe / merge-conflict cases because the runtime intentionally
+  // skips tailwind-merge to keep the bundle under 8 KB gzipped — that
+  // divergence is documented, not accidental.
+  it("expandClassList matches @shortwind/core expand for single-recipe inputs", () => {
+    const samples = ["@card", "@badge"];
+    for (const sample of samples) {
+      const lite = expandClassList(sample, DEFAULT_REGISTRY);
+      const wrapped = expand(`<div class="${sample}"></div>`, DEFAULT_REGISTRY, {
+        mode: "html",
+        mergeConflicts: false,
+      });
+      const fullCls = wrapped.match(/class="([^"]*)"/)?.[1] ?? "";
+      expect(lite.split(/\s+/).filter(Boolean).sort()).toEqual(
+        fullCls.split(/\s+/).filter(Boolean).sort(),
+      );
+    }
   });
 });
