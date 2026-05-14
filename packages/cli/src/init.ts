@@ -191,7 +191,7 @@ async function writeConfig(
     return;
   }
   const current = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
-  const merged = { ...desired, ...current };
+  const merged = { ...current, ...desired };
   await writeFile(configPath, JSON.stringify(merged, null, 2) + "\n");
 }
 
@@ -223,8 +223,7 @@ const HUSKY_LINE = "npx shortwind build";
 async function installHuskyHook(huskyPath: string): Promise<void> {
   await mkdir(path.dirname(huskyPath), { recursive: true });
   if (!existsSync(huskyPath)) {
-    const body = `#!/usr/bin/env sh\n. "$(dirname -- "$0")/_/husky.sh"\n\n${HUSKY_LINE}\n`;
-    await writeFile(huskyPath, body, { mode: 0o755 });
+    await writeFile(huskyPath, `${HUSKY_LINE}\n`, { mode: 0o755 });
     return;
   }
   const current = await readFile(huskyPath, "utf8");

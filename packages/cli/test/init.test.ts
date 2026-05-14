@@ -144,6 +144,35 @@ describe("init", () => {
 
     const hook = readFileSync(result.huskyPath, "utf8");
     expect(hook).toContain("npx shortwind build");
+    // Husky v9: no shebang, no sourcing of _/husky.sh
+    expect(hook).not.toContain("#!/usr/bin/env sh");
+    expect(hook).not.toContain("husky.sh");
+  });
+
+  it("re-init with a new --registry overwrites the prior value in shortwind.config.json", async () => {
+    const dir = await setupProject();
+    cleanup.push(dir);
+
+    const installer = makeInstaller();
+    await init({
+      cwd: dir,
+      preset: "none",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    const SECOND_REGISTRY = "https://example.test/registry";
+    await init({
+      cwd: dir,
+      preset: "none",
+      registry: SECOND_REGISTRY,
+      installPackages: installer.fn,
+    });
+
+    const config = JSON.parse(
+      readFileSync(path.join(dir, "shortwind.config.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(config["registry"]).toBe(SECOND_REGISTRY);
   });
 
   it("writes SKILL.md including each family name", async () => {
