@@ -34,18 +34,16 @@ export const Route = createFileRoute("/docs/$slug")({
 function DocsDetail() {
   const doc = Route.useLoaderData();
   return (
-    <div>
-      <p className="text-sm font-medium uppercase tracking-wider text-slate-500">
-        Docs
-      </p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-        {doc.title}
-      </h1>
+    <div className="@stack-sm">
+      <p className="@muted font-medium uppercase tracking-wider">Docs</p>
+      <h1 className="@heading-xl text-3xl font-semibold">{doc.title}</h1>
       {doc.description ? (
-        <p className="mt-2 text-slate-600">{doc.description}</p>
+        <p className="@body text-base text-zinc-600 dark:text-zinc-400">
+          {doc.description}
+        </p>
       ) : null}
       <div
-        className="prose prose-slate mt-8 max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100"
+        className="prose prose-zinc mt-8 max-w-none dark:prose-invert prose-pre:bg-zinc-900 prose-pre:text-zinc-100"
         dangerouslySetInnerHTML={{ __html: doc.html }}
       />
     </div>

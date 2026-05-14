@@ -73,19 +73,19 @@ function PlaygroundPage() {
       : "0% — try adding more @recipes";
 
   return (
-    <section className="mx-auto max-w-7xl px-6 py-10">
-      <header className="mb-6">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Playground
-        </h1>
-        <p className="mt-2 text-slate-600">
+    <section className="@container max-w-7xl py-10">
+      <header className="@stack-sm mb-6">
+        <h1 className="@heading-lg text-3xl">Playground</h1>
+        <p className="@body text-base text-zinc-600 dark:text-zinc-400">
           Type shorthand HTML on the left. The middle pane shows the expanded
           Tailwind output. The right pane renders it.
         </p>
-        <div className="mt-3 flex items-center gap-3 text-sm text-slate-500">
-          <span>
+        <div className="@row gap-3">
+          <span className="@muted">
             Input ≈ {inputTokens} tokens · Output ≈ {outputTokens} tokens ·{" "}
-            <span className="font-medium text-slate-700">{savings}</span>
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">
+              {savings}
+            </span>
           </span>
           <CopyButton text={output} label="Copy expanded HTML" />
         </div>
@@ -97,13 +97,13 @@ function PlaygroundPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             spellCheck={false}
-            className="h-[28rem] w-full resize-none rounded-md border border-slate-300 bg-white p-3 font-mono text-xs leading-relaxed text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="@textarea h-[28rem] resize-none p-3 font-mono text-xs leading-relaxed"
           />
         </Pane>
         <Pane title="Expanded">
           <pre
             data-testid="playground-output"
-            className="h-[28rem] w-full overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-800"
+            className="@code-block h-[28rem] w-full overflow-auto p-3 text-xs leading-relaxed"
           >
             {output}
           </pre>
@@ -114,7 +114,7 @@ function PlaygroundPage() {
             sandbox="allow-scripts"
             referrerPolicy="no-referrer"
             srcDoc={renderIframe(output)}
-            className="h-[28rem] w-full rounded-md border border-slate-200 bg-white"
+            className="h-[28rem] w-full rounded-md border border-zinc-200 bg-white dark:border-zinc-800"
           />
         </Pane>
       </div>
@@ -125,7 +125,7 @@ function PlaygroundPage() {
 function Pane({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+      <p className="@caption mb-2 font-medium uppercase tracking-wider">
         {title}
       </p>
       {children}
@@ -145,7 +145,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
           setTimeout(() => setCopied(false), 1200);
         }
       }}
-      className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:border-slate-400"
+      className="@btn-ghost-sm"
     >
       {copied ? "Copied" : label}
     </button>

@@ -33,7 +33,7 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <RootDocument>
-      <div className="flex min-h-screen flex-col bg-white text-slate-900">
+      <div className="@surface flex min-h-screen flex-col">
         <SiteHeader />
         <main className="flex-1">
           <Outlet />
@@ -46,27 +46,24 @@ function RootComponent() {
 
 function SiteHeader() {
   return (
-    <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link
-          to="/"
-          className="text-lg font-semibold tracking-tight text-slate-900 hover:text-slate-700"
-        >
+    <header className="@surface border-b border-zinc-200 dark:border-zinc-800">
+      <div className="@container @row-between py-4">
+        <Link to="/" className="@heading-sm text-lg tracking-tight hover:text-zinc-700 dark:hover:text-zinc-300">
           Shortwind
         </Link>
-        <nav className="flex items-center gap-6 text-sm text-slate-600">
-          <Link to="/catalog" className="hover:text-slate-900" activeProps={{ className: "text-slate-900" }}>
+        <nav className="@nav">
+          <Link to="/catalog" className="@nav-link" activeProps={{ className: "@nav-link-active" }}>
             Catalog
           </Link>
-          <Link to="/playground" className="hover:text-slate-900" activeProps={{ className: "text-slate-900" }}>
+          <Link to="/playground" className="@nav-link" activeProps={{ className: "@nav-link-active" }}>
             Playground
           </Link>
-          <Link to="/docs" className="hover:text-slate-900" activeProps={{ className: "text-slate-900" }}>
+          <Link to="/docs" className="@nav-link" activeProps={{ className: "@nav-link-active" }}>
             Docs
           </Link>
           <a
             href={GITHUB_REPO_URL}
-            className="hover:text-slate-900"
+            className="@nav-link"
             target="_blank"
             rel="noreferrer"
           >
@@ -80,16 +77,16 @@ function SiteHeader() {
 
 function SiteFooter() {
   return (
-    <footer className="border-t border-slate-200 bg-slate-50">
-      <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-3 px-6 py-6 text-sm text-slate-500 sm:flex-row sm:items-center">
-        <p>© {new Date().getFullYear()} Shortwind</p>
-        <nav className="flex gap-4">
-          <Link to="/docs" className="hover:text-slate-700">
+    <footer className="@surface-muted border-t border-zinc-200 dark:border-zinc-800">
+      <div className="@container flex flex-col items-start justify-between gap-3 py-6 sm:flex-row sm:items-center">
+        <p className="@muted">© {new Date().getFullYear()} Shortwind</p>
+        <nav className="@row gap-4">
+          <Link to="/docs" className="@nav-link">
             Docs
           </Link>
           <a
             href={GITHUB_REPO_URL}
-            className="hover:text-slate-700"
+            className="@nav-link"
             target="_blank"
             rel="noreferrer"
           >

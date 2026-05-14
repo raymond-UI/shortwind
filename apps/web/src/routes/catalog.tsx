@@ -32,32 +32,30 @@ function CatalogPage() {
   const filtered = useMemo(() => filterCatalog(data, query.trim()), [data, query]);
 
   return (
-    <section className="mx-auto max-w-6xl px-6 py-12">
-      <header className="mb-10">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Recipe catalog
-        </h1>
-        <p className="mt-3 text-slate-600">
+    <section className="@container py-12">
+      <header className="mb-10 @stack-md">
+        <h1 className="@heading-lg text-3xl">Recipe catalog</h1>
+        <p className="@body text-base text-zinc-600 dark:text-zinc-400">
           Every recipe in the default Shortwind registry, with its expanded
           Tailwind class list and a live preview.
         </p>
-        <div className="mt-6">
+        <div>
           <input
             ref={searchRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder='Search recipes — press "/" to focus'
-            className="w-full max-w-md rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="@input max-w-md shadow-sm"
           />
         </div>
       </header>
 
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-[12rem_1fr]">
         <FamilySidebar families={filtered.families} />
-        <div className="space-y-16">
+        <div className="@stack-lg gap-16">
           {filtered.families.length === 0 ? (
-            <p className="text-sm text-slate-500">No recipes match “{query}”.</p>
+            <p className="@muted">No recipes match “{query}”.</p>
           ) : null}
           {filtered.families.map((fam) => (
             <FamilySection key={fam.name} family={fam} />
@@ -72,18 +70,17 @@ function FamilySidebar({ families }: { families: CatalogFamily[] }) {
   return (
     <nav className="hidden lg:block">
       <div className="sticky top-6 max-h-[80vh] overflow-y-auto">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <p className="@caption mb-3 font-semibold uppercase tracking-wider">
           Families
         </p>
-        <ul className="space-y-1 text-sm">
+        <ul className="@stack-xs text-sm">
           {families.map((fam) => (
             <li key={fam.name}>
-              <a
-                href={`#fam-${fam.name}`}
-                className="block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              >
+              <a href={`#fam-${fam.name}`} className="@nav-link block">
                 {fam.name}{" "}
-                <span className="text-slate-400">({fam.recipes.length})</span>
+                <span className="text-zinc-400 dark:text-zinc-500">
+                  ({fam.recipes.length})
+                </span>
               </a>
             </li>
           ))}
@@ -96,16 +93,14 @@ function FamilySidebar({ families }: { families: CatalogFamily[] }) {
 function FamilySection({ family }: { family: CatalogFamily }) {
   return (
     <section id={`fam-${family.name}`} className="scroll-mt-6">
-      <div className="mb-6 flex items-baseline justify-between">
-        <h2 className="text-xl font-semibold capitalize tracking-tight text-slate-900">
-          {family.name}
-        </h2>
+      <div className="@row-between mb-6 items-baseline">
+        <h2 className="@heading-md capitalize">{family.name}</h2>
         <CopyButton
           text={`npx shortwind add ${family.name}`}
           label="Copy install"
         />
       </div>
-      <div className="space-y-6">
+      <div className="@stack-md gap-6">
         {family.recipes.map((r) => (
           <RecipeCard key={r.name} recipe={r} />
         ))}
@@ -117,10 +112,10 @@ function FamilySection({ family }: { family: CatalogFamily }) {
 function RecipeCard({ recipe }: { recipe: CatalogRecipe }) {
   const expansion = recipe.expansion.join(" ");
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <article className="@card p-5">
+      <div className="@row-between flex-wrap items-baseline">
         <h3
-          className="font-mono text-sm font-semibold text-slate-900"
+          className="@heading-sm font-mono text-sm"
           title={recipe.description ?? undefined}
         >
           @{recipe.name}
@@ -128,18 +123,16 @@ function RecipeCard({ recipe }: { recipe: CatalogRecipe }) {
         <CopyButton text={`@${recipe.name}`} label="Copy" />
       </div>
       {recipe.description ? (
-        <p className="mt-1 text-sm text-slate-600">{recipe.description}</p>
+        <p className="@body mt-1">{recipe.description}</p>
       ) : null}
 
-      <pre className="mt-4 overflow-x-auto rounded bg-slate-50 px-3 py-2 font-mono text-xs leading-relaxed text-slate-700">
+      <pre className="@code-block mt-4 px-3 py-2 text-xs leading-relaxed">
         {expansion}
       </pre>
 
       <div className="mt-4">
-        <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">
-          Preview
-        </p>
-        <div className="rounded border border-dashed border-slate-200 p-4">
+        <p className="@caption mb-2 uppercase tracking-wider">Preview</p>
+        <div className="rounded border border-dashed border-zinc-200 p-4 dark:border-zinc-800">
           <div className={expansion}>Preview</div>
         </div>
       </div>
@@ -159,7 +152,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
           setTimeout(() => setCopied(false), 1200);
         }
       }}
-      className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:border-slate-400"
+      className="@btn-ghost-sm"
     >
       {copied ? "Copied" : label}
     </button>

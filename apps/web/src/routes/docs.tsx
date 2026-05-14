@@ -18,21 +18,21 @@ export const Route = createFileRoute("/docs")({
 function DocsLayout() {
   const pages = Route.useLoaderData();
   return (
-    <section className="mx-auto max-w-6xl px-6 py-12">
+    <section className="@container py-12">
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-[14rem_1fr]">
         <nav className="hidden lg:block">
           <div className="sticky top-6">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <p className="@caption mb-3 font-semibold uppercase tracking-wider">
               Documentation
             </p>
-            <ul className="space-y-1 text-sm">
+            <ul className="@stack-xs text-sm">
               {pages.map((p) =>
                 p.slug === "index" ? (
                   <li key={p.slug}>
                     <Link
                       to="/docs"
-                      className="block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                      activeProps={{ className: "bg-slate-100 text-slate-900" }}
+                      className="@nav-link block"
+                      activeProps={{ className: "@nav-link-active block" }}
                       activeOptions={{ exact: true }}
                     >
                       {p.title}
@@ -43,8 +43,8 @@ function DocsLayout() {
                     <Link
                       to="/docs/$slug"
                       params={{ slug: p.slug }}
-                      className="block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                      activeProps={{ className: "bg-slate-100 text-slate-900" }}
+                      className="@nav-link block"
+                      activeProps={{ className: "@nav-link-active block" }}
                       activeOptions={{ exact: true }}
                     >
                       {p.title}

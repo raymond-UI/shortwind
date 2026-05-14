@@ -16,13 +16,11 @@ export const Route = createFileRoute("/docs/")({
 function DocsIndex() {
   const doc = Route.useLoaderData();
   if (!doc) {
-    return (
-      <p className="text-slate-600">Documentation index not found.</p>
-    );
+    return <p className="@muted">Documentation index not found.</p>;
   }
   return (
     <div
-      className="prose prose-slate max-w-none prose-pre:bg-slate-900 prose-pre:text-slate-100"
+      className="prose prose-zinc max-w-none dark:prose-invert prose-pre:bg-zinc-900 prose-pre:text-zinc-100"
       dangerouslySetInnerHTML={{ __html: doc.html }}
     />
   );
