@@ -1,0 +1,10 @@
+{
+  "mode": "html",
+  "mergeConflicts": true,
+  "flattened": {
+    "card": ["rounded-lg", "border"],
+    "card-elevated": ["rounded-lg", "border", "shadow-lg"]
+  },
+  "input": "<section class=\"@card-elevated\"></section>",
+  "expected": "<section class=\"rounded-lg border shadow-lg\"></section>"
+}

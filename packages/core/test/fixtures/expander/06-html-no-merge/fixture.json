@@ -1,0 +1,7 @@
+{
+  "mode": "html",
+  "mergeConflicts": false,
+  "flattened": { "card": ["p-4", "rounded-lg"] },
+  "input": "<div class=\"@card p-6\"></div>",
+  "expected": "<div class=\"p-4 rounded-lg p-6\"></div>"
+}

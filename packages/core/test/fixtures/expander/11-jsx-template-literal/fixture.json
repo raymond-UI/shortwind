@@ -1,0 +1,7 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": { "card": ["rounded-lg", "border"] },
+  "input": "<div className={`@card ${extra}`} />",
+  "expected": "<div className={`rounded-lg border ${extra}`} />"
+}

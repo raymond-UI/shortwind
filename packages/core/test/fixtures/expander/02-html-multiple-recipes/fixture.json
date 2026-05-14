@@ -1,0 +1,10 @@
+{
+  "mode": "html",
+  "mergeConflicts": true,
+  "flattened": {
+    "card": ["rounded-lg", "border"],
+    "btn": ["px-4", "py-2"]
+  },
+  "input": "<div class=\"@card @btn\"></div>",
+  "expected": "<div class=\"rounded-lg border px-4 py-2\"></div>"
+}

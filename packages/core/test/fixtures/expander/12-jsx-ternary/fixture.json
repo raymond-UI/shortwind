@@ -1,0 +1,10 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": {
+    "card": ["rounded-lg", "border"],
+    "btn": ["px-4", "py-2"]
+  },
+  "input": "<div className={active ? \"@card\" : \"@btn\"} />",
+  "expected": "<div className={active ? \"rounded-lg border\" : \"px-4 py-2\"} />"
+}
