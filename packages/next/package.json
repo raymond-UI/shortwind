@@ -1,0 +1,21 @@
+{
+  "name": "@shortwind/next",
+  "version": "0.0.0",
+  "description": "Next.js plugin for Shortwind. Webpack and Turbopack.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "next": ">=14.0.0"
+  },
+  "dependencies": {
+    "@shortwind/core": "workspace:*",
+    "@shortwind/tailwind": "workspace:*"
+  }
+}

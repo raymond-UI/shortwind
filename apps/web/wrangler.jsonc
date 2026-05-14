@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shortwind",
+  "compatibility_date": "2025-04-03",
+  "workers_dev": false,
+  "preview_urls": false,
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@tanstack/react-start/server-entry",
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "VITE_APP_NAME": "Shortwind",
+    "VITE_SITE_URL": "http://localhost:5173"
+  },
+  "env": {
+    "production": {
+      "workers_dev": false,
+      // "routes": [{ "pattern": "shortwind.dev/*", "zone_name": "shortwind.dev" }],
+      "vars": {
+        "VITE_APP_NAME": "Shortwind",
+        "VITE_SITE_URL": "https://shortwind.dev"
+      },
+      "observability": {
+        "logs": {
+          "enabled": true,
+          "invocation_logs": true
+        }
+      }
+    }
+  }
+}

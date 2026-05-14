@@ -1,0 +1,35 @@
+{
+  "name": "shortwind",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check:deps": "tsx scripts/check-deps.ts"
+  },
+  "packageManager": "pnpm@11.1.1",
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^10.3.0",
+    "happy-dom": "^20.9.0",
+    "tsx": "^4.21.0",
+    "turbo": "^2.9.12",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.3",
+    "vitest": "^4.1.6"
+  },
+  "pnpm": {
+    "minimumReleaseAge": 4320,
+    "minimumReleaseAgeExclude": [
+      "@shortwind/core",
+      "@shortwind/tailwind",
+      "@shortwind/vite",
+      "@shortwind/next",
+      "@shortwind/astro",
+      "@shortwind/registry"
+    ]
+  }
+}

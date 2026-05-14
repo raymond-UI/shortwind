@@ -1,0 +1,35 @@
+{
+  "name": "shortwind",
+  "version": "0.0.0",
+  "description": "Shortwind CLI — init, add, remove, upgrade, dev, build, lint, ls, preset.",
+  "type": "module",
+  "bin": {
+    "shortwind": "./dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.4.0",
+    "@shortwind/core": "workspace:*",
+    "cac": "^7.0.0",
+    "chokidar": "^5.0.0",
+    "detect-package-manager": "^3.0.2",
+    "diff": "^9.0.0",
+    "jsonc-parser": "^3.3.1",
+    "picocolors": "^1.1.1",
+    "semver": "^7.8.0",
+    "tinyglobby": "^0.2.16"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.7.1",
+    "tsdown": "^0.22.0"
+  }
+}
