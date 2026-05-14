@@ -1,0 +1,25 @@
+{
+  "name": "@shortwind/runtime",
+  "version": "0.0.0",
+  "description": "Browser runtime for Shortwind. Walks the DOM, expands @recipe tokens, ships the default catalog inline.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "gen": "tsx scripts/generate-registry.ts",
+    "bundle": "tsx scripts/bundle.ts",
+    "build": "pnpm gen && tsc && pnpm bundle",
+    "typecheck": "pnpm gen && tsc --noEmit",
+    "test": "pnpm gen && vitest run"
+  },
+  "dependencies": {
+    "@shortwind/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "esbuild": "^0.25.0"
+  }
+}

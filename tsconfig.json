@@ -6,6 +6,7 @@
     { "path": "./packages/vite" },
     { "path": "./packages/next" },
     { "path": "./packages/astro" },
+    { "path": "./packages/runtime" },
     { "path": "./packages/cli" },
     { "path": "./apps/web" }
   ]

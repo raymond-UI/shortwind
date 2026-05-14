@@ -17,7 +17,8 @@ const LAYERS: Record<string, number> = {
   "@shortwind/registry": 1,
   "@shortwind/vite": 2,
   "@shortwind/next": 2,
-  "@shortwind/astro": 2,
+  "@shortwind/runtime": 2,
+  "@shortwind/astro": 3,
   shortwind: 3,
   web: 4,
 };
