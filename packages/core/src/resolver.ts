@@ -51,7 +51,9 @@ export function buildRegistry(
       const cycleKey = [...new Set(cyclePath)].slice().sort().join(",");
       if (!reportedCycles.has(cycleKey)) {
         reportedCycles.add(cycleKey);
-        const culprit = lookup.get(cyclePath[0] ?? name);
+        // cyclePath[0] is always defined: we just pushed onto it via
+        // `[...stack.slice(cycleIdx), name]`, so length ≥ 1.
+        const culprit = lookup.get(cyclePath[0]!);
         if (culprit) {
           errors.push({
             code: "resolve/cycle",
@@ -71,9 +73,13 @@ export function buildRegistry(
     stack.push(name);
     const out: string[] = [];
     let failed = false;
+    // Walk the parser's `references` set in lockstep with the token list so
+    // we trust a single source of truth for "is this token a ref?" rather
+    // than re-deriving it from the leading `@`.
+    const refSet = new Set(recipe.references);
     for (const token of recipe.tokens) {
-      if (token.startsWith("@")) {
-        const refName = token.slice(1);
+      const refName = token.startsWith("@") ? token.slice(1) : null;
+      if (refName !== null && refSet.has(refName)) {
         if (!lookup.has(refName)) {
           failed = true;
           continue;

@@ -38,6 +38,10 @@ export function parseRecipeFile(
       if (source[pos] === "\n") {
         line++;
         col = 1;
+      } else if (source[pos] === "\r") {
+        // A bare `\r` (or the `\r` in `\r\n`) shouldn't bump the column —
+        // otherwise CRLF files report columns one past where editors show
+        // them. The matching `\n` (when present) does the line increment.
       } else {
         col++;
       }
@@ -75,10 +79,13 @@ export function parseRecipeFile(
   const tryParseHeader = (body: string, startLine: number): RecipeFileHeader | null => {
     const m = body.match(/^shortwind:\s+(\S+)@(\S+)\s+sha:(\S+)/);
     if (!m) return null;
+    // All three capture groups use `\S+`, so they're non-empty when the regex
+    // matches. The non-null assertion documents that — TypeScript can't see
+    // through `RegExpMatchArray` indexing.
     return {
-      family: m[1] ?? "",
-      version: m[2] ?? "",
-      sha: m[3] ?? "",
+      family: m[1]!,
+      version: m[2]!,
+      sha: m[3]!,
       sourceLine: startLine,
     };
   };
