@@ -76,6 +76,13 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       const cleanId = id.split("?")[0] ?? id;
       if (!include.test(cleanId)) return null;
       if (registryFiles.has(cleanId)) return null;
+      // Skip vendored/built code: node_modules dependencies and any `dist/`
+      // output (including this workspace's own built packages). Source files
+      // for the app live outside `dist/`; the expander never needs to run on
+      // already-compiled JS, and processing it can corrupt files that contain
+      // string literals or comments mentioning `className=` or `cva(`.
+      if (cleanId.includes("/node_modules/")) return null;
+      if (/\/dist\//.test(cleanId)) return null;
       // No families means nothing to expand — every file would round-trip
       // identically; skip the per-file work entirely.
       if (Object.keys(registry.flattened).length === 0) return null;

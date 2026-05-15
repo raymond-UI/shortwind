@@ -3,6 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { loadCatalog } from "../lib/catalog-data";
 import type { CatalogData, CatalogFamily, CatalogRecipe } from "../lib/catalog-data";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 const getCatalog = createServerFn({ method: "GET" }).handler(() => loadCatalog());
 
@@ -40,13 +43,13 @@ function CatalogPage() {
           Tailwind class list and a live preview.
         </p>
         <div>
-          <input
+          <Input
             ref={searchRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder='Search recipes — press "/" to focus'
-            className="@input max-w-md shadow-sm"
+            className="max-w-md"
           />
         </div>
       </header>
@@ -122,45 +125,48 @@ function RecipeCard({ recipe }: { recipe: CatalogRecipe }) {
   const expansion = recipe.expansion.join(" ");
   const previewable = isPreviewable(recipe.expansion);
   return (
-    <article className="@card p-5">
-      <div className="@row-between flex-wrap items-baseline">
-        <h3
-          className="@heading-sm font-mono text-sm"
-          title={recipe.description ?? undefined}
-        >
-          @{recipe.name}
-        </h3>
-        <CopyButton text={`@${recipe.name}`} label="Copy" />
-      </div>
-      {recipe.description ? (
-        <p className="@body mt-1">{recipe.description}</p>
-      ) : null}
-
-      <pre className="@code-block mt-4 px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap wrap-break-word">
-        {expansion}
-      </pre>
-
-      <div className="mt-4">
-        <p className="@caption mb-2 uppercase tracking-wider">Preview</p>
-        <div className="relative isolate overflow-hidden rounded border border-dashed border-border p-4">
-          {previewable ? (
-            <div className={expansion}>Preview</div>
-          ) : (
-            <p className="@muted text-sm italic">
-              Positioning recipe — preview not rendered inline.
-            </p>
-          )}
+    <Card>
+      <CardContent className="p-5">
+        <div className="@row-between flex-wrap items-baseline">
+          <h3
+            className="@heading-sm font-mono text-sm"
+            title={recipe.description ?? undefined}
+          >
+            @{recipe.name}
+          </h3>
+          <CopyButton text={`@${recipe.name}`} label="Copy" />
         </div>
-      </div>
-    </article>
+        {recipe.description ? (
+          <p className="@body mt-1">{recipe.description}</p>
+        ) : null}
+
+        <pre className="@code-block mt-4 px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap wrap-break-word">
+          {expansion}
+        </pre>
+
+        <div className="mt-4">
+          <p className="@caption mb-2 uppercase tracking-wider">Preview</p>
+          <div className="relative isolate overflow-hidden rounded border border-dashed border-border p-4">
+            {previewable ? (
+              <div className={expansion}>Preview</div>
+            ) : (
+              <p className="@muted text-sm italic">
+                Positioning recipe — preview not rendered inline.
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={() => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
           void navigator.clipboard.writeText(text);
@@ -168,10 +174,9 @@ function CopyButton({ text, label }: { text: string; label: string }) {
           setTimeout(() => setCopied(false), 1200);
         }
       }}
-      className="@btn-ghost-sm"
     >
       {copied ? "Copied" : label}
-    </button>
+    </Button>
   );
 }
 

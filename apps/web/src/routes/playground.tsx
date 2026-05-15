@@ -4,6 +4,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { loadCatalog } from "../lib/catalog-data";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 // `@shortwind/vite` scans this file at build time and rewrites any
 // `class="@..."` it finds — including inside string literals. Interpolating
@@ -84,16 +87,17 @@ function PlaygroundPage() {
           Type shorthand HTML on the left. The middle pane shows the expanded
           Tailwind output. The right pane renders it.
         </p>
-        <div className="@row gap-3">
-          <span className="@muted">
-            Input ≈ {inputTokens} tokens · Output ≈ {outputTokens} tokens ·{" "}
-            <span className="font-medium text-foreground">
-              {savings}
-            </span>
-          </span>
+        <div className="@row flex-wrap gap-2">
+          <Badge variant="secondary">Input ≈ {inputTokens} tokens</Badge>
+          <Badge variant="secondary">Output ≈ {outputTokens} tokens</Badge>
+          <Badge variant={outputTokens > inputTokens ? "success" : "outline"}>
+            {savings}
+          </Badge>
           <CopyButton text={output} label="Copy expanded HTML" />
         </div>
       </header>
+
+      <Separator className="my-6" />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Pane title="Shorthand">
@@ -140,8 +144,9 @@ function Pane({ title, children }: { title: string; children: React.ReactNode })
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={() => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
           void navigator.clipboard.writeText(text);
@@ -149,10 +154,9 @@ function CopyButton({ text, label }: { text: string; label: string }) {
           setTimeout(() => setCopied(false), 1200);
         }
       }}
-      className="@btn-ghost-sm"
     >
       {copied ? "Copied" : label}
-    </button>
+    </Button>
   );
 }
 

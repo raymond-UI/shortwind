@@ -1,0 +1,7 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": { "card": ["rounded-lg"] },
+  "input": "// example: className={ /\"/.test(x) ? \"@card\" : \"\" }\nconst x = 1;",
+  "expected": "// example: className={ /\"/.test(x) ? \"@card\" : \"\" }\nconst x = 1;"
+}

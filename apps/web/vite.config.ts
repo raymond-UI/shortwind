@@ -17,9 +17,16 @@ export default defineConfig({
     ...shortwind({ recipesDir }),
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tailwindcss(),
-    tanstackStart(),
+    tanstackStart({
+      router: { routeFileIgnorePattern: ".*\\.test\\.(ts|tsx)$" },
+    }),
     viteReact(),
   ],
+  resolve: {
+    alias: {
+      "@": path.resolve(here, "src"),
+    },
+  },
   server: {
     port: 5173,
   },

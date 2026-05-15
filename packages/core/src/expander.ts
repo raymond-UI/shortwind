@@ -78,31 +78,91 @@ export function expandClassList(
 
 const CLASSNAME_KW = "className";
 
-// expandJsxBraced operates as a text rewriter, not a JS parser. Inside
-// className={ ... } expressions it only rewrites string literals and
-// template literals at the top level of the expression — it does not
-// skip JS comments or regex literals. Code like
-//   className={ /"/.test(x) ? "@foo" : "" }
-// or
-//   className={ /* @foo */ ... }
-// is therefore *out of contract* — wrap such expressions in a helper or
-// stick to literal strings / template literals at the top level.
+// Both `expandJsxBraced` and `expandCallStringArgs` need a top-level scan that
+// skips over JS line/block comments, string literals, and template literals so
+// they don't false-match their trigger words inside non-code regions. Returns
+// the slice to emit verbatim and the new cursor, or null if `input[i]` is not
+// the start of one of those constructs.
+//
+// This function does NOT recognize regex literals — telling `/foo/g` apart
+// from a division requires a parser. Once comments are excluded, bare regex
+// literals at module scope are rare enough that the cost outweighs the win.
+// If you write `cva(/"/.test(x) ? "@a" : "@b")` you're outside the contract.
+function skipOpaqueChunk(
+  input: string,
+  i: number,
+): { end: number; emit: string } | null {
+  const ch = input[i];
+  if (ch === "/" && input[i + 1] === "/") {
+    const nl = input.indexOf("\n", i);
+    const end = nl < 0 ? input.length : nl;
+    return { end, emit: input.slice(i, end) };
+  }
+  if (ch === "/" && input[i + 1] === "*") {
+    const close = input.indexOf("*/", i + 2);
+    const end = close < 0 ? input.length : close + 2;
+    return { end, emit: input.slice(i, end) };
+  }
+  if (ch === '"' || ch === "'") {
+    const open = ch;
+    let j = i + 1;
+    while (j < input.length && input[j] !== open) {
+      if (input[j] === "\\") j++;
+      j++;
+    }
+    const end = j < input.length ? j + 1 : j;
+    return { end, emit: input.slice(i, end) };
+  }
+  if (ch === "`") {
+    let j = i + 1;
+    while (j < input.length && input[j] !== "`") {
+      if (input[j] === "\\") {
+        j += 2;
+        continue;
+      }
+      if (input[j] === "$" && input[j + 1] === "{") {
+        let td = 1;
+        j += 2;
+        while (j < input.length && td > 0) {
+          const c = input[j];
+          if (c === "{") td++;
+          else if (c === "}") td--;
+          if (td === 0) break;
+          j++;
+        }
+        if (j < input.length) j++;
+        continue;
+      }
+      j++;
+    }
+    const end = j < input.length ? j + 1 : j;
+    return { end, emit: input.slice(i, end) };
+  }
+  return null;
+}
+
 function expandJsxBraced(input: string, registry: Registry, merge: boolean): string {
   let out = "";
   let i = 0;
   while (i < input.length) {
-    const idx = input.indexOf(CLASSNAME_KW, i);
-    if (idx < 0) {
-      out += input.slice(i);
-      break;
-    }
-    const before = idx > 0 ? input[idx - 1] ?? "" : "";
-    if (before && /[\w$]/.test(before)) {
-      out += input.slice(i, idx + CLASSNAME_KW.length);
-      i = idx + CLASSNAME_KW.length;
+    const skip = skipOpaqueChunk(input, i);
+    if (skip) {
+      out += skip.emit;
+      i = skip.end;
       continue;
     }
-    let j = idx + CLASSNAME_KW.length;
+    if (!input.startsWith(CLASSNAME_KW, i)) {
+      out += input[i];
+      i++;
+      continue;
+    }
+    const before = i > 0 ? input[i - 1] ?? "" : "";
+    if (before && /[\w$]/.test(before)) {
+      out += CLASSNAME_KW;
+      i += CLASSNAME_KW.length;
+      continue;
+    }
+    let j = i + CLASSNAME_KW.length;
     while (j < input.length && /\s/.test(input[j] ?? "")) j++;
     if (input[j] !== "=") {
       out += input.slice(i, j);
@@ -161,28 +221,57 @@ function expandCallStringArgs(
   registry: Registry,
   merge: boolean,
 ): string {
-  const escaped = callNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const re = new RegExp(`\\b(?:${escaped.join("|")})\\s*\\(`, "g");
+  const nameSet = new Set(callNames);
   let out = "";
-  let cursor = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(input)) !== null) {
-    const callStart = m.index;
-    out += input.slice(cursor, callStart);
-    const bodyStart = callStart + m[0].length;
+  let i = 0;
+  while (i < input.length) {
+    const skip = skipOpaqueChunk(input, i);
+    if (skip) {
+      out += skip.emit;
+      i = skip.end;
+      continue;
+    }
+    const ch = input[i] ?? "";
+    if (!/[A-Za-z_$]/.test(ch)) {
+      out += ch;
+      i++;
+      continue;
+    }
+    const before = i > 0 ? input[i - 1] ?? "" : "";
+    if (before && /[\w$]/.test(before)) {
+      // mid-identifier — emit the rest of this identifier verbatim and move on
+      let j = i;
+      while (j < input.length && /[\w$]/.test(input[j] ?? "")) j++;
+      out += input.slice(i, j);
+      i = j;
+      continue;
+    }
+    let j = i;
+    while (j < input.length && /[\w$]/.test(input[j] ?? "")) j++;
+    const ident = input.slice(i, j);
+    if (!nameSet.has(ident)) {
+      out += ident;
+      i = j;
+      continue;
+    }
+    let k = j;
+    while (k < input.length && /\s/.test(input[k] ?? "")) k++;
+    if (input[k] !== "(") {
+      out += input.slice(i, k);
+      i = k;
+      continue;
+    }
+    const bodyStart = k + 1;
     const bodyEnd = findCallBodyEnd(input, bodyStart);
     const body = input.slice(bodyStart, bodyEnd);
-    out += m[0] + expandJsxExpression(body, registry, merge);
+    out += input.slice(i, bodyStart) + expandJsxExpression(body, registry, merge);
     if (bodyEnd < input.length) {
       out += ")";
-      cursor = bodyEnd + 1;
-      re.lastIndex = cursor;
+      i = bodyEnd + 1;
     } else {
-      cursor = bodyEnd;
-      break;
+      i = bodyEnd;
     }
   }
-  out += input.slice(cursor);
   return out;
 }
 

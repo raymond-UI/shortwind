@@ -1,0 +1,7 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": { "btn-base": ["inline-flex"] },
+  "input": "const docs = \"use cva(\\\"@btn-base\\\") in your component\";",
+  "expected": "const docs = \"use cva(\\\"@btn-base\\\") in your component\";"
+}

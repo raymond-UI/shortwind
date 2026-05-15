@@ -7,6 +7,8 @@ import {
   createRootRoute,
 } from "@tanstack/react-router";
 import appCss from "../index.css?url";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 // Source of truth for cross-page references to the project's GitHub repo.
 // Update here when the repository moves; the placeholder `anthropics/shortwind`
@@ -81,6 +83,7 @@ function SiteHeader() {
           >
             GitHub
           </a>
+          <Separator orientation="vertical" className="mx-2 h-5" />
           <ThemeToggle />
         </nav>
       </div>
@@ -90,10 +93,10 @@ function SiteHeader() {
 
 function ThemeToggle() {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon"
       aria-label="Toggle theme"
-      className="@btn-ghost-sm"
       onClick={() => {
         const root = document.documentElement;
         const next = root.classList.toggle("dark") ? "dark" : "light";
@@ -104,7 +107,7 @@ function ThemeToggle() {
     >
       <span className="hidden dark:inline">☀</span>
       <span className="inline dark:hidden">☾</span>
-    </button>
+    </Button>
   );
 }
 
