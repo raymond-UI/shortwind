@@ -48,6 +48,35 @@ It does **not** say guidance is worthless:
   effect that easy tasks hide.
 - Only three models, none of them the current frontier tier.
 
+## Second run: latest coding + frontier models (2026-06-10)
+
+Re-ran on current-generation models to check whether the null effect was just
+the mid-tier models tested first. It was not — the effect is null because these
+models are already at the ceiling.
+
+Pooled unknown-recipe rate (invented names ÷ recipe tokens):
+
+| Category | Model | Control | Guided |
+| --- | --- | --: | --: |
+| Coding | deepseek/deepseek-v4-pro | 0.0% | 0.0% |
+| Coding | qwen/qwen3-coder-next | 0.8% | 0.0% |
+| Coding | openai/gpt-5.3-codex | 0.0% | 0.0% |
+| Frontier OpenAI | openai/gpt-5.5 | 0.0% | 0.0% |
+| Frontier OpenAI | openai/gpt-5.5-pro † | 0.0% | 0.0% |
+
+† gpt-5.5-pro: only 2/12 tasks completed before the test key ran out of credits;
+both showed 0% unknown.
+
+Selection conflicts were 0 in both conditions for every model **except**
+qwen3-coder-next, where guidance cut conflicts 4 → 1 — the single positive
+signal in the whole study, and from one model on n=12.
+
+**Reinforced conclusion:** current coding and frontier models make essentially
+zero recipe-selection errors with or without `@guide`. The `@flex-row`-instead-
+of-`@row` failure that motivated the guidance does not occur with 2026-era
+models. Guidance can only help where the model is weak enough to fail, and those
+models (e.g. llama-3.1-8b) are too weak to be usable regardless.
+
 ## Recommendation
 
 Do not add a "guidance improves selection" claim to the README — the data
