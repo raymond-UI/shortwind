@@ -8,6 +8,7 @@ export type DevOptions = {
   signal?: AbortSignal;
   onStatus?: (status: DevStatus) => void;
   debounceMs?: number;
+  reconcileIntervalMs?: number;
 };
 
 export type DevStatus =
@@ -21,6 +22,7 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
   const config = await readConfig(cwd);
   const recipesDir = path.join(cwd, config.recipesDir);
   const debounceMs = options.debounceMs ?? 50;
+  const reconcileIntervalMs = options.reconcileIntervalMs ?? Math.max(1000, debounceMs * 5);
 
   const status = (s: DevStatus): void => options.onStatus?.(s);
 
@@ -30,25 +32,33 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
   });
 
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let reconcileTimer: ReturnType<typeof setInterval> | null = null;
   let running = false;
   let pending = false;
+  let pendingSilent = true;
 
-  const runBuild = async (): Promise<void> => {
+  const runBuild = async (silentNoChange = false): Promise<void> => {
     if (running) {
       pending = true;
+      pendingSilent = pendingSilent && silentNoChange;
       return;
     }
     running = true;
     try {
+      let currentSilent = silentNoChange;
       do {
         pending = false;
+        pendingSilent = true;
         try {
           const result = await build({ cwd });
-          status({ kind: "rebuilt", families: result.families, changed: result.changed });
+          if (!currentSilent || result.changed) {
+            status({ kind: "rebuilt", families: result.families, changed: result.changed });
+          }
         } catch (err) {
           if (err instanceof BuildError) status({ kind: "error", message: err.message });
           else status({ kind: "error", message: err instanceof Error ? err.message : String(err) });
         }
+        currentSilent = pendingSilent;
       } while (pending);
     } finally {
       running = false;
@@ -57,7 +67,7 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
 
   const schedule = (): void => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(runBuild, debounceMs);
+    timer = setTimeout(() => void runBuild(false), debounceMs);
   };
 
   watcher.on("add", schedule).on("change", schedule).on("unlink", schedule);
@@ -67,6 +77,7 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
     if (stopped) return;
     stopped = true;
     if (timer) clearTimeout(timer);
+    if (reconcileTimer) clearInterval(reconcileTimer);
     await watcher.close();
   };
 
@@ -85,6 +96,7 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
   await runBuild();
   if (stopped) return { stop };
   status({ kind: "ready", recipesDir });
+  reconcileTimer = setInterval(() => void runBuild(true), reconcileIntervalMs);
 
   return { stop };
 }

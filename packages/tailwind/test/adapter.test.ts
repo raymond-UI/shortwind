@@ -122,6 +122,63 @@ describe("transformContent", () => {
     const after = transformContent(input, registry);
     expect(after).toBe(input);
   });
+
+  it("does not rewrite unrelated string literals in JSX mode", () => {
+    const input = [
+      `const label = "@card";`,
+      `export const View = () => <div title="@card" className="plain" />;`,
+      ``,
+    ].join("\n");
+    expect(transformContent(input, registry)).toBe(input);
+  });
+
+  it("rewrites string literals inside className expressions without touching comments", () => {
+    const before = [
+      `import clsx from "clsx";`,
+      `// className="@card" should stay as comment text`,
+      `export const View = ({ on }: { on: boolean }) => (`,
+      `  <button className={clsx("@btn-primary", on && "@btn-ghost")}>Go</button>`,
+      `);`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    expect(after).toContain(`// className="@card" should stay as comment text`);
+    expect(after).not.toMatch(/"@btn-primary"/);
+    expect(after).not.toMatch(/"@btn-ghost"/);
+    expect(after).toContain("inline-flex");
+  });
+
+  it("rewrites only static portions of className template literals", () => {
+    const before = [
+      `export const View = ({ active }: { active: string }) => (`,
+      "  <div className={`@card ${active} @stack-sm`} />",
+      `);`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    expect(after).toContain("${active}");
+    expect(after).not.toContain("@card");
+    expect(after).not.toContain("@stack-sm");
+  });
+
+  it("rewrites configured class helper calls but leaves ordinary calls alone", () => {
+    const before = [
+      `const styles = cva("@btn-primary", { variants: { tone: { ghost: "@btn-ghost" } } });`,
+      `const ordinary = make("@btn-primary");`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    expect(after).not.toMatch(/cva\("@btn-primary"/);
+    expect(after).not.toMatch(/ghost: "@btn-ghost"/);
+    expect(after).toContain(`const ordinary = make("@btn-primary");`);
+  });
+
+  it("allows custom class helper names", () => {
+    const before = `const styles = styled("@btn-primary");`;
+    const after = transformContent(before, registry, { callExpanders: ["styled"] });
+    expect(after).not.toContain("@btn-primary");
+    expect(after).toContain("inline-flex");
+  });
 });
 
 describe("source directive injection", () => {

@@ -150,6 +150,32 @@ describe("dev", () => {
     expect(skill).toContain("card");
   });
 
+  it("reconciles missed watcher events", async () => {
+    const dir = await setupProject("none");
+    dirs.push(dir);
+
+    const events: DevStatus[] = [];
+    // debounceMs is set far longer than the test timeout, which effectively
+    // disables the watcher-driven build path. If the reconcile timer were
+    // removed, this test would never see SKILL.md update and would time out.
+    const { stop } = await dev({
+      cwd: dir,
+      debounceMs: 10 * 60 * 1000,
+      reconcileIntervalMs: 50,
+      onStatus: (s) => events.push(s),
+    });
+    stoppers.push(stop);
+
+    await waitFor(() => events.some((e) => e.kind === "ready"));
+
+    const sourceCss = readFileSync(path.join(REGISTRY_PATH, "recipes", "card.css"), "utf8");
+    await writeFile(path.join(dir, "recipes", "card.css"), sourceCss);
+
+    await waitFor(() =>
+      readFileSync(path.join(dir, "skills", "shortwind", "SKILL.md"), "utf8").includes("@card"),
+    );
+  });
+
   it("coalesces events during an in-flight build into a follow-up rebuild", async () => {
     const dir = await setupProject("none");
     dirs.push(dir);

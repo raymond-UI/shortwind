@@ -12,6 +12,10 @@ export const ALL_RULES = [
   "recipe/duplicate",
   "recipe/unused",
   "recipe/no-redundant-utility",
+  "recipe/bad-suffix-order",
+  "recipe/conflicting-intent",
+  "recipe/dynamic-class",
+  "recipe/no-sibling-overlap",
 ] as const;
 
 export type Rule = (typeof ALL_RULES)[number];
@@ -53,6 +57,7 @@ export async function lint(options: LintOptions): Promise<LintResult> {
 
   const { registry, parseFindings } = loadRegistry(recipesDir, enabledRules);
   findings.push(...parseFindings);
+  findings.push(...checkRecipeNames(registry, recipesDir, enabledRules));
 
   const contentGlobs = options.content ?? DEFAULT_CONTENT;
   // tinyglobby evaluates ignore patterns relative to `cwd`; an absolute
@@ -90,6 +95,18 @@ export async function lint(options: LintOptions): Promise<LintResult> {
             message: `unknown recipe @${name}`,
           });
         }
+      }
+      if (enabledRules.has("recipe/bad-suffix-order")) {
+        findings.push(...checkUsageSuffixOrder(file, u.tokens, registry));
+      }
+      if (enabledRules.has("recipe/conflicting-intent")) {
+        findings.push(...checkConflictingIntent(file, u.tokens, registry));
+      }
+      if (enabledRules.has("recipe/no-sibling-overlap")) {
+        findings.push(...checkSiblingOverlap(file, u.tokens, registry));
+      }
+      if (enabledRules.has("recipe/dynamic-class")) {
+        findings.push(...checkDynamicClass(file, u.dynamicTokens));
       }
     }
 
@@ -193,6 +210,211 @@ function mapErrorCodeToRule(code: string): Rule {
   return ERROR_CODE_RULE[code] ?? "recipe/unknown";
 }
 
+const SIZE_SUFFIXES = new Set(["xs", "sm", "md", "lg", "xl"]);
+const INTENT_SUFFIXES = new Set([
+  "primary",
+  "secondary",
+  "ghost",
+  "danger",
+  "warning",
+  "success",
+  "info",
+]);
+
+function recipeMeta(name: string, familyHint?: string): {
+  family: string;
+  intent: string | null;
+  badOrder: string | null;
+} {
+  const family =
+    familyHint && (name === familyHint || name.startsWith(`${familyHint}-`))
+      ? familyHint
+      : name.split("-")[0] ?? name;
+  const suffix =
+    name === family ? [] : name.slice(family.length + 1).split("-").filter(Boolean);
+  let intent: string | null = null;
+  let firstSizeIdx = -1;
+  let laterIntentIdx = -1;
+
+  for (let i = 0; i < suffix.length; i++) {
+    const part = suffix[i] ?? "";
+    if (SIZE_SUFFIXES.has(part)) {
+      if (firstSizeIdx === -1) firstSizeIdx = i;
+    }
+    if (INTENT_SUFFIXES.has(part)) {
+      intent ??= part;
+      if (firstSizeIdx !== -1) laterIntentIdx = i;
+    }
+  }
+
+  let badOrder: string | null = null;
+  if (firstSizeIdx !== -1 && laterIntentIdx !== -1) {
+    const reordered = [
+      family,
+      ...suffix.filter((p) => INTENT_SUFFIXES.has(p)),
+      ...suffix.filter((p) => !INTENT_SUFFIXES.has(p) && !SIZE_SUFFIXES.has(p)),
+      ...suffix.filter((p) => SIZE_SUFFIXES.has(p)),
+    ];
+    badOrder = reordered.join("-");
+  }
+
+  return { family, intent, badOrder };
+}
+
+function checkRecipeNames(
+  registry: Registry,
+  recipesDir: string,
+  enabledRules: Set<Rule>,
+): Finding[] {
+  if (!enabledRules.has("recipe/bad-suffix-order")) return [];
+  const findings: Finding[] = [];
+  for (const [family, recipes] of Object.entries(registry.families)) {
+    for (const recipe of recipes) {
+      const meta = recipeMeta(recipe.name, family);
+      if (!meta.badOrder) continue;
+      findings.push({
+        rule: "recipe/bad-suffix-order",
+        severity: "warning",
+        file: path.join(recipesDir, recipe.sourceFile),
+        line: recipe.sourceLine,
+        column: 1,
+        message: `recipe @${recipe.name} uses size before intent; prefer @${meta.badOrder}`,
+      });
+    }
+  }
+  return findings;
+}
+
+function checkUsageSuffixOrder(
+  file: string,
+  tokens: ClassUsage["tokens"],
+  registry: Registry,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const token of tokens) {
+    if (!token.value.startsWith("@")) continue;
+    const name = token.value.slice(1);
+    if (!registry.flattened[name]) continue;
+    const meta = recipeMeta(name, familyForRecipe(registry, name));
+    if (!meta.badOrder) continue;
+    findings.push({
+      rule: "recipe/bad-suffix-order",
+      severity: "warning",
+      file,
+      line: token.line,
+      column: token.column,
+      message: `@${name} uses size before intent; prefer @${meta.badOrder}`,
+    });
+  }
+  return findings;
+}
+
+function checkConflictingIntent(
+  file: string,
+  tokens: ClassUsage["tokens"],
+  registry: Registry,
+): Finding[] {
+  const byFamily = new Map<
+    string,
+    Map<string, { token: ClassUsage["tokens"][number]; name: string }>
+  >();
+  for (const token of tokens) {
+    if (!token.value.startsWith("@")) continue;
+    const name = token.value.slice(1);
+    if (!registry.flattened[name]) continue;
+    const meta = recipeMeta(name, familyForRecipe(registry, name));
+    if (!meta.intent) continue;
+    const familyIntents =
+      byFamily.get(meta.family) ??
+      new Map<string, { token: ClassUsage["tokens"][number]; name: string }>();
+    familyIntents.set(meta.intent, { token, name });
+    byFamily.set(meta.family, familyIntents);
+  }
+
+  const findings: Finding[] = [];
+  for (const [family, intents] of byFamily) {
+    if (intents.size < 2) continue;
+    const intentNames = Array.from(intents.values())
+      .map((entry) => `@${entry.name}`)
+      .sort();
+    const first = Array.from(intents.values())
+      .map((entry) => entry.token)
+      .sort((a, b) => a.column - b.column)[0]!;
+    findings.push({
+      rule: "recipe/conflicting-intent",
+      severity: "warning",
+      file,
+      line: first.line,
+      column: first.column,
+      message: `multiple ${family} intents on one element: ${intentNames.join(", ")}`,
+    });
+  }
+  return findings;
+}
+
+function familyForRecipe(registry: Registry, name: string): string | undefined {
+  for (const [family, recipes] of Object.entries(registry.families)) {
+    if (recipes.some((recipe) => recipe.name === name)) return family;
+  }
+  return undefined;
+}
+
+function checkSiblingOverlap(
+  file: string,
+  tokens: ClassUsage["tokens"],
+  registry: Registry,
+): Finding[] {
+  const byFamily = new Map<string, Array<{ token: ClassUsage["tokens"][number]; name: string }>>();
+  for (const token of tokens) {
+    if (!token.value.startsWith("@")) continue;
+    const name = token.value.slice(1);
+    if (!registry.flattened[name]) continue;
+    const family = familyForRecipe(registry, name) ?? name.split("-")[0] ?? name;
+    const arr = byFamily.get(family) ?? [];
+    arr.push({ token, name });
+    byFamily.set(family, arr);
+  }
+
+  const findings: Finding[] = [];
+  for (const [family, entries] of byFamily) {
+    const unique = new Set(entries.map((e) => e.name));
+    if (unique.size < 2) continue;
+    const first = entries.map((e) => e.token).sort((a, b) => a.column - b.column)[0]!;
+    const names = Array.from(unique).map((n) => `@${n}`).sort();
+    findings.push({
+      rule: "recipe/no-sibling-overlap",
+      severity: "warning",
+      file,
+      line: first.line,
+      column: first.column,
+      message: `multiple ${family} recipes on one element: ${names.join(", ")}`,
+    });
+  }
+  return findings;
+}
+
+// Dynamic recipe names defeat unknown-reference checking and the safelist
+// pass — Tailwind never sees the computed token, so the recipe's expanded
+// utilities won't appear in the bundle unless they're already in another file.
+function checkDynamicClass(
+  file: string,
+  dynamicTokens: ClassUsage["dynamicTokens"],
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const token of dynamicTokens) {
+    if (!token.value.includes("@")) continue;
+    findings.push({
+      rule: "recipe/dynamic-class",
+      severity: "warning",
+      file,
+      line: token.line,
+      column: token.column,
+      message: `dynamic recipe name ${token.value} — Tailwind cannot statically resolve this`,
+    });
+  }
+  return findings;
+}
+
 type ClassUsage = {
   fileOffset: number;
   // Exact source offset of the first character inside the attribute value
@@ -202,6 +424,10 @@ type ClassUsage = {
   valueStart: number;
   raw: string;
   tokens: Array<{ value: string; line: number; column: number }>;
+  // Tokens that contain a `${...}` interpolation. Surfaced separately so the
+  // dynamic-class rule can flag computed recipe names while the normal token
+  // pipeline still treats them as opaque.
+  dynamicTokens: Array<{ value: string; line: number; column: number }>;
   // Only string-literal attribute values can be auto-fixed in place;
   // JSX expression containers (className={...}) may wrap clsx() / template
   // literals where blind substring writes would be unsafe.
@@ -218,11 +444,13 @@ export function extractClassUsages(source: string): ClassUsage[] {
     const value = m[2] ?? "";
     const attrStart = m.index ?? 0;
     const valueStart = attrStart + m[0]!.length - 1 - value.length;
+    const { tokens, dynamicTokens } = tokenizeClassString(source, value, valueStart);
     usages.push({
       fileOffset: attrStart,
       valueStart,
       raw: value,
-      tokens: tokenizeClassString(source, value, valueStart),
+      tokens,
+      dynamicTokens,
       fixable: true,
     });
   }
@@ -237,13 +465,14 @@ export function extractClassUsages(source: string): ClassUsage[] {
       if (value.length === 0) continue;
       const literalStart = openBrace + 1 + (sm.index ?? 0);
       const valueStart = literalStart + 1;
-      const tokens = tokenizeClassString(source, value, valueStart);
-      if (tokens.length === 0) continue;
+      const { tokens, dynamicTokens } = tokenizeClassString(source, value, valueStart);
+      if (tokens.length === 0 && dynamicTokens.length === 0) continue;
       usages.push({
         fileOffset: literalStart,
         valueStart,
         raw: value,
         tokens,
+        dynamicTokens,
         fixable: false,
       });
     }
@@ -256,27 +485,32 @@ function tokenizeClassString(
   source: string,
   value: string,
   valueStart: number,
-): Array<{ value: string; line: number; column: number }> {
+): {
+  tokens: Array<{ value: string; line: number; column: number }>;
+  dynamicTokens: Array<{ value: string; line: number; column: number }>;
+} {
   const tokens: Array<{ value: string; line: number; column: number }> = [];
+  const dynamicTokens: Array<{ value: string; line: number; column: number }> = [];
   let offset = 0;
   for (const piece of value.split(/(\s+)/)) {
     if (/^\s+$/.test(piece) || piece.length === 0) {
       offset += piece.length;
       continue;
     }
-    // Inside template literals the regex captures `${expr}` as part of
-    // the value; treat any token containing an interpolation marker as
-    // opaque so we don't try to lint dynamic content.
+    const abs = valueStart + offset;
+    const { line, column } = offsetToLineCol(source, abs);
+    // Tokens containing `${...}` are opaque to the normal pipeline (no merge,
+    // no unknown-reference check) but still surfaced separately so the
+    // dynamic-class rule can warn on computed recipe names.
     if (piece.includes("${")) {
+      dynamicTokens.push({ value: piece, line, column });
       offset += piece.length;
       continue;
     }
-    const abs = valueStart + offset;
-    const { line, column } = offsetToLineCol(source, abs);
     tokens.push({ value: piece, line, column });
     offset += piece.length;
   }
-  return tokens;
+  return { tokens, dynamicTokens };
 }
 
 function findMatchingBrace(source: string, openIdx: number): number {

@@ -16,6 +16,7 @@ import {
 import { verify } from "./commands/verify.js";
 import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.js";
 import { init, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
+import { bench, formatBenchTable } from "./commands/bench.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
 
@@ -278,6 +279,25 @@ export async function run(argv: string[] = process.argv): Promise<void> {
         if (!result.ok) process.exit(1);
       },
     );
+
+  cli
+    .command("bench [path]", "Benchmark token savings in a corpus or target directory")
+    .option("--corpus", "Run benchmark on the built-in corpus")
+    .option("--json", "Emit machine-readable JSON")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (pathArg: string | undefined, opts: { corpus?: boolean; json?: boolean; cwd?: string }) => {
+      const benchOptions: Parameters<typeof bench>[0] = { cwd: opts.cwd ?? process.cwd() };
+      if (opts.corpus) benchOptions.corpus = true;
+      if (opts.json) benchOptions.json = true;
+      if (pathArg !== undefined) benchOptions.path = pathArg;
+      const result = await bench(benchOptions);
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      } else {
+        const text = formatBenchTable(result);
+        process.stdout.write(text + "\n");
+      }
+    });
 
   cli.help();
   cli.version("0.0.0");

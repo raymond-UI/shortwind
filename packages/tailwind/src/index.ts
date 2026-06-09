@@ -8,10 +8,12 @@ import {
   type Recipe,
   type Registry,
 } from "@shortwind/core";
+import { transformJsxContent } from "./jsx-transform.js";
 
 export type TransformOptions = {
   mode?: ExpandMode;
   mergeConflicts?: boolean;
+  callExpanders?: readonly string[];
 };
 
 export type TailwindMajor = 3 | 4;
@@ -28,9 +30,18 @@ export function transformContent(
   registry: Registry,
   options: TransformOptions = {},
 ): string {
+  const mode = options.mode ?? "jsx";
+  const mergeConflicts = options.mergeConflicts ?? true;
+  if (mode === "jsx") {
+    return transformJsxContent(content, registry, {
+      mergeConflicts,
+      callExpanders: options.callExpanders ?? ["cva", "tv"],
+    });
+  }
   return expand(content, registry, {
-    mode: options.mode ?? "jsx",
-    mergeConflicts: options.mergeConflicts ?? true,
+    mode,
+    mergeConflicts,
+    ...(options.callExpanders ? { callExpanders: options.callExpanders } : {}),
   });
 }
 
