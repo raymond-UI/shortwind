@@ -1,6 +1,6 @@
 {
   "name": "shortwind",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.0",
   "description": "Shortwind CLI — init, add, remove, upgrade, dev, build, lint, ls, preset.",
   "type": "module",
   "bin": {
@@ -17,7 +17,8 @@
     "gen:bench": "tsx scripts/generate-bench-recipes.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@clack/prompts": "^1.4.0",
@@ -33,5 +34,8 @@
   "devDependencies": {
     "@types/node": "^25.7.0",
     "tsdown": "^0.22.0"
+  },
+  "publishConfig": {
+    "tag": "beta"
   }
 }

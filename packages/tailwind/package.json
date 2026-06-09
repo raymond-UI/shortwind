@@ -1,15 +1,18 @@
 {
   "name": "@shortwind/tailwind",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.0",
   "description": "Tailwind integration for Shortwind. Detects v3 vs v4 from package.json and registers via the correct plugin API.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
     "tailwindcss": ">=3.0.0"
@@ -20,5 +23,9 @@
   },
   "devDependencies": {
     "@types/node": "^25.7.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
   }
 }

@@ -1,15 +1,18 @@
 {
   "name": "@shortwind/vite",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.0",
   "description": "Vite plugin for Shortwind. Transforms source files before Tailwind's content scan.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
     "vite": ">=7.0.0"
@@ -20,5 +23,9 @@
   },
   "devDependencies": {
     "@types/node": "^25.7.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
   }
 }
