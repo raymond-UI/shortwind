@@ -74,24 +74,35 @@ async function main(): Promise<void> {
 
   const grader = createGrader();
   const results: TaskResult[] = [];
+  let failures = 0;
   try {
     for (const model of models) {
       for (const task of tasks) {
         for (const condition of CONDITIONS) {
           const messages = buildMessages(catalog, condition, task);
-          const gen = await client.generate({ model, messages, temperature: 0 });
-          const score = await grader.grade(gen.text);
-          results.push({ model, condition, taskId: task.id, score, output: gen.text });
-          process.stderr.write(
-            `  ${model}  ${task.id.padEnd(18)} ${condition.padEnd(8)} ` +
-              `unknown=${score.unknown} conflicts=${score.conflicts} density=${(score.recipeDensity * 100).toFixed(0)}%\n`,
-          );
+          // One model/task/condition failing (a retired id, a rate limit, a
+          // provider hiccup) shouldn't sink the whole run — record it and move
+          // on so the rest of the matrix still produces a report.
+          try {
+            const gen = await client.generate({ model, messages, temperature: 0 });
+            const score = await grader.grade(gen.text);
+            results.push({ model, condition, taskId: task.id, score, output: gen.text });
+            process.stderr.write(
+              `  ${model}  ${task.id.padEnd(18)} ${condition.padEnd(8)} ` +
+                `unknown=${score.unknown} conflicts=${score.conflicts} density=${(score.recipeDensity * 100).toFixed(0)}%\n`,
+            );
+          } catch (err) {
+            failures++;
+            const msg = err instanceof Error ? err.message : String(err);
+            process.stderr.write(`  ${model}  ${task.id.padEnd(18)} ${condition.padEnd(8)} FAILED: ${msg}\n`);
+          }
         }
       }
     }
   } finally {
     grader.dispose();
   }
+  if (failures > 0) process.stderr.write(`\n${failures} generation(s) failed and were skipped.\n`);
 
   const reports = buildReport(results);
   if (args.json) {
