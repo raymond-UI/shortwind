@@ -5,3 +5,8 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+# Force the patched devalue: astro pulls 5.8.0, which carries a high-severity
+# DoS advisory (GHSA-77vg-94rm-hx3p). 5.8.1 is the patch and is a semver-
+# compatible bump. Drop this once astro ships a release that pins >=5.8.1.
+overrides:
+  devalue: ">=5.8.1"
