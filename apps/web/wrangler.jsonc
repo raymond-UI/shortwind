@@ -1,8 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shortwind",
+  "account_id": "31d65fe8d35768972de29c4199b648ee",
   "compatibility_date": "2025-04-03",
-  "workers_dev": false,
+  "workers_dev": true,
   "preview_urls": false,
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
@@ -10,14 +11,19 @@
     "directory": "dist/client",
     "binding": "ASSETS"
   },
+  // Custom domain at top level: the TanStack Start build flattens its
+  // redirected wrangler config to the top level and drops the `env` block, so
+  // a route nested under env.production never reaches wrangler. Declaring it
+  // here makes wrangler provision the proxied DNS record + cert for the apex.
+  "routes": [{ "pattern": "shortwind.dev", "custom_domain": true }],
   "vars": {
     "VITE_APP_NAME": "Shortwind",
-    "VITE_SITE_URL": "http://localhost:5173"
+    "VITE_SITE_URL": "https://shortwind.dev"
   },
   "env": {
     "production": {
       "workers_dev": false,
-      // "routes": [{ "pattern": "shortwind.dev/*", "zone_name": "shortwind.dev" }],
+      "routes": [{ "pattern": "shortwind.dev", "custom_domain": true }],
       "vars": {
         "VITE_APP_NAME": "Shortwind",
         "VITE_SITE_URL": "https://shortwind.dev"
