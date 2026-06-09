@@ -1,7 +1,7 @@
 import { copyFileSync, mkdtempSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { lint, extractClassUsages, type Rule } from "shortwind";
+import { lint, extractClassUsages, type Rule } from "@shortwind/cli";
 import { RECIPES_DIR } from "./registry.js";
 
 // What a single generation is scored on. The headline metric is unknownRate —

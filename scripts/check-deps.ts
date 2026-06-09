@@ -19,7 +19,7 @@ const LAYERS: Record<string, number> = {
   "@shortwind/next": 2,
   "@shortwind/runtime": 2,
   "@shortwind/astro": 3,
-  shortwind: 3,
+  "@shortwind/cli": 3,
   web: 4,
   "@shortwind/eval": 4,
 };

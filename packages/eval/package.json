@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@shortwind/core": "workspace:*",
-    "shortwind": "workspace:*"
+    "@shortwind/cli": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.7.0",

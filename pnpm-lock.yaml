@@ -176,12 +176,12 @@ importers:
 
   packages/eval:
     dependencies:
+      '@shortwind/cli':
+        specifier: workspace:*
+        version: link:../cli
       '@shortwind/core':
         specifier: workspace:*
         version: link:../core
-      shortwind:
-        specifier: workspace:*
-        version: link:../cli
     devDependencies:
       '@types/node':
         specifier: ^25.7.0
