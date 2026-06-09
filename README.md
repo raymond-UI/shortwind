@@ -180,19 +180,31 @@ The starter set, shipped as `@shortwind/default`. ~19 families, ~150–200 recip
 
 ## CLI
 
+The CLI ships as **`@shortwind/cli`** and provides the `shortwind` command. While in beta it's published on the `beta` tag, so install with `@beta`:
+
 ```bash
-npx shortwind init                                    # interactive: pick a preset, wire plugin, write SKILL.md
-npx shortwind init --preset=app                       # non-interactive (starter | app | content | all | none)
-npx shortwind add card button badge layout
-npx shortwind add card --as marketing-card            # rename on install to avoid collision
-npx shortwind remove table                            # delete a family + its skills section
-npx shortwind preset app                              # switch presets (additive — never auto-removes)
-npx shortwind upgrade                                 # interactive: walk families, show changelogs, prompt on touched files
-npx shortwind upgrade --check                         # CI-friendly: exits non-zero if drift exists
-npx shortwind dev                                     # watch ./recipes/, regenerate SKILL.md on save
-npx shortwind build                                   # one-shot regenerate SKILL.md
-npx shortwind ls                                      # list installed families + recipes
-npx shortwind lint                                    # validate recipe usage, naming, cycles, conflicts
+# one-off, no install:
+npx @shortwind/cli@beta init
+
+# or install it (the `shortwind` command becomes available):
+npm i -D @shortwind/cli@beta      # pnpm add -D / yarn add -D
+```
+
+Once installed, run the `shortwind` command directly (or prefix any example below with `npx @shortwind/cli@beta` to run without installing):
+
+```bash
+shortwind init                                    # interactive: pick a preset, wire plugin, write SKILL.md
+shortwind init --preset=app                       # non-interactive (starter | app | content | all | none)
+shortwind add card button badge layout
+shortwind add card --as marketing-card            # rename on install to avoid collision
+shortwind remove table                            # delete a family + its skills section
+shortwind preset app                              # switch presets (additive — never auto-removes)
+shortwind upgrade                                 # interactive: walk families, show changelogs, prompt on touched files
+shortwind upgrade --check                         # CI-friendly: exits non-zero if drift exists
+shortwind dev                                     # watch ./recipes/, regenerate SKILL.md on save
+shortwind build                                   # one-shot regenerate SKILL.md
+shortwind ls                                      # list installed families + recipes
+shortwind lint                                    # validate recipe usage, naming, cycles, conflicts
 ```
 
 ### Init presets
@@ -283,7 +295,7 @@ Frontmatter follows the skills.sh spec — `name` (lowercase, hyphens) and `desc
 
 ### Three layered surfaces ensure freshness
 
-1. **`npx shortwind dev`** — chokidar watcher. Solo dev default. Same UX as `tailwindcss --watch`.
+1. **`shortwind dev`** — chokidar watcher. Solo dev default. Same UX as `tailwindcss --watch`.
 2. **Bundler plugins** — `shortwind/vite`, `shortwind/next`, `shortwind/astro`. Hooks the dev server's file watcher; no extra process.
 3. **Pre-commit hook** — installed by `init`. Belt and suspenders, guarantees committed `SKILL.md` is fresh even if the other two are bypassed.
 
@@ -404,7 +416,7 @@ Implementation details (PostCSS, Lightning CSS, etc.) are internal — never sur
 | Surface | For | Install cost |
 |---|---|---|
 | **CDN script** (`shortwind.dev/expand.js`) | One-off HTML artifacts shared via S3/gist | Drop in `<script>` |
-| **CLI + `recipes/` folder** | Any project with a repo | `npx shortwind init` |
+| **CLI + `recipes/` folder** | Any project with a repo | `shortwind init` |
 | **Vite/Next/Astro plugin** | Production apps | Add to config |
 | **Inline expander** | Fully self-contained HTML artifacts | LLM emits a 20-line `<script>` in the output |
 
@@ -420,7 +432,7 @@ Two-layer hover on the website:
 - Hover `@card-elevated` → tooltip shows description + expansion (registry lookup).
 - Hover `rounded-xl` inside the expansion → tooltip shows the underlying CSS (static class-to-CSS map, ~200KB JSON generated once at build time with `@tailwindcss/cli`).
 
-View-source on shared shorthand HTML reveals the recipes used. Receivers `npx shortwind add` the missing families. View-source is the funnel.
+View-source on shared shorthand HTML reveals the recipes used. Receivers `shortwind add` the missing families. View-source is the funnel.
 
 ### Hosting — TanStack Start on Cloudflare Workers
 
