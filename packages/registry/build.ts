@@ -109,8 +109,14 @@ function writeFamily(
   const header = `/* shortwind: ${family}@${version} sha:${sha} */`;
   const out = `${header}\n${body}`;
   const ensureNewline = out.endsWith("\n") ? out : `${out}\n`;
+  // Flat + versioned copies feed the catalog site and direct-CDN installs.
   writeFileSync(path.join(destDir, `${family}.css`), ensureNewline);
   writeFileSync(path.join(destDir, `${family}@${version}.css`), ensureNewline);
+  // `recipes/<family>.css` is the path the CLI's registry source fetches
+  // (mirrors the local file layout). Without it `shortwind add/init` 404s.
+  const recipesDir = path.join(destDir, "recipes");
+  mkdirSync(recipesDir, { recursive: true });
+  writeFileSync(path.join(recipesDir, `${family}.css`), ensureNewline);
 }
 
 function defaultChangelog(family: string, version: string): string {
@@ -234,6 +240,14 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
   const manifest: Manifest = { families };
   const manifestPath = path.join(registryOut, "manifest.json");
   writeFileSync(manifestPath, stableStringify(manifest));
+
+  // `index.json` is the family list the CLI fetches via listAllFamilies().
+  // manifest.json carries the same names plus expansions for the catalog UI;
+  // index.json is the slim contract the `--registry <url>` HTTP source reads.
+  writeFileSync(
+    path.join(registryOut, "index.json"),
+    stableStringify({ families: families.map((f) => f.name) }),
+  );
 
   if (!existsSync(opts.presetsFile)) {
     throw new Error(
