@@ -77,6 +77,14 @@ of-`@row` failure that motivated the guidance does not occur with 2026-era
 models. Guidance can only help where the model is weak enough to fail, and those
 models (e.g. llama-3.1-8b) are too weak to be usable regardless.
 
+## Third run: most-popular OpenRouter leaderboard models
+
+Spot-checked the top of the OpenRouter usage leaderboard (DeepSeek V4 Flash,
+DeepSeek V3.2, Kimi K2.6) — all 0% unknown-recipe rate in both conditions, 0
+conflicts. Across ~10 distinct models now (mid-tier, coding, frontier, popular),
+the result is uniform: no usable model invents recipe names, so `@guide` has no
+selection-correctness effect to deliver. Further models only re-confirm 0%.
+
 ## Recommendation
 
 Do not add a "guidance improves selection" claim to the README — the data
