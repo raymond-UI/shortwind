@@ -14,6 +14,7 @@ type CliArgs = {
   limit: number | null;
   out: string | null;
   json: boolean;
+  maxTokens: number;
 };
 
 function parseArgs(argv: string[]): CliArgs {
@@ -24,6 +25,10 @@ function parseArgs(argv: string[]): CliArgs {
     limit: null,
     out: null,
     json: false,
+    // Outputs are small JSX snippets. Capping max_tokens keeps cost down and,
+    // crucially, stops reasoning models from reserving their full context (which
+    // a credit-limited key can't afford — OpenRouter 402s the whole request).
+    maxTokens: 8192,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -33,6 +38,7 @@ function parseArgs(argv: string[]): CliArgs {
     else if (a === "--tasks") args.tasks = (argv[++i] ?? "").split(",").filter(Boolean);
     else if (a === "--limit") args.limit = Number(argv[++i]);
     else if (a === "--out") args.out = argv[++i] ?? null;
+    else if (a === "--max-tokens") args.maxTokens = Number(argv[++i]);
   }
   return args;
 }
@@ -84,7 +90,7 @@ async function main(): Promise<void> {
           // provider hiccup) shouldn't sink the whole run — record it and move
           // on so the rest of the matrix still produces a report.
           try {
-            const gen = await client.generate({ model, messages, temperature: 0 });
+            const gen = await client.generate({ model, messages, temperature: 0, maxTokens: args.maxTokens });
             const score = await grader.grade(gen.text);
             results.push({ model, condition, taskId: task.id, score, output: gen.text });
             process.stderr.write(
