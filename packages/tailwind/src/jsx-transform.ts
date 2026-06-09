@@ -76,7 +76,13 @@ export function transformJsxContent(
       return;
     }
     if (node.type === "TemplateLiteral") {
+      // Static text (quasis) expands directly; the interpolated `${...}`
+      // expressions can themselves hold class strings (e.g. a ternary
+      // `${on ? '@btn-primary' : '@btn-ghost'}`), so recurse into them too —
+      // otherwise recipes inside interpolations are silently left unexpanded.
       pushTemplateReplacement(node);
+      const expressions = node["expressions"] as Node[] | undefined;
+      if (expressions) for (const expr of expressions) collectClassStrings(expr);
       return;
     }
     walkChildren(node, collectClassStrings);

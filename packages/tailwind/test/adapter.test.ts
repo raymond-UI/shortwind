@@ -161,6 +161,21 @@ describe("transformContent", () => {
     expect(after).not.toContain("@stack-sm");
   });
 
+  it("expands recipe string literals inside template-literal interpolations", () => {
+    const before = [
+      `export const View = ({ on }: { on: boolean }) => (`,
+      "  <button className={`@btn-base ${on ? '@btn-primary' : '@btn-ghost'}`}>Go</button>",
+      `);`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    // both the quasi recipe and the recipes inside the ${...} ternary expand
+    expect(after).not.toMatch(/'@btn-primary'/);
+    expect(after).not.toMatch(/'@btn-ghost'/);
+    expect(after).not.toContain("@btn-base");
+    expect(after).toContain("inline-flex"); // a real expanded utility
+  });
+
   it("rewrites configured class helper calls but leaves ordinary calls alone", () => {
     const before = [
       `const styles = cva("@btn-primary", { variants: { tone: { ghost: "@btn-ghost" } } });`,
