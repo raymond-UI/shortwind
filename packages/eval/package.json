@@ -1,0 +1,21 @@
+{
+  "name": "@shortwind/eval",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Selection-quality eval harness. Measures whether @guide guidance makes an LLM pick the right recipe more often, via OpenRouter.",
+  "type": "module",
+  "scripts": {
+    "eval": "tsx src/run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shortwind/core": "workspace:*",
+    "shortwind": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "tsx": "^4.21.0",
+    "vitest": "^4.1.6"
+  }
+}

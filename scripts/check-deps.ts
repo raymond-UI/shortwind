@@ -21,6 +21,7 @@ const LAYERS: Record<string, number> = {
   "@shortwind/astro": 3,
   shortwind: 3,
   web: 4,
+  "@shortwind/eval": 4,
 };
 
 function readPkg(dir: string): Pkg | null {

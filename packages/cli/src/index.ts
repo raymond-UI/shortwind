@@ -30,6 +30,8 @@ export { verify } from "./commands/verify.js";
 export type { VerifyOptions, VerifyResult, VerifyIssue } from "./commands/verify.js";
 export { bench, formatBenchTable } from "./commands/bench.js";
 export type { BenchOptions, BenchResult, FileBenchResult } from "./commands/bench.js";
+export { lint, formatFindingsText, extractClassUsages, ALL_RULES } from "./commands/lint.js";
+export type { LintOptions, LintResult, Finding, Rule, Severity } from "./commands/lint.js";
 export { readLockfile, writeLockfile } from "./lockfile.js";
 export type { Lockfile, LockEntry } from "./lockfile.js";
 export {
