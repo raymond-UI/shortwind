@@ -38,6 +38,24 @@ Per-file whole-file savings range from 46.6% (layout files that mix recipes with
 
 ---
 
+## Install
+
+One command sets everything up:
+
+```bash
+npx @shortwind/cli@beta init      # beta: published on the `beta` tag
+```
+
+`init` detects your bundler and does the whole wiring:
+
+- Adds **exactly one** adapter — `@shortwind/vite`, `@shortwind/next`, or `@shortwind/astro` — plus the Tailwind integration, as devDependencies. (`@shortwind/core` comes in transitively; **you never install it directly**.)
+- Copies the recipe catalog into `./recipes/` — yours to edit, shadcn-style.
+- Writes `skills/shortwind/SKILL.md`, wires the plugin into your config, and installs a pre-commit hook.
+
+**You do not install all the `@shortwind/*` packages** — a project needs one adapter, and `init` picks it. The standalone CDN path (`shortwind.dev/expand.js`) needs no install and no `init` at all — just a `<script>` tag.
+
+---
+
 ## How it works
 
 1. **LLM writes shorthand.** Recipes prefixed with `@` inside `class="..."`.
@@ -400,14 +418,15 @@ Shadcn-style: **recipes are source code in your repo, not a dependency.** The CL
 
 ### Package layout
 
-| Package | Role |
-|---|---|
-| **`@shortwind/core`** | Parser, resolver, `expand()`. Zero Tailwind dependency. Used by every other package and by the CDN runtime. |
-| **`@shortwind/tailwind`** | Tailwind integration. Detects v3 vs v4 from `package.json` and registers via the correct plugin API. Single install regardless of Tailwind version. |
-| **`@shortwind/vite`** | Vite plugin. Transforms source files before Tailwind's content scan. |
-| **`@shortwind/next`** | Next.js plugin. Webpack + Turbopack. |
-| **`@shortwind/astro`** | Astro integration. |
-| **`shortwind` (CLI)** | `init`, `add`, `remove`, `upgrade`, `dev`, `build`, `lint`, `ls`, `preset`. |
+`init` installs the right subset for you — this table is just what each package *is*. A typical project ends up with **one adapter + the Tailwind integration** (and `@shortwind/cli` for tooling); the rest are either transitive or for other entry points.
+
+| Package | Role | You install it? |
+|---|---|---|
+| **`@shortwind/cli`** | `init`, `add`, `remove`, `upgrade`, `dev`, `build`, `lint`, `ls`, `preset`. Provides the `shortwind` command. | Tooling (or just `npx`) |
+| **`@shortwind/vite`** / **`@shortwind/next`** / **`@shortwind/astro`** | Bundler plugin. Transforms source files before Tailwind's content scan. | **Pick one** (init adds it) |
+| **`@shortwind/tailwind`** | Tailwind integration. Detects v3 vs v4 and registers via the correct plugin API. | init adds it |
+| **`@shortwind/core`** | Parser, resolver, `expand()`. Zero Tailwind dependency. The shared engine. | No — transitive |
+| **`@shortwind/runtime`** | Browser/CDN expander (~6KB, catalog inline). For the no-build path. | Only the CDN path |
 
 Implementation details (PostCSS, Lightning CSS, etc.) are internal — never surfaced in package names, docs, or `init` output.
 
