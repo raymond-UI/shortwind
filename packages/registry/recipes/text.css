@@ -1,5 +1,13 @@
 /* shortwind: text@0.0.1 sha:000000 */
 
+/* @guide
+   Headings are sized by weight, not HTML level: @heading-xl/lg/md/sm — there
+   is no @h1..@h6. Body copy: @body (default), @lead (intro paragraphs), @muted
+   (secondary), @caption (fine print). Use @label for form labels and @link for
+   inline links. Don't append a -text suffix: it's @body not @body-text, @muted
+   not @muted-text, @link not @link-text.
+*/
+
 /* Top-level page heading. */
 @recipe heading-xl {
   text-4xl font-bold tracking-tight text-foreground

@@ -6,11 +6,14 @@
       {
         "name": "card",
         "description": null,
-        "tokens": ["rounded-lg"],
+        "tokens": [
+          "rounded-lg"
+        ],
         "references": [],
         "sourceFile": "input.css",
         "sourceLine": 1
       }
-    ]
+    ],
+    "guidance": null
   }
 }

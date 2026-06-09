@@ -129,6 +129,30 @@ describe("renderSkillMarkdown", () => {
     }
   });
 
+  it("renders family guidance as a blockquote and a selection hint", () => {
+    const base = buildSampleRegistry();
+    const registry: Registry = {
+      ...base,
+      guidance: { card: "Use @card-elevated for emphasis; @card otherwise." },
+    };
+    const md = renderSkillMarkdown(registry, { order: ["card", "button"] });
+    // top-level selection hint appears because at least one family has guidance
+    expect(md).toContain("Read it before picking");
+    // the guidance renders as a blockquote directly under the family heading
+    const cardIdx = md.indexOf("### Card recipes");
+    const quoteIdx = md.indexOf("> Use @card-elevated for emphasis");
+    const recipeIdx = md.indexOf("@card ");
+    expect(cardIdx).toBeGreaterThan(-1);
+    expect(quoteIdx).toBeGreaterThan(cardIdx);
+    expect(recipeIdx).toBeGreaterThan(quoteIdx);
+  });
+
+  it("omits the selection hint when no family has guidance", () => {
+    const md = renderSkillMarkdown(buildSampleRegistry());
+    expect(md).not.toContain("Read it before picking");
+    expect(md).not.toContain("\n> ");
+  });
+
   it("renders a minimal but valid SKILL.md for an empty registry", () => {
     const md = renderSkillMarkdown({ families: {}, flattened: {} });
     expect(md.startsWith("---\n")).toBe(true);

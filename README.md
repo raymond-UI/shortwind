@@ -31,10 +31,10 @@ Run on the bundled corpus (`shortwind bench --corpus`) — five representative c
 
 | Metric | Shortwind | Expanded | Saved |
 | --- | --: | --: | --: |
-| Class-string tokens | 154 | 558 | **72.4%** |
-| Whole-file LLM tokens | 1,352 | 2,670 | **49.4%** |
+| Class-string tokens | 125 | 658 | **81.0%** |
+| Whole-file LLM tokens | 1,255 | 3,001 | **58.2%** |
 
-Per-file whole-file savings range from 18.8% (layout-heavy files still using raw utilities) to 77.3% (recipe-dense component files). The benchmark runs in CI, so these numbers stay honest as the catalog changes. Reproduce locally with `shortwind bench --corpus`, or measure your own project with `shortwind bench`.
+Per-file whole-file savings range from 46.6% (layout files that mix recipes with raw utilities) to 77.9% (recipe-dense component files). The benchmark runs in CI, so these numbers stay honest as the catalog changes. Reproduce locally with `shortwind bench --corpus`, or measure your own project with `shortwind bench`.
 
 ---
 

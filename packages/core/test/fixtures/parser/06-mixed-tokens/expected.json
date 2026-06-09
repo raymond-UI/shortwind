@@ -6,11 +6,20 @@
       {
         "name": "card-elevated",
         "description": null,
-        "tokens": ["@card", "rounded-xl", "p-6", "hover:shadow-md", "transition-shadow"],
-        "references": ["card"],
+        "tokens": [
+          "@card",
+          "rounded-xl",
+          "p-6",
+          "hover:shadow-md",
+          "transition-shadow"
+        ],
+        "references": [
+          "card"
+        ],
         "sourceFile": "input.css",
         "sourceLine": 1
       }
-    ]
+    ],
+    "guidance": null
   }
 }

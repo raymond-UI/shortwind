@@ -6,11 +6,17 @@
       {
         "name": "card",
         "description": null,
-        "tokens": ["rounded-lg", "hover:shadow-md", "dark:bg-zinc-900", "md:grid-cols-2"],
+        "tokens": [
+          "rounded-lg",
+          "hover:shadow-md",
+          "dark:bg-zinc-900",
+          "md:grid-cols-2"
+        ],
         "references": [],
         "sourceFile": "input.css",
         "sourceLine": 1
       }
-    ]
+    ],
+    "guidance": null
   }
 }

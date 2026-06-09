@@ -1,5 +1,11 @@
 /* shortwind: feedback@0.0.1 sha:000000 */
 
+/* @guide
+   Inline messages use @alert (neutral) or a tone variant @alert-success/
+   warning/danger/info — one tone each. @callout is a left-accent inline note,
+   @toast is a floating notification, @banner spans the full viewport width.
+*/
+
 /* Default informational alert. */
 @recipe alert {
   flex items-start gap-3 rounded-md border border-border bg-card p-4 text-sm text-card-foreground

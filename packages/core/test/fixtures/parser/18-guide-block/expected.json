@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "value": {
+    "header": {
+      "family": "layout",
+      "version": "0.0.1",
+      "sha": "000000",
+      "sourceLine": 1
+    },
+    "recipes": [
+      {
+        "name": "stack-sm",
+        "description": "Vertical stack with small gap.",
+        "tokens": [
+          "flex",
+          "flex-col",
+          "gap-2"
+        ],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 9
+      },
+      {
+        "name": "row",
+        "description": null,
+        "tokens": [
+          "flex",
+          "flex-row",
+          "items-center",
+          "gap-2"
+        ],
+        "references": [],
+        "sourceFile": "input.css",
+        "sourceLine": 13
+      }
+    ],
+    "guidance": "Structural primitives. @stack-* is vertical (flex-col); @row* is horizontal. Don't confuse @row with @stack-sm."
+  }
+}

@@ -65,4 +65,50 @@ describe("buildRegistry (registry shape)", () => {
       value: { flattened: {}, families: {} },
     });
   });
+
+  it("forwards guidance only for resolved, non-empty families", () => {
+    const result = buildRegistry(
+      [
+        {
+          name: "row",
+          description: null,
+          tokens: ["flex"],
+          references: [],
+          sourceFile: "layout.css",
+          sourceLine: 1,
+        },
+      ],
+      {
+        guidance: {
+          layout: "Use @row for horizontal.",
+          // family with no recipes — must be dropped
+          ghost: "should not appear",
+          // empty/whitespace — must be dropped
+          card: "   ",
+        },
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.guidance).toEqual({ layout: "Use @row for horizontal." });
+  });
+
+  it("omits the guidance key entirely when none applies", () => {
+    const result = buildRegistry(
+      [
+        {
+          name: "row",
+          description: null,
+          tokens: ["flex"],
+          references: [],
+          sourceFile: "layout.css",
+          sourceLine: 1,
+        },
+      ],
+      { guidance: { ghost: "no matching family" } },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect("guidance" in result.value).toBe(false);
+  });
 });

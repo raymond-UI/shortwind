@@ -79,6 +79,11 @@ The broad catalog is useful, but agents can suffer from too many near-neighbor c
 - Add selection guidance to `SKILL.md`, not only flattened expansions.
 - Use the catalog page to expose the long tail.
 
+Started:
+
+- Per-family selection guidance now ships in `SKILL.md` via `@guide` blocks (see §6), which is the core of "optimize for reliable selection" — the guidance names the right recipe and calls out the wrong-but-tempting one.
+- The benchmark corpus was the diagnostic: it referenced recipes that don't exist (`@flex-row`, `@h3`, `@form-group`, `@grid-cols-3`, `@sidebar-layout`) where the real names are `@row`, `@heading-md`, `@field`, `@grid-3`, etc. Those exact confusions are now taught in the `@guide` blocks and the corpus was corrected to real names. Added one genuinely-missing recipe (`@table-container`) rather than fictional aliases, keeping near-neighbor count down.
+
 ### 6. Improve Generated Skill Guidance
 
 The generated skill file should teach behavior as well as vocabulary.
@@ -87,10 +92,15 @@ The generated skill file should teach behavior as well as vocabulary.
 - Add usage notes for easy-to-confuse recipes.
 - Keep expansions visible, but consider compact examples for common combinations.
 
+Started:
+
+- `@guide` comment directive in recipe `.css` files (parsed by `@shortwind/core`, no new brace-grammar) carries family-level guidance into the generated `SKILL.md` as a per-family blockquote plus a top-level selection hint.
+- Guidance authored for the nine highest-traffic families (layout, text, form, button, card, badge, table, navigation, feedback), each calling out easy-to-confuse neighbours.
+- Expansions remain visible; guidance sits above the expansion table per family.
+
 ## Suggested Order
 
-1. Improve `SKILL.md` guidance format.
+1. Extend `@guide` coverage to the remaining families and add compact combination examples.
 2. Revisit MDX support on top of the existing `@babel/parser` JSX/TSX path.
-3. Use benchmark and catalog data to tune presets.
-4. Cross-platform watch behavior coverage (Linux/macOS/Windows).
-5. Publish measured corpus numbers in the README from the bench command output.
+3. Cross-platform watch behavior coverage (Linux/macOS/Windows).
+4. Consider per-recipe subsetting in presets if family-granularity proves too coarse for `starter`/`app`.

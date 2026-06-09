@@ -6,11 +6,16 @@
       {
         "name": "card",
         "description": null,
-        "tokens": ["p-[13px]", "bg-[#abc]", "grid-cols-[1fr_2fr]"],
+        "tokens": [
+          "p-[13px]",
+          "bg-[#abc]",
+          "grid-cols-[1fr_2fr]"
+        ],
         "references": [],
         "sourceFile": "input.css",
         "sourceLine": 1
       }
-    ]
+    ],
+    "guidance": null
   }
 }

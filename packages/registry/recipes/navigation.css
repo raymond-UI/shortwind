@@ -1,5 +1,12 @@
 /* shortwind: navigation@0.0.1 sha:000000 */
 
+/* @guide
+   @nav is the container; links are @nav-link with @nav-link-active for the
+   current page. Tabs mirror that pair: @tab and @tab-active. Use @breadcrumb
+   for trail navigation. Active and inactive are separate recipes — swap the
+   whole class rather than combining them.
+*/
+
 /* Top-level nav container. */
 @recipe nav {
   flex items-center gap-1

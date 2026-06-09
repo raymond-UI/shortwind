@@ -1,5 +1,12 @@
 /* shortwind: card@0.0.1 sha:000000 */
 
+/* @guide
+   Pick exactly one container: @card (default), @card-elevated (raised shadow),
+   @card-flat (no border), or @card-interactive (clickable hover/focus) — don't
+   stack two container variants on one element. Lay out the inside with
+   @card-header / @card-body / @card-footer.
+*/
+
 /* Default content card with border, padding, and surface color. */
 @recipe card {
   rounded-lg border border-border bg-card text-card-foreground p-4

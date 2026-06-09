@@ -1,5 +1,13 @@
 /* shortwind: button@0.0.1 sha:000000 */
 
+/* @guide
+   Name order is @btn-<intent>[-<size>]: intent first (primary/secondary/ghost/
+   danger/outline), size second (sm/lg; omit for default). One intent per
+   button — never combine @btn-primary with @btn-danger. @btn-ghost is text-only,
+   @btn-outline is bordered with no fill, @btn-icon is a square icon button.
+   @btn-base is the shared shell; don't use it on its own.
+*/
+
 /* Shared button base — sizing, focus ring, disabled state. */
 @recipe btn-base {
   inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50

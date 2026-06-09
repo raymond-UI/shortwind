@@ -18,6 +18,7 @@ export function parseRecipeFile(
   const recipes: Recipe[] = [];
   let header: RecipeFileHeader | null = null;
   let pendingDescription: string | null = null;
+  const guidanceBlocks: string[] = [];
 
   const end = source.length;
   let pos = 0;
@@ -74,6 +75,16 @@ export function parseRecipeFile(
     const body = source.slice(bodyStart, pos);
     advance(2);
     return { body: body.trim(), startLine, startCol };
+  };
+
+  // A `@guide` comment marks family-level selection guidance. The marker must
+  // open the comment body; everything after it is normalized to a single
+  // whitespace-collapsed paragraph so multi-line, indented source renders as a
+  // clean blurb in SKILL.md. Returns null for ordinary comments.
+  const tryParseGuide = (body: string): string | null => {
+    const m = body.match(/^@guide\b[ \t]*([\s\S]*)$/);
+    if (!m) return null;
+    return (m[1] ?? "").replace(/\s+/g, " ").trim();
   };
 
   const tryParseHeader = (body: string, startLine: number): RecipeFileHeader | null => {
@@ -238,6 +249,13 @@ export function parseRecipeFile(
           continue;
         }
       }
+      const guide = tryParseGuide(c.body);
+      if (guide !== null) {
+        // `@guide` blocks are family-level metadata, not a recipe description —
+        // don't let them attach to the next recipe.
+        if (guide.length > 0) guidanceBlocks.push(guide);
+        continue;
+      }
       pendingDescription = c.body;
       continue;
     }
@@ -272,5 +290,6 @@ export function parseRecipeFile(
   }
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: { header, recipes } };
+  const guidance = guidanceBlocks.length > 0 ? guidanceBlocks.join(" ") : null;
+  return { ok: true, value: { header, recipes, guidance } };
 }

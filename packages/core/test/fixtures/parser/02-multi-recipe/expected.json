@@ -6,7 +6,9 @@
       {
         "name": "card",
         "description": null,
-        "tokens": ["rounded-lg"],
+        "tokens": [
+          "rounded-lg"
+        ],
         "references": [],
         "sourceFile": "input.css",
         "sourceLine": 1
@@ -14,11 +16,15 @@
       {
         "name": "btn",
         "description": null,
-        "tokens": ["px-4", "py-2"],
+        "tokens": [
+          "px-4",
+          "py-2"
+        ],
         "references": [],
         "sourceFile": "input.css",
         "sourceLine": 5
       }
-    ]
+    ],
+    "guidance": null
   }
 }

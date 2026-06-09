@@ -1,7 +1,15 @@
 import type { Diagnostic, Recipe, Registry, Result } from "./types.js";
 
+export type BuildRegistryOptions = {
+  // Family-level guidance keyed by family name. Callers that parsed `@guide`
+  // blocks pass them here; the resolver only forwards non-empty maps onto the
+  // Registry so SKILL.md can render selection guidance per family.
+  guidance?: Record<string, string>;
+};
+
 export function buildRegistry(
   recipes: readonly Recipe[],
+  options: BuildRegistryOptions = {},
 ): Result<Registry, Diagnostic[]> {
   const errors: Diagnostic[] = [];
 
@@ -121,7 +129,17 @@ export function buildRegistry(
   }
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: { flattened, families } };
+
+  // Only surface guidance for families that actually resolved, and drop empty
+  // strings so consumers can treat presence as "has guidance".
+  const guidance: Record<string, string> = {};
+  for (const [fam, text] of Object.entries(options.guidance ?? {})) {
+    if (families[fam] && text.trim().length > 0) guidance[fam] = text;
+  }
+
+  const registry: Registry = { flattened, families };
+  if (Object.keys(guidance).length > 0) registry.guidance = guidance;
+  return { ok: true, value: registry };
 }
 
 function familyOf(sourceFile: string): string {

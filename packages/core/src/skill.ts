@@ -59,10 +59,24 @@ export function renderSkillMarkdown(registry: Registry, options: SkillRenderOpti
 
   parts.push("## Available recipes");
   parts.push("");
+  // Only emit the selection hint when at least one family ships guidance —
+  // otherwise it points at a convention the catalog doesn't use.
+  const hasGuidance = families.some((f) => registry.guidance?.[f]);
+  if (hasGuidance) {
+    parts.push(
+      "Each family below opens with a one-line guide on when to reach for which recipe. Read it before picking — it calls out easy-to-confuse neighbours.",
+    );
+    parts.push("");
+  }
   for (const family of families) {
     const recipes = registry.families[family] ?? [];
     parts.push(`### ${capitalize(family)} recipes`);
     parts.push("");
+    const guidance = registry.guidance?.[family];
+    if (guidance) {
+      parts.push(`> ${guidance}`);
+      parts.push("");
+    }
     parts.push(...renderFamily(recipes, registry, verbose, wrapAt));
     parts.push("");
   }

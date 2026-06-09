@@ -1157,6 +1157,13 @@ exports[`catalog > flattened expansion is a stable snapshot 1`] = `
     "text-sm",
     "text-foreground",
   ],
+  "table-container": [
+    "w-full",
+    "overflow-x-auto",
+    "rounded-md",
+    "border",
+    "border-border",
+  ],
   "table-zebra": [
     "w-full",
     "border-collapse",

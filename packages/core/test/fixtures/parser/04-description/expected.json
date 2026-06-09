@@ -6,7 +6,9 @@
       {
         "name": "card",
         "description": "Default content card.",
-        "tokens": ["rounded-lg"],
+        "tokens": [
+          "rounded-lg"
+        ],
         "references": [],
         "sourceFile": "input.css",
         "sourceLine": 2
@@ -14,11 +16,14 @@
       {
         "name": "btn",
         "description": null,
-        "tokens": ["px-4"],
+        "tokens": [
+          "px-4"
+        ],
         "references": [],
         "sourceFile": "input.css",
         "sourceLine": 6
       }
-    ]
+    ],
+    "guidance": null
   }
 }

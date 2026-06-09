@@ -1,5 +1,12 @@
 /* shortwind: badge@0.0.1 sha:000000 */
 
+/* @guide
+   @badge is the neutral default; tone variants @badge-success/warning/danger/
+   info carry their own color; @badge-outline is unfilled. One tone per badge.
+   @badge-base is a color-less shell for building custom tones — not for direct
+   use.
+*/
+
 /* Badge shell — shape, sizing, focus ring. No bg/text/border color so
    variants can supply their own tone without conflicts. */
 @recipe badge-base {

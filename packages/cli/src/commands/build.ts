@@ -36,6 +36,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   const families = installedFamilies(recipesDir);
 
   const allRecipes: Recipe[] = [];
+  const guidance: Record<string, string> = {};
   const errors: Diagnostic[] = [];
 
   for (const family of families) {
@@ -47,11 +48,12 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
       continue;
     }
     allRecipes.push(...parsed.value.recipes);
+    if (parsed.value.guidance) guidance[family] = parsed.value.guidance;
   }
 
   if (errors.length > 0) throw new BuildError(errors);
 
-  const resolved = buildRegistry(allRecipes);
+  const resolved = buildRegistry(allRecipes, { guidance });
   if (!resolved.ok) throw new BuildError(resolved.errors);
 
   const skillPath = path.join(cwd, config.outputPath);

@@ -52,20 +52,20 @@ describe("bench", () => {
 
     const buttonResult = result.files.find((f) => f.filename === "button.tsx");
     expect(buttonResult).toBeDefined();
-    expect(buttonResult!.compactClassTokens).toBe(11); // 11 classes/recipes inside className attributes
-    expect(buttonResult!.expandedClassTokens).toBeGreaterThan(11);
+    expect(buttonResult!.compactClassTokens).toBe(10); // 10 classes/recipes inside className attributes
+    expect(buttonResult!.expandedClassTokens).toBeGreaterThan(10);
   });
 
   // Guards the README's headline "~50% fewer tokens" claim. The measured
-  // figure is 49.4% whole-file token savings across the corpus; a 45% floor
+  // figure is 58.2% whole-file token savings across the corpus; a 50% floor
   // catches a real regression (catalog drift, expander change) without
   // tripping on noise. If this fails, the README number is no longer honest —
   // fix the regression or update both together.
-  it("holds the README token-savings claim (whole-file ≥ 45%)", async () => {
+  it("holds the README token-savings claim (whole-file ≥ 50%)", async () => {
     const result = await bench({ cwd: process.cwd(), corpus: true });
     const { compactLlmTokens, expandedLlmTokens } = result.totals;
     const saved = 1 - compactLlmTokens / expandedLlmTokens;
-    expect(saved).toBeGreaterThanOrEqual(0.45);
+    expect(saved).toBeGreaterThanOrEqual(0.5);
   });
 
   it("runs on a local project structure", async () => {

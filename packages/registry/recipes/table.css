@@ -1,5 +1,16 @@
 /* shortwind: table@0.0.1 sha:000000 */
 
+/* @guide
+   Wrap the table in @table-container for horizontal overflow, then put @table
+   (or @table-zebra for striped rows) on the <table>. Cells are @th (header) and
+   @td (body); add @tr-hover to a <tr> for row highlighting.
+*/
+
+/* Scroll container for a wide table — keeps overflow horizontal. */
+@recipe table-container {
+  w-full overflow-x-auto rounded-md border border-border
+}
+
 /* Data table base. */
 @recipe table {
   w-full border-collapse text-left text-sm text-foreground

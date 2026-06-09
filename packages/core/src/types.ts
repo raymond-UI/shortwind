@@ -27,9 +27,17 @@ export type Recipe = {
 export type ParsedRecipeFile = {
   header: RecipeFileHeader | null;
   recipes: Recipe[];
+  // Family-level selection guidance from `@guide` comment blocks. Null when
+  // the file declares none. Teaches when to reach for which recipe and calls
+  // out easy-to-confuse neighbours; surfaced in the generated SKILL.md.
+  guidance: string | null;
 };
 
 export type Registry = {
   flattened: Record<string, string[]>;
   families: Record<string, Recipe[]>;
+  // Per-family guidance keyed by family name, collected from `@guide` blocks.
+  // Optional so the many `{ families, flattened }` literals across adapters
+  // stay valid; absent guidance simply renders no blurb.
+  guidance?: Record<string, string>;
 };

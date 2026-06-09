@@ -245,15 +245,19 @@ async function writeSkillMd(
 ): Promise<void> {
   await mkdir(path.dirname(skillPath), { recursive: true });
   const allRecipes: Recipe[] = [];
+  const guidance: Record<string, string> = {};
   for (const family of families) {
     const filePath = path.join(recipesDir, `${family}.css`);
     if (!existsSync(filePath)) continue;
     const source = readFileSync(filePath, "utf8");
     const parsed = parseRecipeFile(source, `${family}.css`);
-    if (parsed.ok) allRecipes.push(...parsed.value.recipes);
+    if (parsed.ok) {
+      allRecipes.push(...parsed.value.recipes);
+      if (parsed.value.guidance) guidance[family] = parsed.value.guidance;
+    }
   }
   let registry: Registry = { families: {}, flattened: {} };
-  const resolved = buildRegistry(allRecipes);
+  const resolved = buildRegistry(allRecipes, { guidance });
   if (resolved.ok) registry = resolved.value;
   await writeFile(skillPath, renderSkillMarkdown(registry, { order: families }));
 }
