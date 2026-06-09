@@ -17,7 +17,10 @@ jobs:
   policy:
     name: Security policy checks
     runs-on: ubuntu-latest
-    permissions: {}
+    # checkout needs contents:read; an empty map ({}) starves the GITHUB_TOKEN
+    # and the clone 404s on private repos. This is the minimal grant per job.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -42,7 +45,10 @@ jobs:
   build:
     name: Build, typecheck, test
     runs-on: ubuntu-latest
-    permissions: {}
+    # checkout needs contents:read; an empty map ({}) starves the GITHUB_TOKEN
+    # and the clone 404s on private repos. This is the minimal grant per job.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -65,7 +71,10 @@ jobs:
   verify-recipes:
     name: Verify recipe lockfile (if present)
     runs-on: ubuntu-latest
-    permissions: {}
+    # checkout needs contents:read; an empty map ({}) starves the GITHUB_TOKEN
+    # and the clone 404s on private repos. This is the minimal grant per job.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
