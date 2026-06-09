@@ -25,6 +25,17 @@ LLMs spend 35–50% of HTML output tokens on Tailwind class strings. Shortwind c
 
 A 10-line expander rewrites `@card-elevated` to its canonical Tailwind class cluster before the browser (or build step) ever sees it. Same rendered output. ~50% fewer tokens for the LLM to produce.
 
+### Measured savings
+
+Run on the bundled corpus (`shortwind bench --corpus`) — five representative component files, counted with the cl100k_base BPE tokenizer:
+
+| Metric | Shortwind | Expanded | Saved |
+| --- | --: | --: | --: |
+| Class-string tokens | 154 | 558 | **72.4%** |
+| Whole-file LLM tokens | 1,352 | 2,670 | **49.4%** |
+
+Per-file whole-file savings range from 18.8% (layout-heavy files still using raw utilities) to 77.3% (recipe-dense component files). The benchmark runs in CI, so these numbers stay honest as the catalog changes. Reproduce locally with `shortwind bench --corpus`, or measure your own project with `shortwind bench`.
+
 ---
 
 ## How it works

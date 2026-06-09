@@ -56,6 +56,18 @@ describe("bench", () => {
     expect(buttonResult!.expandedClassTokens).toBeGreaterThan(11);
   });
 
+  // Guards the README's headline "~50% fewer tokens" claim. The measured
+  // figure is 49.4% whole-file token savings across the corpus; a 45% floor
+  // catches a real regression (catalog drift, expander change) without
+  // tripping on noise. If this fails, the README number is no longer honest —
+  // fix the regression or update both together.
+  it("holds the README token-savings claim (whole-file ≥ 45%)", async () => {
+    const result = await bench({ cwd: process.cwd(), corpus: true });
+    const { compactLlmTokens, expandedLlmTokens } = result.totals;
+    const saved = 1 - compactLlmTokens / expandedLlmTokens;
+    expect(saved).toBeGreaterThanOrEqual(0.45);
+  });
+
   it("runs on a local project structure", async () => {
     const dir = await setupProject(["card"]);
     dirs.push(dir);

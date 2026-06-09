@@ -56,6 +56,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # Print the measured token savings into the build log. The floor that
+      # backs the README claim is asserted by the bench test in `pnpm test`;
+      # this step surfaces the actual table for each run.
+      - name: Token benchmark (corpus)
+        run: node packages/cli/dist/bin.js bench --corpus
 
   verify-recipes:
     name: Verify recipe lockfile (if present)
