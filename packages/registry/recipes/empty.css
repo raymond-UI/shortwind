@@ -1,5 +1,11 @@
 /* shortwind: empty@0.0.1 sha:000000 */
 
+/* @guide
+   @empty is the container for a no-data state; fill it with @empty-icon,
+   @empty-title, and @empty-description. These are slots for that pattern — use
+   @heading-* / @body from the text family for ordinary copy.
+*/
+
 /* Empty-state container. */
 @recipe empty {
   flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border p-8 text-center

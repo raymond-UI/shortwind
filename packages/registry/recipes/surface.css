@@ -1,5 +1,12 @@
 /* shortwind: surface@0.0.1 sha:000000 */
 
+/* @guide
+   @surface / @surface-muted / @surface-accent set a background+foreground pair
+   for a region — one per section. @container (or @container-tight for prose)
+   centers and width-caps content; there is no @container-lg, set a different cap
+   with max-w-* yourself. @divider-h and @divider-v are hairline rules.
+*/
+
 /* Default page/section surface. */
 @recipe surface {
   bg-background text-foreground

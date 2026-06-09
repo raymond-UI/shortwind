@@ -1,5 +1,11 @@
 /* shortwind: code@0.0.1 sha:000000 */
 
+/* @guide
+   @code-inline for a code span inside prose, @code-block for a multi-line
+   preformatted block, @kbd for a keyboard-shortcut hint. Pick by context, not
+   by size.
+*/
+
 /* Inline code span. */
 @recipe code-inline {
   rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground

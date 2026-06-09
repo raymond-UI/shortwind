@@ -1,5 +1,11 @@
 /* shortwind: icon@0.0.1 sha:000000 */
 
+/* @guide
+   Size an icon with @icon-sm/md/lg (16/20/24px) — these set width and height
+   only; add @icon-muted for secondary color. They're for SVG/icon elements, not
+   to be confused with @btn-icon (the icon button in the button family).
+*/
+
 /* Small icon — 16px. */
 @recipe icon-sm {
   h-4 w-4 shrink-0

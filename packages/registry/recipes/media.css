@@ -1,5 +1,11 @@
 /* shortwind: media@0.0.1 sha:000000 */
 
+/* @guide
+   @avatar (with @avatar-sm/lg) is a round user image; @thumb is a small square
+   thumbnail. For responsive embeds use @aspect-square or @aspect-video. Avatars
+   are circular by default — don't restyle the radius.
+*/
+
 /* User/profile avatar. */
 @recipe avatar {
   inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground

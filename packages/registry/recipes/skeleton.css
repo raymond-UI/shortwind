@@ -1,5 +1,11 @@
 /* shortwind: skeleton@0.0.1 sha:000000 */
 
+/* @guide
+   Match the skeleton to the shape it stands in for: @skeleton (block),
+   @skeleton-text (a text line), @skeleton-circle (avatar/icon). Size block and
+   text skeletons with raw width/height utilities.
+*/
+
 /* Default rectangular skeleton placeholder. */
 @recipe skeleton {
   animate-pulse rounded-md bg-muted

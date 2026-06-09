@@ -1,5 +1,10 @@
 /* shortwind: tooltip@0.0.1 sha:000000 */
 
+/* @guide
+   @tooltip is the floating label bubble — it styles appearance only, so pair it
+   with your own positioning.
+*/
+
 /* Floating tooltip bubble. */
 @recipe tooltip {
   pointer-events-none z-50 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background shadow-md

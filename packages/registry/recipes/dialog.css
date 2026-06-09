@@ -1,5 +1,12 @@
 /* shortwind: dialog@0.0.1 sha:000000 */
 
+/* @guide
+   A modal is three layers: @dialog-overlay (dimmed backdrop), @dialog (the
+   centering wrapper), and @dialog-content (the panel). Structure the panel with
+   @dialog-header and @dialog-footer. Don't put content styling on @dialog
+   itself — it's only the positioner.
+*/
+
 /* Modal dialog wrapper — covers the viewport, centers content. */
 @recipe dialog {
   fixed inset-0 z-50 flex items-center justify-center p-4

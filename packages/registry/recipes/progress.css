@@ -1,5 +1,11 @@
 /* shortwind: progress@0.0.1 sha:000000 */
 
+/* @guide
+   A bar is two pieces: @progress-track (the background) wrapping @progress-bar
+   (the fill). For an indeterminate state use @spinner instead — it's a
+   standalone loader, not a bar.
+*/
+
 /* Progress bar track (background). */
 @recipe progress-track {
   h-2 w-full overflow-hidden rounded-full bg-muted

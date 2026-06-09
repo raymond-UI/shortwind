@@ -1,5 +1,11 @@
 /* shortwind: list@0.0.1 sha:000000 */
 
+/* @guide
+   @list wraps a stack of @list-item rows; use @list-bordered for divided rows.
+   Definition lists are separate: @dl with @dt (term) and @dd (description).
+   For site navigation reach for the navigation family (@nav), not @list.
+*/
+
 /* Vertical list with default gap. */
 @recipe list {
   flex flex-col gap-1

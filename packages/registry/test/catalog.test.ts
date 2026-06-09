@@ -12,6 +12,7 @@ type Parsed = {
   file: string;
   family: string;
   recipes: Recipe[];
+  guidance: string | null;
 };
 
 function loadCatalog(): Parsed[] {
@@ -29,6 +30,7 @@ function loadCatalog(): Parsed[] {
       file,
       family: file.replace(/\.css$/, ""),
       recipes: result.value.recipes,
+      guidance: result.value.guidance,
     });
   }
   return out;
@@ -79,6 +81,13 @@ describe("catalog", () => {
       for (const recipe of parsed.recipes) {
         expect(recipe.description, `${recipe.name} is missing a description`).not.toBeNull();
       }
+    });
+
+    it(`${parsed.file} ships family selection guidance`, () => {
+      // Every family must carry an @guide block so the generated SKILL.md
+      // teaches when to reach for which recipe, not just the expansions.
+      expect(parsed.guidance, `${parsed.family} is missing an @guide block`).toBeTruthy();
+      expect((parsed.guidance ?? "").length).toBeGreaterThan(20);
     });
 
     it(`${parsed.file} names follow @<family>[-<...>]`, () => {
