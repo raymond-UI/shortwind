@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 // Source of truth for cross-page references to the project's GitHub repo.
 // Update here when the repository moves; the placeholder `anthropics/shortwind`
 // org was wrong and quietly 404'd from the header link.
-export const GITHUB_REPO_URL = "https://github.com/shortwind/shortwind";
+export const GITHUB_REPO_URL = "https://github.com/raymond-UI/shortwind";
 
 export const Route = createRootRoute({
   head: () => ({

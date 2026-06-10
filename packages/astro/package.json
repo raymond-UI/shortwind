@@ -28,5 +28,14 @@
   "publishConfig": {
     "access": "public",
     "tag": "beta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raymond-UI/shortwind.git",
+    "directory": "packages/astro"
+  },
+  "homepage": "https://shortwind.dev",
+  "bugs": {
+    "url": "https://github.com/raymond-UI/shortwind/issues"
   }
 }

@@ -1,6 +1,8 @@
 # Shortwind
 
-`shortwind.dev` — a token-efficient class layer for LLM-generated HTML. Flat vocabulary, no new grammar, distributed shadcn-style.
+**[shortwind.dev](https://shortwind.dev)** · **CLI:** [`@shortwind/cli`](https://www.npmjs.com/package/@shortwind/cli) (`npx @shortwind/cli@beta init`) · **Repo:** [github.com/raymond-UI/shortwind](https://github.com/raymond-UI/shortwind)
+
+A token-efficient class layer for LLM-generated HTML. Flat vocabulary, no new grammar, distributed shadcn-style.
 
 LLMs spend 35–50% of HTML output tokens on Tailwind class strings. Shortwind collapses common class clusters into 1–3-token recipes the model can memorise on turn one.
 
