@@ -17,6 +17,7 @@ import { verify } from "./commands/verify.js";
 import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.js";
 import { init, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 import { bench, formatBenchTable } from "./commands/bench.js";
+import { newFamily, NewFamilyError } from "./commands/new.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
 
@@ -70,6 +71,28 @@ export async function run(argv: string[] = process.argv): Promise<void> {
         }
       },
     );
+
+  cli
+    .command("new <family>", "Scaffold a new custom recipe family file")
+    .option("--force", "Overwrite an existing family file")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (family: string, opts: { force?: boolean; cwd?: string }) => {
+      try {
+        const result = await newFamily({
+          cwd: opts.cwd ?? process.cwd(),
+          family,
+          ...(opts.force ? { force: true } : {}),
+        });
+        p.log.success(`created ${result.familyPath}`);
+        p.log.info(`regenerated ${result.skillPath} — edit the recipes, then \`shortwind build\` to refresh.`);
+      } catch (err) {
+        if (err instanceof NewFamilyError) {
+          process.stderr.write(err.message + "\n");
+          process.exit(1);
+        }
+        throw err;
+      }
+    });
 
   cli
     .command("remove <...families>", "Remove installed families")

@@ -215,6 +215,7 @@ shortwind init                                    # interactive: pick a preset, 
 shortwind init --preset=app                       # non-interactive (starter | app | content | all | none)
 shortwind add card button badge layout
 shortwind add card --as marketing-card            # rename on install to avoid collision
+shortwind new marketing                           # scaffold your own custom recipe family
 shortwind remove table                            # delete a family + its skills section
 shortwind preset app                              # switch presets (additive — never auto-removes)
 shortwind upgrade                                 # interactive: walk families, show changelogs, prompt on touched files

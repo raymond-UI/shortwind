@@ -8,6 +8,8 @@ export { add } from "./commands/add.js";
 export type { AddOptions, AddResult } from "./commands/add.js";
 export { remove } from "./commands/remove.js";
 export type { RemoveOptions, RemoveResult } from "./commands/remove.js";
+export { newFamily, NewFamilyError } from "./commands/new.js";
+export type { NewOptions, NewResult } from "./commands/new.js";
 export { preset } from "./commands/preset.js";
 export type { PresetOptions, PresetResult } from "./commands/preset.js";
 export { ls, formatLsText } from "./commands/ls.js";
