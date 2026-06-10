@@ -180,7 +180,7 @@ The starter set, shipped as `@shortwind/default`. ~19 families, ~150–200 recip
 | `layout` | `stack-xs`, `stack-sm`, `stack-md`, `stack-lg`, `row`, `row-between`, `row-end`, `grid-2`, `grid-3`, `grid-4`, `center`, `full` |
 | `text` | `heading-xl`, `heading-lg`, `heading-md`, `heading-sm`, `body`, `muted`, `label`, `caption`, `link` |
 | `form` | `input`, `textarea`, `select`, `checkbox`, `radio`, `field`, `field-error`, `fieldset` |
-| `surface` | `surface`, `surface-muted`, `surface-accent`, `container`, `container-tight`, `divider-h`, `divider-v` |
+| `surface` | `surface`, `surface-muted`, `surface-accent`, `wrapper`, `wrapper-tight`, `divider-h`, `divider-v` |
 | `feedback` | `alert`, `alert-success`, `alert-warning`, `alert-danger`, `callout`, `toast`, `banner` |
 | `navigation` | `nav`, `nav-link`, `nav-link-active`, `breadcrumb`, `tab`, `tab-active` |
 | `list` | `list`, `list-item`, `list-bordered`, `dl`, `dt`, `dd` |

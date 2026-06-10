@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { buildRegistry, parseRecipeFile } from "@shortwind/core";
+import { buildRegistry, isReservedRecipeName, parseRecipeFile } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
 import { installedFamilies, readConfig } from "../project.js";
 
@@ -16,6 +16,7 @@ export const ALL_RULES = [
   "recipe/conflicting-intent",
   "recipe/dynamic-class",
   "recipe/no-sibling-overlap",
+  "recipe/reserved-name",
 ] as const;
 
 export type Rule = (typeof ALL_RULES)[number];
@@ -58,6 +59,7 @@ export async function lint(options: LintOptions): Promise<LintResult> {
   const { registry, parseFindings } = loadRegistry(recipesDir, enabledRules);
   findings.push(...parseFindings);
   findings.push(...checkRecipeNames(registry, recipesDir, enabledRules));
+  findings.push(...checkReservedNames(registry, recipesDir, enabledRules));
 
   const contentGlobs = options.content ?? DEFAULT_CONTENT;
   // tinyglobby evaluates ignore patterns relative to `cwd`; an absolute
@@ -279,6 +281,29 @@ function checkRecipeNames(
         line: recipe.sourceLine,
         column: 1,
         message: `recipe @${recipe.name} uses size before intent; prefer @${meta.badOrder}`,
+      });
+    }
+  }
+  return findings;
+}
+
+function checkReservedNames(
+  registry: Registry,
+  recipesDir: string,
+  enabledRules: Set<Rule>,
+): Finding[] {
+  if (!enabledRules.has("recipe/reserved-name")) return [];
+  const findings: Finding[] = [];
+  for (const recipes of Object.values(registry.families)) {
+    for (const recipe of recipes) {
+      if (!isReservedRecipeName(recipe.name)) continue;
+      findings.push({
+        rule: "recipe/reserved-name",
+        severity: "error",
+        file: path.join(recipesDir, recipe.sourceFile),
+        line: recipe.sourceLine,
+        column: 1,
+        message: `recipe @${recipe.name} collides with a reserved Tailwind @-utility; rename it`,
       });
     }
   }

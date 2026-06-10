@@ -618,21 +618,6 @@ exports[`catalog > flattened expansion is a stable snapshot 1`] = `
     "text-[0.875em]",
     "text-foreground",
   ],
-  "container": [
-    "mx-auto",
-    "w-full",
-    "max-w-6xl",
-    "px-4",
-    "sm:px-6",
-    "lg:px-8",
-  ],
-  "container-tight": [
-    "mx-auto",
-    "w-full",
-    "max-w-3xl",
-    "px-4",
-    "sm:px-6",
-  ],
   "dd": [
     "text-sm",
     "text-foreground",
@@ -1243,6 +1228,21 @@ exports[`catalog > flattened expansion is a stable snapshot 1`] = `
   "tr-hover": [
     "transition-colors",
     "hover:bg-muted",
+  ],
+  "wrapper": [
+    "mx-auto",
+    "w-full",
+    "max-w-6xl",
+    "px-4",
+    "sm:px-6",
+    "lg:px-8",
+  ],
+  "wrapper-tight": [
+    "mx-auto",
+    "w-full",
+    "max-w-3xl",
+    "px-4",
+    "sm:px-6",
   ],
 }
 `;

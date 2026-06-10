@@ -165,6 +165,23 @@ describe("buildRegistryPipeline", () => {
     ).toThrow(/Failed to parse|Registry resolution failed/);
   });
 
+  it("rejects a recipe whose name collides with a reserved Tailwind @-utility", async () => {
+    const f = await fixture({
+      "surface.css": `/* shortwind: surface@0.0.1 sha:000000 */\n\n/* wrapper */\n@recipe container {\n  mx-auto max-w-6xl\n}\n`,
+    });
+    cleanups.push(f.cleanup);
+    expect(() =>
+      buildRegistryPipeline({
+        recipesDir: f.recipesDir,
+        presetsFile: f.presetsFile,
+        changelogsDir: f.changelogsDir,
+        outDir: f.outDir,
+        runtimeBundle: null,
+        runtimeVersion: "0.0.1",
+      }),
+    ).toThrow(/reserved Tailwind @-utility/);
+  });
+
   it("rejects presets that reference a missing family", async () => {
     const f = await fixture(
       { "card.css": CARD_CSS },

@@ -122,7 +122,7 @@ export const CORPUS_FILES: Record<string, string> = {
             <div className="h-8 w-8 rounded-full bg-primary/20" />
           </div>
         </header>
-        <main className="@container @stack-lg py-8">
+        <main className="@wrapper @stack-lg py-8">
           <div className="@grid-3">
             <div className="@card-elevated">Card 1</div>
             <div className="@card-elevated">Card 2</div>

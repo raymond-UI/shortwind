@@ -141,9 +141,9 @@ export const TASKS: EvalTask[] = [
     title: "Stat cards",
     prompt:
       "A row of three stat cards inside a centered page container. Each card shows a caption label and a large number.",
-    recipes: ["container", "grid-3", "card", "caption"],
+    recipes: ["wrapper", "grid-3", "card", "caption"],
     confusables: [
-      { wrong: "container-lg", right: "container" },
+      { wrong: "container-lg", right: "wrapper" },
       { wrong: "grid-cols-3", right: "grid-3" },
     ],
   },

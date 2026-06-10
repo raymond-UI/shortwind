@@ -2,9 +2,11 @@
 
 /* @guide
    @surface / @surface-muted / @surface-accent set a background+foreground pair
-   for a region — one per section. @container (or @container-tight for prose)
-   centers and width-caps content; there is no @container-lg, set a different cap
-   with max-w-* yourself. @divider-h and @divider-v are hairline rules.
+   for a region — one per section. @wrapper (or @wrapper-tight for prose)
+   centers and width-caps content; there is no @wrapper-lg, set a different cap
+   with max-w-* yourself. (Note: @container is reserved for Tailwind's
+   container-query utility, so the content wrapper is @wrapper.) @divider-h and
+   @divider-v are hairline rules.
 */
 
 /* Default page/section surface. */
@@ -22,13 +24,13 @@
   bg-accent text-accent-foreground
 }
 
-/* Standard content container with max width. */
-@recipe container {
+/* Centered content wrapper with a max width. */
+@recipe wrapper {
   mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8
 }
 
-/* Narrow content container for prose. */
-@recipe container-tight {
+/* Narrow content wrapper for prose. */
+@recipe wrapper-tight {
   mx-auto w-full max-w-3xl px-4 sm:px-6
 }
 

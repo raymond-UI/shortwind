@@ -307,6 +307,22 @@ describe("lint", () => {
     expect(result.findings.filter((f) => f.rule === "recipe/dynamic-class")).toEqual([]);
   });
 
+  it("flags a recipe whose name collides with a reserved Tailwind @-utility", async () => {
+    const dir = await setupProject([]);
+    dirs.push(dir);
+    await writeFile(
+      path.join(dir, "recipes", "surface.css"),
+      `/* shortwind: surface@0.0.1 sha:000000 */\n@recipe container { mx-auto max-w-6xl }\n`,
+    );
+
+    const result = await lint({ cwd: dir, rules: ["recipe/reserved-name"] });
+    const reserved = result.findings.filter((f) => f.rule === "recipe/reserved-name");
+    expect(reserved).toHaveLength(1);
+    expect(reserved[0]!.severity).toBe("error");
+    expect(reserved[0]!.message).toContain("@container");
+    expect(result.ok).toBe(false);
+  });
+
   it("formatFindingsText emits eslint-compatible lines", () => {
     const text = formatFindingsText([
       {

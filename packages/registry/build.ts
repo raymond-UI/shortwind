@@ -10,7 +10,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { buildRegistry, parseRecipeFile } from "@shortwind/core";
+import { buildRegistry, parseRecipeFile, RESERVED_RECIPE_NAMES } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
 
 export type BuildOptions = {
@@ -205,7 +205,18 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
     const body = bodyWithoutHeader(source);
     const sha = computeSha(body);
     familySources.push({ family, version, sha, body });
-    for (const r of parsed.value.recipes) allRecipes.push(r);
+    for (const r of parsed.value.recipes) {
+      // `@`-prefixed recipe names share a namespace with Tailwind's own
+      // `@`-utilities. A recipe named after one (e.g. `container`, which is
+      // Tailwind v4's container-query utility) silently shadows it, so the
+      // catalog must never ship one.
+      if (RESERVED_RECIPE_NAMES.has(r.name)) {
+        throw new Error(
+          `recipe "@${r.name}" (in ${file}) collides with a reserved Tailwind @-utility — rename it`,
+        );
+      }
+      allRecipes.push(r);
+    }
   }
 
   const built = buildRegistry(allRecipes);

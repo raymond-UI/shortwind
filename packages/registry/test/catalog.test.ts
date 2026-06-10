@@ -108,7 +108,7 @@ describe("catalog", () => {
           layout: ["stack", "row", "grid", "center", "full"],
           text: ["heading", "body", "lead", "muted", "label", "caption", "link"],
           form: ["input", "textarea", "select", "checkbox", "radio", "field", "fieldset", "label", "help"],
-          surface: ["surface", "container", "divider"],
+          surface: ["surface", "wrapper", "divider"],
           feedback: ["alert", "callout", "toast", "banner"],
           navigation: ["nav", "breadcrumb", "tab"],
           list: ["list", "dl", "dt", "dd"],
