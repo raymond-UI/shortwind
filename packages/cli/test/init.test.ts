@@ -83,9 +83,11 @@ describe("init", () => {
     });
 
     expect(installer.calls).toHaveLength(1);
-    expect(installer.calls[0]?.packages.sort()).toEqual(
-      ["@shortwind/tailwind", "@shortwind/vite"].sort(),
-    );
+    const installed = installer.calls[0]?.packages ?? [];
+    // adapters are pinned to the CLI's own version (scoped name + @version)
+    expect(installed.every((p) => /^@shortwind\/\S+@\d+\.\d+\.\d+/.test(p))).toBe(true);
+    const bare = installed.map((p) => p.slice(0, p.lastIndexOf("@"))).sort();
+    expect(bare).toEqual(["@shortwind/tailwind", "@shortwind/vite"].sort());
   });
 
   it("writes shortwind.config.json with registry and recipesDir", async () => {
@@ -289,8 +291,10 @@ describe("init", () => {
       installPackages: installer.fn,
     });
 
-    // bundler unknown → only base package is installed
-    expect(installer.calls[0]?.packages).toEqual(["@shortwind/tailwind"]);
+    // bundler unknown → only base package is installed (version-pinned to the CLI)
+    const installed = installer.calls[0]?.packages ?? [];
+    expect(installed).toHaveLength(1);
+    expect(installed[0]).toMatch(/^@shortwind\/tailwind@\d+\.\d+\.\d+/);
   });
 });
 

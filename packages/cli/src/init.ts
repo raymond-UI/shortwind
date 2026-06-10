@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
@@ -65,9 +66,16 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const families = await resolveFamilies(options.preset, source);
   const pkgs = pickPackages(shape.bundler);
 
+  // Pin adapters to this CLI's own version so a released CLI always installs the
+  // adapters it shipped with — `latest` can lag the `beta` tag (or vice-versa),
+  // and a bare `add @shortwind/tailwind` would resolve `latest` and drift out of
+  // sync with the CLI/core/catalog.
+  const version = cliVersion();
+  const specs = version ? pkgs.map((p) => `${p}@${version}`) : pkgs;
+
   const installer = options.installPackages ?? defaultInstall;
-  if (pkgs.length > 0) {
-    await installer(shape.packageManager, pkgs, cwd);
+  if (specs.length > 0) {
+    await installer(shape.packageManager, specs, cwd);
   }
 
   const recipesDir = path.join(cwd, "recipes");
@@ -124,6 +132,19 @@ async function resolveFamilies(preset: string, source: RegistrySource): Promise<
   const presets = await source.loadPresets();
   const all = await source.listAllFamilies();
   return resolvePresetFamilies(preset, presets, all);
+}
+
+// The CLI's own version, read from its package.json at runtime (one dir above
+// the compiled dist/ — and above src/ under vitest). Returns null if it can't be
+// read, in which case install falls back to bare (latest-tag) specs.
+export function cliVersion(): string | null {
+  try {
+    const pkgUrl = new URL("../package.json", import.meta.url);
+    const pkg = JSON.parse(readFileSync(fileURLToPath(pkgUrl), "utf8")) as { version?: string };
+    return pkg.version ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function pickPackages(bundler: ReturnType<typeof detectProject>["bundler"]): string[] {

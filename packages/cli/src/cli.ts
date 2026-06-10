@@ -15,7 +15,7 @@ import {
 } from "./commands/upgrade.js";
 import { verify } from "./commands/verify.js";
 import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.js";
-import { init, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
+import { init, cliVersion, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 import { bench, formatBenchTable } from "./commands/bench.js";
 import { newFamily, NewFamilyError } from "./commands/new.js";
 import { reseal } from "./commands/reseal.js";
@@ -338,7 +338,7 @@ export async function run(argv: string[] = process.argv): Promise<void> {
     });
 
   cli.help();
-  cli.version("0.0.0");
+  cli.version(cliVersion() ?? "0.0.0");
   cli.parse(argv);
 }
 
