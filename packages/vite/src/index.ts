@@ -1,6 +1,7 @@
 import path from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import {
+  findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
   loadRegistryFromDir,
@@ -87,6 +88,14 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       // identically; skip the per-file work entirely.
       if (Object.keys(registry.flattened).length === 0) return null;
       const out = transformContent(code, registry, { mode: modeForId(cleanId) });
+      // Surface recipes the transform couldn't reach (usually a dynamic
+      // className) — they ship as literal @tokens and won't render.
+      const leftover = findUnexpandedRecipes(out, registry);
+      if (leftover.length > 0) {
+        console.warn(
+          `[shortwind] ${cleanId}: unexpanded recipe ${leftover.join(", ")} — likely a dynamic className the build can't statically expand; it will render as raw text.`,
+        );
+      }
       if (out === code) return null;
       return { code: out, map: null };
     },

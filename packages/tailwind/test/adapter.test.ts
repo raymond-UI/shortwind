@@ -8,6 +8,7 @@ import {
   buildSourceDirective,
   computeSafelistTokens,
   detectTailwindMajor,
+  findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
   loadRegistryFromDir,
@@ -193,6 +194,33 @@ describe("transformContent", () => {
     const after = transformContent(before, registry, { callExpanders: ["styled"] });
     expect(after).not.toContain("@btn-primary");
     expect(after).toContain("inline-flex");
+  });
+});
+
+describe("findUnexpandedRecipes", () => {
+  const registry = loadRegistryFromDir(REGISTRY_RECIPES);
+
+  it("flags a known recipe left in a className value", () => {
+    const code = `<div className="@card text-center" />`;
+    expect(findUnexpandedRecipes(code, registry)).toEqual(["@card"]);
+  });
+
+  it("returns nothing once the transform has expanded everything", () => {
+    const out = transformContent(`<div className="@card" />`, registry);
+    expect(findUnexpandedRecipes(out, registry)).toEqual([]);
+  });
+
+  it("does not flag genuine Tailwind @-utilities that aren't recipe names", () => {
+    // container-query variants like @md:/@max-lg: are real Tailwind, not recipes
+    const code = `<div className="@md:flex @max-lg:hidden" />`;
+    expect(findUnexpandedRecipes(code, registry)).toEqual([]);
+  });
+
+  it("catches a recipe stranded inside a dynamic className", () => {
+    const code = "<button className={`@btn-base ${on ? '@btn-primary' : '@btn-ghost'}`} />";
+    const found = findUnexpandedRecipes(code, registry);
+    expect(found).toContain("@btn-primary");
+    expect(found).toContain("@btn-ghost");
   });
 });
 

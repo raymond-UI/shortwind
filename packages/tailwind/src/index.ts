@@ -45,6 +45,28 @@ export function transformContent(
   });
 }
 
+// Diagnostic: after a transform, any *known* recipe name still sitting in a
+// class/className value means the expander missed it (e.g. a recipe inside a
+// dynamic className the static transform can't reach) — it won't render. We
+// only flag names that are real recipes, so genuine Tailwind `@`-utilities like
+// `@container` are never false-positived. Heuristic by design (a warning, not a
+// hard error): the regex covers string, template-literal, and `{...}` class
+// values, which is where misses surface in practice.
+const CLASS_VALUE_RE = /\b(?:class|className)\s*=\s*(?:(["'`])([\s\S]*?)\1|\{([\s\S]*?)\})/g;
+const RECIPE_TOKEN_RE = /@[A-Za-z0-9][\w-]*/g;
+
+export function findUnexpandedRecipes(code: string, registry: Registry): string[] {
+  const known = registry.flattened;
+  const found = new Set<string>();
+  for (const m of code.matchAll(CLASS_VALUE_RE)) {
+    const value = m[2] ?? m[3] ?? "";
+    for (const token of value.match(RECIPE_TOKEN_RE) ?? []) {
+      if (known[token.slice(1)]) found.add(token);
+    }
+  }
+  return [...found].sort();
+}
+
 // Recipe expansions only ever appear in build-time-transformed JSX/HTML, which
 // Tailwind v4's content scanner never reads — it walks files on disk. We hand
 // Tailwind the bounded candidate set via `@source inline(...)`, its official
