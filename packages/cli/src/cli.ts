@@ -379,10 +379,27 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
       `pre-commit:        ${result.huskyPath}`,
       `SKILL.md:          ${result.skillPath}`,
       `theme:             ${describeTheme(result)}`,
+      `bundler config:    ${describeBundlerConfig(result)}`,
     ].join("\n"),
     "shortwind init",
   );
+  if (result.bundlerConfigAction === "manual" && result.bundlerConfigSnippet) {
+    p.log.warn(`Add the plugin to your bundler config:\n\n${result.bundlerConfigSnippet}`);
+  }
   p.outro(`Next: run \`${result.packageManager} dev\` to start watching.`);
+}
+
+function describeBundlerConfig(result: Awaited<ReturnType<typeof init>>): string {
+  switch (result.bundlerConfigAction) {
+    case "patched":
+      return `plugin added to ${result.bundlerConfigPath}`;
+    case "manual":
+      return "needs a manual edit (see below)";
+    case "skipped":
+      return result.bundlerConfigPath
+        ? `already wired in ${result.bundlerConfigPath}`
+        : "skipped (no supported bundler)";
+  }
 }
 
 function describeTheme(result: Awaited<ReturnType<typeof init>>): string {

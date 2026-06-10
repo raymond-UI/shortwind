@@ -13,6 +13,7 @@ import {
 } from "./registry-source.js";
 import { readLockfile, writeLockfile } from "./lockfile.js";
 import { scaffoldTheme, type ThemeAction } from "./theme.js";
+import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
 
 export const DEFAULT_REGISTRY = "https://shortwind.dev/registry";
 
@@ -43,6 +44,9 @@ export type InitResult = {
   skillPath: string;
   themePath: string | null;
   themeAction: ThemeAction;
+  bundlerConfigPath: string | null;
+  bundlerConfigAction: BundlerWireAction;
+  bundlerConfigSnippet?: string;
 };
 
 export async function init(options: InitOptions): Promise<InitResult> {
@@ -80,6 +84,10 @@ export async function init(options: InitOptions): Promise<InitResult> {
   // render with color on first run instead of as colorless markup.
   const theme = await scaffoldTheme(cwd);
 
+  // Wire the plugin into the bundler config (Vite auto-patches; Next/Astro
+  // return a snippet for the summary).
+  const bundlerConfig = await wireBundler(cwd, shape.bundler);
+
   return {
     packageManager: shape.packageManager,
     preset: options.preset,
@@ -94,6 +102,9 @@ export async function init(options: InitOptions): Promise<InitResult> {
     skillPath,
     themePath: theme.themePath,
     themeAction: theme.action,
+    bundlerConfigPath: bundlerConfig.configPath,
+    bundlerConfigAction: bundlerConfig.action,
+    ...(bundlerConfig.snippet ? { bundlerConfigSnippet: bundlerConfig.snippet } : {}),
   };
 }
 
