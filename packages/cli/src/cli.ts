@@ -18,6 +18,7 @@ import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.
 import { init, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 import { bench, formatBenchTable } from "./commands/bench.js";
 import { newFamily, NewFamilyError } from "./commands/new.js";
+import { reseal } from "./commands/reseal.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
 
@@ -254,6 +255,20 @@ export async function run(argv: string[] = process.argv): Promise<void> {
         }
       },
     );
+
+  cli
+    .command("reseal [...families]", "Re-sign recipes after intentional edits (updates header sha + lockfile)")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (families: string[], opts: { cwd?: string }) => {
+      const result = await reseal({ cwd: opts.cwd ?? process.cwd(), families });
+      for (const f of result.resealed) p.log.success(`resealed ${f}`);
+      for (const f of result.unchanged) p.log.info(`${f} already sealed`);
+      for (const f of result.notFound) p.log.warn(`${f} is not installed`);
+      for (const f of result.noHeader) p.log.warn(`${f} has no fingerprint header`);
+      if (result.resealed.length === 0 && result.unchanged.length > 0 && result.notFound.length === 0) {
+        p.log.success("all recipes already sealed");
+      }
+    });
 
   cli
     .command("verify", "Check installed recipes against fingerprint headers and lockfile")

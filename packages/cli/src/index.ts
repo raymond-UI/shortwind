@@ -10,6 +10,8 @@ export { remove } from "./commands/remove.js";
 export type { RemoveOptions, RemoveResult } from "./commands/remove.js";
 export { newFamily, NewFamilyError } from "./commands/new.js";
 export type { NewOptions, NewResult } from "./commands/new.js";
+export { reseal } from "./commands/reseal.js";
+export type { ResealOptions, ResealResult } from "./commands/reseal.js";
 export { preset } from "./commands/preset.js";
 export type { PresetOptions, PresetResult } from "./commands/preset.js";
 export { ls, formatLsText } from "./commands/ls.js";
