@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { open, rename } from "node:fs/promises";
 import path from "node:path";
-import { createRegistrySource, type RegistrySource } from "../registry-source.js";
+import { resolveSource, type RegistrySource } from "../registry-source.js";
 import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
 import { readLockfile, writeLockfile, type Lockfile } from "../lockfile.js";
 import { installedFamilies, readConfig, regenerateSkillMd } from "../project.js";
@@ -57,7 +57,7 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
   const cwd = path.resolve(options.cwd);
   const config = await readConfig(cwd);
   const registry = options.registry ?? config.registry;
-  const source = options.source ?? createRegistrySource(registry);
+  const source = options.source ?? resolveSource(registry);
   const recipesDir = path.join(cwd, config.recipesDir);
 
   const installed = installedFamilies(recipesDir);

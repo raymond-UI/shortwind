@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createRegistrySource } from "../registry-source.js";
+import { resolveSource } from "../registry-source.js";
 import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
 import { readLockfile, writeLockfile, type Lockfile } from "../lockfile.js";
 import {
@@ -33,7 +33,7 @@ export async function add(options: AddOptions): Promise<AddResult> {
   const cwd = path.resolve(options.cwd);
   const config = await readConfig(cwd);
   const registry = options.registry ?? config.registry;
-  const source = createRegistrySource(registry);
+  const source = resolveSource(registry);
   const recipesDir = path.join(cwd, config.recipesDir);
   await mkdir(recipesDir, { recursive: true });
 

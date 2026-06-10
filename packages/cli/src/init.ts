@@ -7,7 +7,8 @@ import type { Recipe, Registry } from "@shortwind/core";
 import { computeBodySha, extractHeader, rewriteHeaderSha } from "./fingerprint.js";
 import { detectProject, type PackageManager } from "./detect.js";
 import {
-  createRegistrySource,
+  BUNDLED_ORIGIN,
+  resolveSource,
   resolvePresetFamilies,
   type RegistrySource,
 } from "./registry-source.js";
@@ -15,7 +16,9 @@ import { readLockfile, writeLockfile } from "./lockfile.js";
 import { scaffoldTheme, type ThemeAction } from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
 
-export const DEFAULT_REGISTRY = "https://shortwind.dev/registry";
+// Default to the catalog bundled in the CLI — no network, always available.
+// Pass --registry <url> (or a path) for a custom/BYO registry.
+export const DEFAULT_REGISTRY = BUNDLED_ORIGIN;
 
 export type InitOptions = {
   cwd: string;
@@ -52,7 +55,7 @@ export type InitResult = {
 export async function init(options: InitOptions): Promise<InitResult> {
   const cwd = path.resolve(options.cwd);
   const registry = options.registry ?? DEFAULT_REGISTRY;
-  const source = createRegistrySource(registry);
+  const source = resolveSource(registry);
 
   const shape = detectProject(cwd);
 

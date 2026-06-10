@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createRegistrySource } from "../registry-source.js";
+import { resolveSource } from "../registry-source.js";
 import { readConfig, installedFamilies } from "../project.js";
 import { readLockfile } from "../lockfile.js";
 
@@ -31,7 +31,7 @@ export async function ls(options: LsOptions): Promise<LsResult> {
   let available: string[] = [];
   if (!options.installedOnly) {
     const registry = options.registry ?? config.registry;
-    const source = createRegistrySource(registry);
+    const source = resolveSource(registry);
     try {
       available = await source.listAllFamilies();
     } catch {

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createRegistrySource, resolvePresetFamilies } from "../registry-source.js";
+import { resolveSource, resolvePresetFamilies } from "../registry-source.js";
 import { readConfig } from "../project.js";
 import { add, type AddResult } from "./add.js";
 
@@ -15,7 +15,7 @@ export async function preset(options: PresetOptions): Promise<PresetResult> {
   const cwd = path.resolve(options.cwd);
   const config = await readConfig(cwd);
   const registry = options.registry ?? config.registry;
-  const source = createRegistrySource(registry);
+  const source = resolveSource(registry);
 
   if (options.name === "none") {
     throw new Error("Use `shortwind remove` to uninstall families; preset 'none' is for `init` only.");

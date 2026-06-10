@@ -31,6 +31,14 @@ export function createRegistrySource(origin: string): RegistrySource {
   return fileSource(origin);
 }
 
+// Resolve a registry origin to a source. The default (absent, or the bundled
+// sentinel) is the catalog embedded in the CLI; an http(s) URL or a filesystem
+// path is a custom/BYO registry. This is what every command should call.
+export function resolveSource(origin: string | undefined): RegistrySource {
+  if (!origin || origin === BUNDLED_ORIGIN) return bundledSource();
+  return createRegistrySource(origin);
+}
+
 // The default catalog, embedded in the CLI (see catalog.generated.ts). Resolves
 // presets/families/recipes with zero network, so `init`/`add` always work even
 // offline or if a registry host is down — the failure that made an agent
