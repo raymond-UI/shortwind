@@ -82,12 +82,26 @@ jobs:
 
       # npm is the reference trusted-publishing implementation; publishing the
       # pnpm-packed tarballs keeps workspace resolution with pnpm and auth/OIDC
-      # with npm. access/tag come from each package's publishConfig.
+      # with npm. Notes:
+      #   - publishConfig.tag is NOT honored when publishing a tarball, so the
+      #     dist-tag is read from each package.json and passed with --tag (else
+      #     npm defaults prereleases to `latest`).
+      #   - already-published versions are skipped (not fatal), so a partial
+      #     release can be re-run to completion and bootstrap-published packages
+      #     don't abort the job.
       - name: Publish to npm (OIDC + provenance)
         run: |
           set -euo pipefail
           for tgz in "$RUNNER_TEMP/tarballs"/*.tgz; do
-            echo "::group::publish $(basename "$tgz")"
-            npm publish "$tgz" --provenance --access public
+            pkg="$(tar -xzO -f "$tgz" package/package.json)"
+            name="$(node -p 'JSON.parse(process.argv[1]).name' "$pkg")"
+            version="$(node -p 'JSON.parse(process.argv[1]).version' "$pkg")"
+            tag="$(node -p 'JSON.parse(process.argv[1]).publishConfig?.tag || "latest"' "$pkg")"
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "::notice::${name}@${version} already published — skipping"
+              continue
+            fi
+            echo "::group::publish ${name}@${version} (tag: ${tag})"
+            npm publish "$tgz" --provenance --access public --tag "$tag"
             echo "::endgroup::"
           done
