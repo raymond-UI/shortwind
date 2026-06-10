@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>What is Shortwind?</title>
+
+    <!-- 1. Shortwind CDN expander: walks the DOM on DOMContentLoaded and
+         rewrites every @recipe in every class attribute into plain Tailwind
+         utility classes. See https://shortwind.dev/docs/cdn -->
+    <script src="https://shortwind.dev/expand.js" defer></script>
+
+    <!-- 2. Tailwind Play CDN: compiles the expanded utility classes in the
+         browser. No build step for either script. -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+
+    <!-- 3. Theme tokens used by the default recipe catalog (bg-primary,
+         border-border, text-muted-foreground, ...). -->
+    <style type="text/tailwindcss">
+      :root {
+        --background: oklch(0.9816 0.0017 247.839);
+        --foreground: oklch(0.1649 0.0352 281.8285);
+        --card: oklch(1 0 0);
+        --card-foreground: oklch(0.1649 0.0352 281.8285);
+        --primary: oklch(0.6726 0.2904 341.4084);
+        --primary-foreground: oklch(1 0 0);
+        --secondary: oklch(0.9595 0.02 286.0164);
+        --secondary-foreground: oklch(0.1649 0.0352 281.8285);
+        --muted: oklch(0.9595 0.02 286.0164);
+        --muted-foreground: oklch(0.45 0.03 281.8285);
+        --accent: oklch(0.8903 0.1739 171.269);
+        --accent-foreground: oklch(0.1649 0.0352 281.8285);
+        --destructive: oklch(0.6535 0.2348 34.037);
+        --destructive-foreground: oklch(1 0 0);
+        --border: oklch(0.9205 0.0086 225.0878);
+        --input: oklch(0.9205 0.0086 225.0878);
+        --ring: oklch(0.6726 0.2904 341.4084);
+      }
+      @theme inline {
+        --color-background: var(--background);
+        --color-foreground: var(--foreground);
+        --color-card: var(--card);
+        --color-card-foreground: var(--card-foreground);
+        --color-primary: var(--primary);
+        --color-primary-foreground: var(--primary-foreground);
+        --color-secondary: var(--secondary);
+        --color-secondary-foreground: var(--secondary-foreground);
+        --color-muted: var(--muted);
+        --color-muted-foreground: var(--muted-foreground);
+        --color-accent: var(--accent);
+        --color-accent-foreground: var(--accent-foreground);
+        --color-destructive: var(--destructive);
+        --color-destructive-foreground: var(--destructive-foreground);
+        --color-border: var(--border);
+        --color-input: var(--input);
+        --color-ring: var(--ring);
+      }
+    </style>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: var(--background);
+        color: var(--foreground);
+        margin: 0;
+      }
+    </style>
+  </head>
+
+  <!-- Every class below that starts with @ is a Shortwind recipe.
+       View source, then inspect the live DOM: the expander has already
+       replaced each recipe with its canonical Tailwind class cluster. -->
+  <body class="@body">
+    <main class="@container-tight @stack-lg py-12">
+      <header class="@stack-sm">
+        <span class="@badge-info">shortwind.dev</span>
+        <h1 class="@heading-xl">What is Shortwind?</h1>
+        <p class="@lead">
+          A token-efficient class layer for LLM-generated HTML. Flat
+          vocabulary, no new grammar, distributed shadcn-style.
+        </p>
+      </header>
+
+      <section class="@alert-info">
+        <p>
+          This page is the demo. It is written entirely in Shortwind shorthand
+          — <span class="@code-inline">@card</span>,
+          <span class="@code-inline">@btn-primary</span>,
+          <span class="@code-inline">@heading-xl</span> — and a single CDN
+          script expanded it before first paint. Hit
+          <span class="@kbd">Ctrl</span>+<span class="@kbd">U</span> to compare
+          the source with the rendered DOM.
+        </p>
+      </section>
+
+      <section class="@stack-md">
+        <h2 class="@heading-lg">The problem</h2>
+        <p>
+          LLMs spend 35–50% of their HTML output tokens on Tailwind class
+          strings. The same clusters — card shells, button variants, flex rows
+          — get retyped utility-by-utility on every element, in every
+          response.
+        </p>
+        <p>
+          Shortwind collapses those common clusters into 1–3-token
+          <strong>recipes</strong> the model can memorise on turn one. A tiny
+          expander rewrites each recipe to its canonical Tailwind classes
+          before the browser (or build step) ever sees it. Same rendered
+          output, roughly half the tokens.
+        </p>
+      </section>
+
+      <section class="@stack-md">
+        <h2 class="@heading-lg">How it works</h2>
+        <div class="@grid-3">
+          <div class="@card @card-body @stack-xs">
+            <span class="@badge">1</span>
+            <h3 class="@heading-sm">LLM writes shorthand</h3>
+            <p class="@muted">
+              Recipes prefixed with <span class="@code-inline">@</span> inside
+              <span class="@code-inline">class="..."</span>, mixed freely with
+              raw Tailwind utilities.
+            </p>
+          </div>
+          <div class="@card @card-body @stack-xs">
+            <span class="@badge">2</span>
+            <h3 class="@heading-sm">Expander resolves recipes</h3>
+            <p class="@muted">
+              Each <span class="@code-inline">@name</span> is replaced with its
+              definition, nested references and all. Conflicts are settled by
+              tailwind-merge — last position wins.
+            </p>
+          </div>
+          <div class="@card @card-body @stack-xs">
+            <span class="@badge">3</span>
+            <h3 class="@heading-sm">Tailwind sees only utilities</h3>
+            <p class="@muted">
+              No runtime cost in production, no semantic change. Purge, JIT,
+              and the dev server all work normally.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="@stack-md">
+        <h2 class="@heading-lg">Before and after</h2>
+        <p>The LLM emits this:</p>
+        <pre class="@code-block">&lt;article class="@card-elevated @stack-md"&gt;
+  &lt;header class="@row-between"&gt;
+    &lt;h3 class="@heading-md"&gt;Quarterly review&lt;/h3&gt;
+    &lt;span class="@badge-success"&gt;On track&lt;/span&gt;
+  &lt;/header&gt;
+  &lt;p class="@muted"&gt;3 of 5 milestones complete.&lt;/p&gt;
+  &lt;div class="@row"&gt;
+    &lt;button class="@btn-primary"&gt;Open&lt;/button&gt;
+    &lt;button class="@btn-ghost"&gt;Skip&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</pre>
+        <p>And the expander renders this — live, on this page:</p>
+        <article class="@card-elevated @card-body @stack-md">
+          <header class="@row-between">
+            <h3 class="@heading-md">Quarterly review</h3>
+            <span class="@badge-success">On track</span>
+          </header>
+          <p class="@muted">3 of 5 milestones complete.</p>
+          <div class="@row">
+            <button class="@btn-primary">Open</button>
+            <button class="@btn-ghost">Skip</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="@stack-md">
+        <h2 class="@heading-lg">Measured savings</h2>
+        <p>
+          From the bundled benchmark corpus (<span class="@code-inline"
+            >shortwind bench --corpus</span
+          >), counted with the cl100k_base tokenizer:
+        </p>
+        <div class="@table-container">
+          <table class="@table">
+            <thead>
+              <tr>
+                <th class="@th">Metric</th>
+                <th class="@th">Shortwind</th>
+                <th class="@th">Expanded</th>
+                <th class="@th">Saved</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="@tr-hover">
+                <td class="@td">Class-string tokens</td>
+                <td class="@td">125</td>
+                <td class="@td">658</td>
+                <td class="@td"><strong>81.0%</strong></td>
+              </tr>
+              <tr class="@tr-hover">
+                <td class="@td">Whole-file LLM tokens</td>
+                <td class="@td">1,255</td>
+                <td class="@td">3,001</td>
+                <td class="@td"><strong>58.2%</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="@stack-md">
+        <h2 class="@heading-lg">Using the CDN expander</h2>
+        <p>
+          For one-off HTML files — Claude artifacts, demos, single-page
+          experiments — there is no install and no build step. One script tag
+          is the whole integration:
+        </p>
+        <pre class="@code-block">&lt;script src="https://shortwind.dev/expand.js" defer&gt;&lt;/script&gt;</pre>
+        <p>
+          On <span class="@code-inline">DOMContentLoaded</span> the script
+          walks the document, expands every
+          <span class="@code-inline">@recipe</span> in every
+          <span class="@code-inline">class</span> attribute, and stops. No
+          mutation observer, no overhead after first paint. It ships the
+          expander (~1KB gzipped) plus the default catalog of 100+ recipes,
+          ~6KB gzipped total.
+        </p>
+        <p>Need a custom palette? Point the script at a registry manifest:</p>
+        <pre class="@code-block">&lt;script
+  src="https://shortwind.dev/expand.js"
+  data-registry="https://my-registry.example/manifest.json"
+  defer
+&gt;&lt;/script&gt;</pre>
+        <div class="@callout">
+          <p>
+            Shipping a real site? Use the bundler plugin
+            (<span class="@code-inline">@shortwind/vite</span>,
+            <span class="@code-inline">@shortwind/next</span>, or
+            <span class="@code-inline">@shortwind/astro</span>) instead. It
+            expands recipes at build time, so production output ships zero
+            <span class="@code-inline">@</span> tokens and no runtime expander.
+          </p>
+        </div>
+      </section>
+
+      <div class="@divider-h"></div>
+
+      <footer class="@row-between">
+        <p class="@caption">
+          Built with the Shortwind CDN expander and Tailwind Play CDN — no
+          build step.
+        </p>
+        <div class="@row">
+          <a class="@link" href="https://shortwind.dev/docs/cdn">CDN docs</a>
+          <a class="@link" href="https://shortwind.dev">shortwind.dev</a>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>
