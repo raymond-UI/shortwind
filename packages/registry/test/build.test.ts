@@ -165,6 +165,35 @@ describe("buildRegistryPipeline", () => {
     ).toThrow(/Failed to parse|Registry resolution failed/);
   });
 
+  it("fails the build when a family's content changes without a version bump", async () => {
+    const f = await fixture({ "card.css": CARD_CSS }, { all: "*" });
+    cleanups.push(f.cleanup);
+    const lockPath = path.join(f.recipesDir, "..", "catalog.lock.json");
+    const opts = {
+      recipesDir: f.recipesDir,
+      presetsFile: f.presetsFile,
+      changelogsDir: f.changelogsDir,
+      outDir: f.outDir,
+      runtimeBundle: null,
+      runtimeVersion: "0.0.1",
+      versionLockPath: lockPath,
+    };
+    // first build bootstraps the ledger
+    buildRegistryPipeline(opts);
+    // change the body but keep card@0.0.1 → must fail
+    await writeFile(
+      path.join(f.recipesDir, "card.css"),
+      CARD_CSS.replace("rounded-lg border p-4", "rounded-xl border-2 p-6"),
+    );
+    expect(() => buildRegistryPipeline(opts)).toThrow(/without a version bump/);
+    // bumping the version clears it
+    await writeFile(
+      path.join(f.recipesDir, "card.css"),
+      CARD_CSS.replace("card@0.0.1", "card@0.0.2").replace("rounded-lg border p-4", "rounded-xl border-2 p-6"),
+    );
+    expect(() => buildRegistryPipeline(opts)).not.toThrow();
+  });
+
   it("rejects a recipe whose name collides with a reserved Tailwind @-utility", async () => {
     const f = await fixture({
       "surface.css": `/* shortwind: surface@0.0.1 sha:000000 */\n\n/* wrapper */\n@recipe container {\n  mx-auto max-w-6xl\n}\n`,

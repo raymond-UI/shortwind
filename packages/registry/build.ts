@@ -21,6 +21,10 @@ export type BuildOptions = {
   runtimeBundle: string | null;
   runtimeVersion: string;
   outDir: string;
+  // Path to the committed version ledger. When set, the build fails if a
+  // family's content changed without a version bump (and updates the ledger
+  // when a bump is legitimate). Omit to skip the check (e.g. in unit tests).
+  versionLockPath?: string;
 };
 
 export type ManifestFamily = {
@@ -83,6 +87,42 @@ function bodyWithoutHeader(source: string): string {
     return lines.slice(1).join("\n");
   }
   return source;
+}
+
+type VersionLedger = Record<string, { version: string; sha: string }>;
+
+// Fail the build if a family's body changed but its version header didn't —
+// the exact mistake that shipped a renamed recipe under an unchanged version
+// and broke `shortwind upgrade`. The ledger records the last {version, sha}
+// per family; a legitimate version bump updates it.
+function enforceVersionBumps(
+  families: Array<{ family: string; version: string; sha: string }>,
+  lockPath: string,
+): void {
+  const ledger: VersionLedger = existsSync(lockPath)
+    ? (JSON.parse(readFileSync(lockPath, "utf8")) as VersionLedger)
+    : {};
+
+  const violations: string[] = [];
+  const next: VersionLedger = {};
+  for (const { family, version, sha } of families) {
+    const prev = ledger[family];
+    if (prev && prev.sha !== sha && prev.version === version) {
+      violations.push(
+        `  ${family}: content changed but version is still ${version} — bump the @<version> in ${family}.css's header`,
+      );
+    }
+    next[family] = { version, sha };
+  }
+
+  if (violations.length > 0) {
+    throw new Error(`Family content changed without a version bump:\n${violations.join("\n")}`);
+  }
+
+  // Keep the ledger in sync (sorted for stable diffs).
+  const sorted: VersionLedger = {};
+  for (const k of Object.keys(next).sort()) sorted[k] = next[k]!;
+  writeFileSync(lockPath, JSON.stringify(sorted, null, 2) + "\n");
 }
 
 function familyVersion(opts: BuildOptions, family: string, source: string): string {
@@ -218,6 +258,10 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
       }
       allRecipes.push(r);
     }
+  }
+
+  if (opts.versionLockPath) {
+    enforceVersionBumps(familySources, opts.versionLockPath);
   }
 
   const built = buildRegistry(allRecipes);
@@ -365,6 +409,7 @@ if (isMain) {
     outDir: distDir,
     runtimeBundle,
     runtimeVersion,
+    versionLockPath: path.join(here, "catalog.lock.json"),
   });
 
   // Mirror into the web app's public dir so the site can still serve/browse the

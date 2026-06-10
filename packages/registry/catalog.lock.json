@@ -1,0 +1,78 @@
+{
+  "badge": {
+    "version": "0.0.1",
+    "sha": "8548b9a7305a0a59"
+  },
+  "button": {
+    "version": "0.0.1",
+    "sha": "777fa510c4ab4aeb"
+  },
+  "card": {
+    "version": "0.0.1",
+    "sha": "4813cef10cd21824"
+  },
+  "code": {
+    "version": "0.0.1",
+    "sha": "cc8d2b0bedb5b453"
+  },
+  "dialog": {
+    "version": "0.0.1",
+    "sha": "b4dbf853e99fce75"
+  },
+  "empty": {
+    "version": "0.0.1",
+    "sha": "003168e1b4a395c5"
+  },
+  "feedback": {
+    "version": "0.0.1",
+    "sha": "818868f6af179bcf"
+  },
+  "form": {
+    "version": "0.0.1",
+    "sha": "bc12a9cc520a2d85"
+  },
+  "icon": {
+    "version": "0.0.1",
+    "sha": "fab3b2d3a0c089fb"
+  },
+  "layout": {
+    "version": "0.0.1",
+    "sha": "48a2a7b6e1a5d7ad"
+  },
+  "list": {
+    "version": "0.0.1",
+    "sha": "f662887791fabb8d"
+  },
+  "media": {
+    "version": "0.0.1",
+    "sha": "dfc85633101b0637"
+  },
+  "navigation": {
+    "version": "0.0.1",
+    "sha": "73150057219b648a"
+  },
+  "progress": {
+    "version": "0.0.1",
+    "sha": "37210e32d2cd555f"
+  },
+  "skeleton": {
+    "version": "0.0.1",
+    "sha": "cd2db5c1c48b16d3"
+  },
+  "surface": {
+    "version": "0.0.2",
+    "sha": "31716e4cbe81f93f"
+  },
+  "table": {
+    "version": "0.0.1",
+    "sha": "4f3295935b2a647c"
+  },
+  "text": {
+    "version": "0.0.1",
+    "sha": "9c5d7ed7b1e3ef5a"
+  },
+  "tooltip": {
+    "version": "0.0.1",
+    "sha": "1be3af4165357dcd"
+  }
+}
