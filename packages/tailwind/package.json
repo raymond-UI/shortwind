@@ -1,6 +1,6 @@
 {
   "name": "@shortwind/tailwind",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Tailwind integration for Shortwind. Detects v3 vs v4 from package.json and registers via the correct plugin API.",
   "type": "module",
   "main": "./dist/index.js",
