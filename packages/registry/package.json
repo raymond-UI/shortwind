@@ -1,18 +1,34 @@
 {
-  "name": "@shortwind/registry",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Source-of-truth recipe files. Built into apps/web/public/registry/ before site deploy.",
+  "name": "@shortwind/catalog",
+  "version": "0.1.0-beta.2",
+  "description": "The Shortwind recipe catalog — built, versioned recipe files the CLI installs from.",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsx build.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@shortwind/core": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.21.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raymond-UI/shortwind.git",
+    "directory": "packages/registry"
+  },
+  "homepage": "https://shortwind.dev",
+  "bugs": {
+    "url": "https://github.com/raymond-UI/shortwind/issues"
   }
 }

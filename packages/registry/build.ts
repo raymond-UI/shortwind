@@ -1,5 +1,6 @@
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -345,7 +346,9 @@ if (isMain) {
   const recipesDir = path.join(here, "recipes");
   const presetsFile = path.join(here, "presets.json");
   const changelogsDir = path.join(here, "changelogs");
-  const outDir = path.resolve(here, "..", "..", "apps", "web", "public");
+  // Primary output is this package's own dist (what `@shortwind/catalog`
+  // publishes to npm). The pipeline writes everything under `<outDir>/registry`.
+  const distDir = path.join(here, "dist");
   const runtimeBundle = path.resolve(
     here,
     "..",
@@ -359,12 +362,19 @@ if (isMain) {
     recipesDir,
     presetsFile,
     changelogsDir,
-    outDir,
+    outDir: distDir,
     runtimeBundle,
     runtimeVersion,
   });
 
+  // Mirror into the web app's public dir so the site can still serve/browse the
+  // catalog. (Once the CLI defaults to the package, the HTTP endpoint is only
+  // for the catalog browser / BYO reference — see issue #33.)
+  const webRegistry = path.resolve(here, "..", "..", "apps", "web", "public", "registry");
+  rmSync(webRegistry, { recursive: true, force: true });
+  cpSync(path.join(distDir, "registry"), webRegistry, { recursive: true });
+
   console.log(
-    `[registry] wrote ${result.manifest.families.length} families to ${result.manifestPath}`,
+    `[catalog] wrote ${result.manifest.families.length} families to ${result.manifestPath} (+ mirrored to apps/web/public/registry)`,
   );
 }

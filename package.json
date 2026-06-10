@@ -34,7 +34,7 @@
       "@shortwind/vite",
       "@shortwind/next",
       "@shortwind/astro",
-      "@shortwind/registry"
+      "@shortwind/catalog"
     ]
   }
 }

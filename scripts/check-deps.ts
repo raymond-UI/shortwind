@@ -14,7 +14,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const LAYERS: Record<string, number> = {
   "@shortwind/core": 0,
   "@shortwind/tailwind": 1,
-  "@shortwind/registry": 1,
+  "@shortwind/catalog": 1,
   "@shortwind/vite": 2,
   "@shortwind/next": 2,
   "@shortwind/runtime": 2,

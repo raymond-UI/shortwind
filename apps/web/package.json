@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "pnpm --filter @shortwind/registry build && vite build && tsc",
+    "build": "pnpm --filter @shortwind/catalog build && vite build && tsc",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "wrangler:dev": "wrangler dev --port=3001",
