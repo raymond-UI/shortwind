@@ -39,13 +39,19 @@ type MinimalVitePlugin = {
 
 const DEFAULT_INCLUDE = /\.(?:tsx?|jsx?|vue|svelte|astro|html?|md|mdx)$/;
 
-const JSX_LIKE = new Set(["ts", "tsx", "js", "jsx", "vue", "svelte", "astro", "md", "mdx"]);
+// Real JSX/TSX (and MDX, which compiles to JSX) use `className` and parse with
+// the JSX-aware transform. Template formats — .astro, .vue, .svelte — and
+// .html/.htm are HTML-shaped: they use `class=` (not `className`) and are NOT
+// valid JSX, so the JSX AST parser can't read them and would silently leave
+// every `class="@recipe"` unexpanded. Those go through the html-mode expander,
+// which rewrites `class=` attributes by regex. (.md is markdown, not JSX; it
+// stays on the JSX path, where a parse failure is a safe no-op, to avoid
+// expanding `class="@..."` inside documentation code fences.)
+const JSX_LIKE = new Set(["ts", "tsx", "js", "jsx", "md", "mdx"]);
 
 function modeForId(id: string): "html" | "jsx" {
   const ext = path.extname(id).slice(1).toLowerCase();
-  if (ext === "html" || ext === "htm") return "html";
-  if (JSX_LIKE.has(ext)) return "jsx";
-  return "jsx";
+  return JSX_LIKE.has(ext) ? "jsx" : "html";
 }
 
 export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin[] {

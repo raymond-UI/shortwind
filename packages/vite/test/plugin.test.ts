@@ -81,6 +81,41 @@ describe("vite plugin", () => {
     expect(code).not.toMatch(/@btn-primary\b/);
   });
 
+  // .astro/.vue/.svelte are HTML-shaped templates: they use `class=`, not
+  // `className=`, and are NOT valid JSX. They must run through the html-mode
+  // expander — routing them to the JSX AST transform silently no-ops and ships
+  // literal `class="@recipe"` to the browser. Regression for that bug.
+  it("expands class= attributes in .astro templates (html mode, not JSX)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [transformPlugin] = shortwind({ cwd: dir });
+    const result = callTransform(
+      transformPlugin!,
+      `<header class="@card other-class"></header>`,
+      path.join(dir, "src", "components", "Header.astro"),
+    );
+    expect(result).not.toBeNull();
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).toMatch(/rounded/);
+    expect(code).toContain("other-class");
+    expect(code).not.toMatch(/@card\b/);
+  });
+
+  it("expands class= attributes in .vue templates (html mode, not JSX)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [transformPlugin] = shortwind({ cwd: dir });
+    const result = callTransform(
+      transformPlugin!,
+      `<template><div class="@card"></div></template>`,
+      path.join(dir, "src", "App.vue"),
+    );
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).not.toBeNull();
+    expect(code).not.toMatch(/@card\b/);
+    expect(code).toMatch(/rounded/);
+  });
+
   it("returns null for unrelated extensions", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
