@@ -99,7 +99,7 @@ function FamilySection({ family }: { family: CatalogFamily }) {
       <div className="@row-between mb-6 items-baseline">
         <h2 className="@heading-md capitalize">{family.name}</h2>
         <CopyButton
-          text={`npx shortwind add ${family.name}`}
+          text={`npx @shortwind/cli@beta add ${family.name}`}
           label="Copy install"
         />
       </div>

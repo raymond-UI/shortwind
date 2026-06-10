@@ -23,11 +23,12 @@ download is identical to plain Tailwind — Shortwind only shrinks the source.
 ## Install
 
 ```bash
-npx shortwind init
+npx @shortwind/cli@beta init
 ```
 
-The CLI scaffolds a `recipes/` directory, writes a starter `shortwind.config.json`,
-generates a `SKILL.md` so your agents know the recipe palette, and wires the
-plugin into your bundler.
+The CLI (the `@shortwind/cli` package — beta for now) detects your bundler, installs
+the matching adapter, copies a `recipes/` directory you own, scaffolds a default
+theme, generates a `SKILL.md` so your agents know the recipe palette, and wires the
+plugin into your bundler config.
 
 See [install](/docs/install) for the full walkthrough.

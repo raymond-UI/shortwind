@@ -1,22 +1,27 @@
 ---
 title: Install
-description: Run shortwind init and wire it into your bundler.
+description: Run @shortwind/cli init and wire it into your bundler.
 order: 1
 ---
 
 # Install
 
 ```bash
-npx shortwind init
+npx @shortwind/cli@beta init
 ```
 
-`init` is interactive. It will:
+Shortwind's CLI is the **`@shortwind/cli`** package — it provides the `shortwind`
+command. It's in beta, so install with the `@beta` tag (or `npm i -D @shortwind/cli@beta`
+to use the `shortwind` command directly in your scripts).
 
-1. Detect your bundler (Vite, Next.js, Astro, or a Tailwind project).
+`init` detects your bundler and does the whole setup:
+
+1. Detect your bundler (Vite, Next.js, Astro, or a Tailwind project) and install the matching adapter — `@shortwind/vite`, `@shortwind/next`, or `@shortwind/astro`. (`@shortwind/core` comes along transitively; you never install it directly.)
 2. Write `shortwind.config.json` at the repo root.
-3. Create a `recipes/` directory with starter recipes.
-4. Generate `SKILL.md` — a recipe palette your coding agents can read.
+3. Copy the recipe catalog into a `recipes/` directory — yours to edit.
+4. Scaffold a default theme so recipes render with color on first run.
 5. Patch your bundler config with the right plugin import.
+6. Generate `skills/shortwind/SKILL.md` — a recipe palette your coding agents can read.
 
 ## What the plugin does
 

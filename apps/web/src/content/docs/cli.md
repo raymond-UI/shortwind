@@ -6,6 +6,16 @@ order: 6
 
 # CLI reference
 
+The CLI ships as **`@shortwind/cli`** (beta) and provides the `shortwind` command.
+Run it one-off with `npx @shortwind/cli@beta <command>`, or install it
+(`npm i -D @shortwind/cli@beta`) to use the `shortwind` command in scripts. The
+commands below assume it's installed.
+
+## `shortwind new <family>`
+
+Scaffold a new custom recipe family file (`recipes/<family>.css`) with a header,
+an `@guide` stub, and an example recipe, then regenerate `SKILL.md`.
+
 ## `shortwind init`
 
 Scaffold Shortwind in the current project. Interactive — detects your bundler,
