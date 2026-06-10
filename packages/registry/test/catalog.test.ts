@@ -73,7 +73,10 @@ describe("catalog", () => {
       if (!result.ok) return;
       expect(result.value.header).not.toBeNull();
       expect(result.value.header?.family).toEqual(parsed.family);
-      expect(result.value.header?.version).toEqual("0.0.1");
+      // Versions are per-family and bump independently when a family's content
+      // changes (so `shortwind upgrade` can detect drift) — just require a valid
+      // semver, not a fixed value.
+      expect(result.value.header?.version).toMatch(/^\d+\.\d+\.\d+$/);
       expect(result.value.header?.sha).toEqual("000000");
     });
 
