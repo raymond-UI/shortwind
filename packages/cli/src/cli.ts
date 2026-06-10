@@ -403,6 +403,17 @@ async function promptForPreset(): Promise<string> {
   return choice;
 }
 
+function installCmd(pm: Awaited<ReturnType<typeof init>>["packageManager"]): string {
+  switch (pm) {
+    case "bun":
+      return "bun add -d";
+    case "npm":
+      return "npm install -D";
+    default:
+      return `${pm} add -D`;
+  }
+}
+
 function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
   p.note(
     [
@@ -411,6 +422,7 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
       `package manager:   ${result.packageManager}`,
       `families copied:   ${result.installedFamilies.length}`,
       `families skipped:  ${result.skippedFamilies.length}`,
+      `adapters:          ${result.installOk ? result.installedPackages.join(", ") || "none" : "install failed — see below"}`,
       ``,
       `config:            ${result.configPath}`,
       `vscode settings:   ${result.vscodePath}`,
@@ -422,6 +434,16 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
     ].join("\n"),
     "shortwind init",
   );
+  if (!result.installOk) {
+    const v = cliVersion();
+    const specs = result.installedPackages.map((p) => (v ? `${p}@${v}` : p)).join(" ");
+    p.log.warn(
+      `Couldn't auto-install adapters (your recipes and config were still scaffolded).\n` +
+        `Finish by installing them yourself:\n\n` +
+        `  ${installCmd(result.packageManager)} ${specs}\n\n` +
+        `(${result.installError ?? "unknown error"})`,
+    );
+  }
   if (result.bundlerConfigAction === "manual" && result.bundlerConfigSnippet) {
     p.log.warn(`Add the plugin to your bundler config:\n\n${result.bundlerConfigSnippet}`);
   }

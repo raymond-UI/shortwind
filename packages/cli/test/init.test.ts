@@ -90,6 +90,30 @@ describe("init", () => {
     expect(bare).toEqual(["@shortwind/tailwind", "@shortwind/vite"].sort());
   });
 
+  it("still scaffolds recipes/config/SKILL when the adapter install fails", async () => {
+    const dir = await setupProject({ name: "x", version: "0.0.0", devDependencies: { vite: "^7" } });
+    cleanup.push(dir);
+
+    // mimic pnpm exiting non-zero (e.g. ERR_PNPM_IGNORED_BUILDS) — must not abort
+    const failing: InstallPackages = async () => {
+      throw new Error("pnpm add -D … exited 1");
+    };
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: failing,
+    });
+
+    expect(result.installOk).toBe(false);
+    expect(result.installError).toMatch(/exited 1/);
+    // the core scaffold still happened
+    expect(result.installedFamilies.length).toBeGreaterThan(0);
+    expect(existsSync(result.configPath)).toBe(true);
+    expect(existsSync(result.skillPath)).toBe(true);
+    expect(existsSync(path.join(dir, "recipes", ".shortwind-lock.json"))).toBe(true);
+  });
+
   it("writes shortwind.config.json with registry and recipesDir", async () => {
     const dir = await setupProject();
     cleanup.push(dir);

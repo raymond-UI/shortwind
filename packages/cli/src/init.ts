@@ -54,6 +54,8 @@ export type InitResult = {
   bundlerConfigSnippet?: string;
   agentsFilePath: string | null;
   agentsFileAction: AgentsFileAction;
+  installOk: boolean;
+  installError: string | null;
 };
 
 export async function init(options: InitOptions): Promise<InitResult> {
@@ -73,9 +75,20 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const version = cliVersion();
   const specs = version ? pkgs.map((p) => `${p}@${version}`) : pkgs;
 
+  // The adapter install is a convenience, not the point — copying recipes and
+  // generating SKILL.md is. A peer-dep conflict or pnpm's non-zero exit on
+  // ERR_PNPM_IGNORED_BUILDS must not abort the whole scaffold, so failures here
+  // are surfaced (installOk/installError) rather than thrown.
   const installer = options.installPackages ?? defaultInstall;
+  let installOk = true;
+  let installError: string | null = null;
   if (specs.length > 0) {
-    await installer(shape.packageManager, specs, cwd);
+    try {
+      await installer(shape.packageManager, specs, cwd);
+    } catch (err) {
+      installOk = false;
+      installError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   const recipesDir = path.join(cwd, "recipes");
@@ -124,6 +137,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
     ...(bundlerConfig.snippet ? { bundlerConfigSnippet: bundlerConfig.snippet } : {}),
     agentsFilePath: agentsFile.path,
     agentsFileAction: agentsFile.action,
+    installOk,
+    installError,
   };
 }
 
