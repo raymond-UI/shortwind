@@ -15,6 +15,7 @@ import {
 import { readLockfile, writeLockfile } from "./lockfile.js";
 import { scaffoldTheme, type ThemeAction } from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
+import { wireAgentsInstructions, type AgentsFileAction } from "./agents-file.js";
 
 // Default to the catalog bundled in the CLI — no network, always available.
 // Pass --registry <url> (or a path) for a custom/BYO registry.
@@ -50,6 +51,8 @@ export type InitResult = {
   bundlerConfigPath: string | null;
   bundlerConfigAction: BundlerWireAction;
   bundlerConfigSnippet?: string;
+  agentsFilePath: string | null;
+  agentsFileAction: AgentsFileAction;
 };
 
 export async function init(options: InitOptions): Promise<InitResult> {
@@ -91,6 +94,9 @@ export async function init(options: InitOptions): Promise<InitResult> {
   // return a snippet for the summary).
   const bundlerConfig = await wireBundler(cwd, shape.bundler);
 
+  // Point coding agents at the recipe catalog with a one-liner.
+  const agentsFile = await wireAgentsInstructions(cwd, skillPath);
+
   return {
     packageManager: shape.packageManager,
     preset: options.preset,
@@ -108,6 +114,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
     bundlerConfigPath: bundlerConfig.configPath,
     bundlerConfigAction: bundlerConfig.action,
     ...(bundlerConfig.snippet ? { bundlerConfigSnippet: bundlerConfig.snippet } : {}),
+    agentsFilePath: agentsFile.path,
+    agentsFileAction: agentsFile.action,
   };
 }
 

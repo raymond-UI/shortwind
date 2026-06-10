@@ -403,6 +403,7 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
       `SKILL.md:          ${result.skillPath}`,
       `theme:             ${describeTheme(result)}`,
       `bundler config:    ${describeBundlerConfig(result)}`,
+      `agent guide:       ${describeAgentsFile(result)}`,
     ].join("\n"),
     "shortwind init",
   );
@@ -410,6 +411,17 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
     p.log.warn(`Add the plugin to your bundler config:\n\n${result.bundlerConfigSnippet}`);
   }
   p.outro(`Next: run \`${result.packageManager} dev\` to start watching.`);
+}
+
+function describeAgentsFile(result: Awaited<ReturnType<typeof init>>): string {
+  switch (result.agentsFileAction) {
+    case "created":
+      return `wrote ${result.agentsFilePath}`;
+    case "appended":
+      return `added recipe pointer to ${result.agentsFilePath}`;
+    case "skipped":
+      return `pointer already in ${result.agentsFilePath}`;
+  }
 }
 
 function describeBundlerConfig(result: Awaited<ReturnType<typeof init>>): string {
