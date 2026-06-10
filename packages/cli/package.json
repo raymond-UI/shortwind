@@ -15,6 +15,7 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "gen:bench": "tsx scripts/generate-bench-recipes.ts",
+    "gen:catalog": "tsx scripts/generate-catalog.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

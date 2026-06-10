@@ -31,6 +31,38 @@ export function createRegistrySource(origin: string): RegistrySource {
   return fileSource(origin);
 }
 
+// The default catalog, embedded in the CLI (see catalog.generated.ts). Resolves
+// presets/families/recipes with zero network, so `init`/`add` always work even
+// offline or if a registry host is down — the failure that made an agent
+// reimplement Shortwind from scratch in a dogfood run.
+export const BUNDLED_ORIGIN = "bundled:@shortwind/catalog";
+
+export function bundledSource(): RegistrySource {
+  // Imported lazily so the (large) generated module only loads when the bundled
+  // catalog is actually used, not for every CLI invocation.
+  let cache: Promise<typeof import("./catalog.generated.js")> | null = null;
+  const load = (): Promise<typeof import("./catalog.generated.js")> => {
+    cache ??= import("./catalog.generated.js");
+    return cache;
+  };
+  return {
+    origin: BUNDLED_ORIGIN,
+    async loadPresets() {
+      return (await load()).CATALOG_PRESETS;
+    },
+    async loadFamily(family) {
+      assertValidFamilyName(family);
+      const { CATALOG_RECIPES } = await load();
+      const css = CATALOG_RECIPES[family];
+      if (css === undefined) throw new Error(`unknown family: ${family}`);
+      return css;
+    },
+    async listAllFamilies() {
+      return [...(await load()).CATALOG_FAMILIES];
+    },
+  };
+}
+
 function fileSource(origin: string): RegistrySource {
   const root = origin.startsWith("file://") ? fileURLToPath(origin) : origin;
   return {
