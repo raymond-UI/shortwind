@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Star Freight — a Shortwind CDN game</title>
+
+    <!-- Shortwind CDN expander (https://shortwind.dev/docs/cdn).
+         Expands the static shell once at DOMContentLoaded, and exposes
+         window.shortwind.run(root) — which this game calls after every
+         dynamic render, since the one-shot expander has no mutation
+         observer by design. -->
+    <script src="https://shortwind.dev/expand.js" defer></script>
+
+    <!-- Tailwind Play CDN compiles the expanded utilities. Its own
+         MutationObserver picks up classes produced by later renders. -->
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+
+    <style type="text/tailwindcss">
+      /* Class-based dark mode so the catalog's dark: variants follow the
+         page theme instead of the OS preference. */
+      @custom-variant dark (&:where(.dark, .dark *));
+
+      :root {
+        --background: oklch(0.16 0.025 262);
+        --foreground: oklch(0.95 0.012 250);
+        --card: oklch(0.21 0.03 262);
+        --card-foreground: oklch(0.95 0.012 250);
+        --popover: oklch(0.24 0.035 262);
+        --popover-foreground: oklch(0.95 0.012 250);
+        --primary: oklch(0.8 0.13 195);
+        --primary-foreground: oklch(0.16 0.04 230);
+        --secondary: oklch(0.28 0.035 262);
+        --secondary-foreground: oklch(0.95 0.012 250);
+        --muted: oklch(0.27 0.03 262);
+        --muted-foreground: oklch(0.68 0.02 255);
+        --accent: oklch(0.82 0.14 85);
+        --accent-foreground: oklch(0.2 0.05 80);
+        --destructive: oklch(0.66 0.21 25);
+        --destructive-foreground: oklch(0.99 0 0);
+        --border: oklch(0.32 0.025 262);
+        --input: oklch(0.32 0.025 262);
+        --ring: oklch(0.8 0.13 195);
+      }
+      @theme inline {
+        --color-background: var(--background);
+        --color-foreground: var(--foreground);
+        --color-card: var(--card);
+        --color-card-foreground: var(--card-foreground);
+        --color-popover: var(--popover);
+        --color-popover-foreground: var(--popover-foreground);
+        --color-primary: var(--primary);
+        --color-primary-foreground: var(--primary-foreground);
+        --color-secondary: var(--secondary);
+        --color-secondary-foreground: var(--secondary-foreground);
+        --color-muted: var(--muted);
+        --color-muted-foreground: var(--muted-foreground);
+        --color-accent: var(--accent);
+        --color-accent-foreground: var(--accent-foreground);
+        --color-destructive: var(--destructive);
+        --color-destructive-foreground: var(--destructive-foreground);
+        --color-border: var(--border);
+        --color-input: var(--input);
+        --color-ring: var(--ring);
+      }
+    </style>
+
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        margin: 0;
+        background:
+          radial-gradient(1px 1px at 12% 28%, rgba(255 255 255 / 0.5) 50%, transparent 51%),
+          radial-gradient(1px 1px at 67% 12%, rgba(255 255 255 / 0.4) 50%, transparent 51%),
+          radial-gradient(1.5px 1.5px at 84% 64%, rgba(255 255 255 / 0.45) 50%, transparent 51%),
+          radial-gradient(1px 1px at 38% 78%, rgba(255 255 255 / 0.35) 50%, transparent 51%),
+          radial-gradient(1px 1px at 92% 33%, rgba(255 255 255 / 0.3) 50%, transparent 51%),
+          radial-gradient(1.5px 1.5px at 23% 55%, rgba(255 255 255 / 0.35) 50%, transparent 51%),
+          var(--background);
+        color: var(--foreground);
+      }
+      button { font: inherit; }
+    </style>
+  </head>
+
+  <!-- Every @class on this page (static below, or produced by render() in
+       the script) is a Shortwind recipe from the default catalog. -->
+  <body class="@surface @body min-h-screen">
+    <div class="@banner">
+      ★ STAR FREIGHT — pay off the Guild before day 30, captain.
+    </div>
+
+    <main class="@container @stack-md py-6">
+      <header class="@row-between flex-wrap">
+        <div class="@stack-xs">
+          <h1 class="@heading-lg">Star Freight</h1>
+          <p class="@caption">
+            Built with the Shortwind CDN expander — view source: it's all
+            <span class="@code-inline">@recipes</span>.
+          </p>
+        </div>
+        <nav class="@nav" id="tab-bar" aria-label="Game sections"></nav>
+      </header>
+
+      <section class="@card-elevated" id="stats-panel" aria-live="polite"></section>
+
+      <section class="@stack-md" id="main-panel"></section>
+
+      <div class="@divider-h"></div>
+
+      <footer class="@row-between flex-wrap">
+        <p class="@caption">
+          <span class="@kbd">1</span>–<span class="@kbd">4</span> switch tabs ·
+          buy low at producers, sell high where it's scarce ·
+          debt compounds 3% per day of travel
+        </p>
+        <a class="@link text-xs" href="https://shortwind.dev/docs/cdn">Shortwind CDN docs</a>
+      </footer>
+    </main>
+
+    <!-- Toast stack and dialog root: filled by render code, expanded by
+         window.shortwind.run() on each insert. -->
+    <div id="toast-root" class="pointer-events-none fixed top-4 right-4 z-50 flex w-80 max-w-[90vw] flex-col gap-2"></div>
+    <div id="dialog-root"></div>
+
+    <script>
+      "use strict";
+
+      // ---------------------------------------------------------------
+      // Shortwind glue: after any dynamic render, re-expand that subtree.
+      // The CDN expander is one-shot (DOMContentLoaded) by design, but it
+      // exposes window.shortwind.run(root) for exactly this case.
+      // ---------------------------------------------------------------
+      function sw(root) {
+        if (window.shortwind) window.shortwind.run(root);
+      }
+      function render(el, html) {
+        el.innerHTML = html;
+        sw(el);
+      }
+
+      // ---------------------------------------------------------------
+      // Static data
+      // ---------------------------------------------------------------
+      const GOODS = [
+        { id: "ice",    name: "Water Ice",       base: 14,  blurb: "Cheap ballast. Frontier stations pay dearly." },
+        { id: "coffee", name: "Void Coffee",     base: 32,  blurb: "Grown on Haven's Rest. Drunk everywhere." },
+        { id: "alloy",  name: "Alloy Ingots",    base: 48,  blurb: "Mined at Kepler Verge, devoured by the Forge." },
+        { id: "med",    name: "Medkits",         base: 85,  blurb: "Made in core-world factories. Scarce out far." },
+        { id: "cores",  name: "Quantum Cores",   base: 230, blurb: "The Forge stamps them out. Miners need them." },
+        { id: "relics", name: "Relic Artifacts", base: 520, blurb: "Dug up on the Drift. Meridian collectors swoon." },
+      ];
+
+      const STATIONS = [
+        { name: "Meridian Station", tag: "Core world",  bias: { ice: 1.1,  coffee: 1.0, alloy: 1.0,  med: 0.7,  cores: 1.05, relics: 1.45 } },
+        { name: "Kepler Verge",     tag: "Mining belt", bias: { ice: 0.85, coffee: 1.1, alloy: 0.6,  med: 1.2,  cores: 1.35, relics: 1.0  } },
+        { name: "Outer Drift",      tag: "Frontier",    bias: { ice: 1.5,  coffee: 1.3, alloy: 1.1,  med: 1.5,  cores: 1.1,  relics: 0.6  } },
+        { name: "Haven's Rest",     tag: "Agri & spa",  bias: { ice: 0.9,  coffee: 0.6, alloy: 1.05, med: 1.0,  cores: 1.0,  relics: 1.1  } },
+        { name: "The Forge",        tag: "Industrial",  bias: { ice: 1.0,  coffee: 1.15, alloy: 1.3, med: 1.1,  cores: 0.65, relics: 1.0  } },
+      ];
+
+      // Jump distance between stations. Days spent = distance,
+      // fuel burned = distance * 14.
+      const DIST = [
+        [0, 1, 3, 2, 1],
+        [1, 0, 2, 3, 2],
+        [3, 2, 0, 2, 3],
+        [2, 3, 2, 0, 1],
+        [1, 2, 3, 1, 0],
+      ];
+      const FUEL_PER_JUMP = 14;
+      const FUEL_PRICE = 3;
+      const REPAIR_PRICE = 5;
+      const MAX_DAY = 30;
+      const INTEREST = 0.03;
+
+      const UPGRADES = [
+        { id: "pods",    name: "Cargo Pods",     cost: 900,  desc: "+12 cargo capacity. Stackable twice.", max: 2 },
+        { id: "tank",    name: "Auxiliary Tank", cost: 700,  desc: "+40 max fuel. Longer routes, fewer detours.", max: 1 },
+        { id: "shields", name: "Shield Array",   cost: 1200, desc: "Blunts pirates and flares. Stackable twice.", max: 2 },
+        { id: "license", name: "Guild License",  cost: 1500, desc: "Registered trader: +8% on every sale.", max: 1 },
+      ];
+
+      const TABS = [
+        { id: "market", label: "Market" },
+        { id: "starmap", label: "Starmap" },
+        { id: "ship", label: "Ship" },
+        { id: "log", label: "Captain's Log" },
+      ];
+
+      // ---------------------------------------------------------------
+      // State
+      // ---------------------------------------------------------------
+      let state;
+
+      function newGame() {
+        state = {
+          day: 1,
+          credits: 1000,
+          debt: 8000,
+          station: 0,
+          fuel: 100,
+          fuelMax: 100,
+          hull: 100,
+          cargoMax: 24,
+          upgrades: { pods: 0, tank: 0, shields: 0, license: 0 },
+          cargo: {},     // goodId -> qty
+          paid: {},      // goodId -> total credits spent (cost basis)
+          prices: [],    // station -> goodId -> price
+          prevPrices: [],
+          tab: "market",
+          log: [],
+          busy: false,
+          over: false,
+        };
+        rollAllPrices();
+        addLog("info", "Day 1 — docked at Meridian Station. The Guild wants 8,000 cr by day 30.");
+        rerender();
+      }
+
+      function rollStationPrices(si) {
+        const out = {};
+        for (const g of GOODS) {
+          const noise = 0.75 + Math.random() * 0.5;
+          out[g.id] = Math.max(2, Math.round(g.base * STATIONS[si].bias[g.id] * noise));
+        }
+        return out;
+      }
+      function rollAllPrices() {
+        state.prevPrices = state.prices;
+        state.prices = STATIONS.map((_, si) => rollStationPrices(si));
+      }
+
+      // ---------------------------------------------------------------
+      // Derived values
+      // ---------------------------------------------------------------
+      const cargoUsed = () => Object.values(state.cargo).reduce((a, b) => a + b, 0);
+      const cargoValue = () =>
+        Object.entries(state.cargo).reduce((sum, [id, qty]) => sum + qty * state.prices[state.station][id], 0);
+      const netWorth = () => state.credits + cargoValue() - state.debt;
+      const sellPrice = (id) => {
+        const p = state.prices[state.station][id];
+        return state.upgrades.license ? Math.round(p * 1.08) : p;
+      };
+      const cr = (n) => n.toLocaleString("en-US") + " cr";
+
+      // ---------------------------------------------------------------
+      // Rendering
+      // ---------------------------------------------------------------
+      const $ = (id) => document.getElementById(id);
+
+      function rerender() {
+        renderTabs();
+        renderStats();
+        renderMain();
+      }
+
+      function renderTabs() {
+        render(
+          $("tab-bar"),
+          TABS.map(
+            (t, i) => `
+            <button class="${t.id === state.tab ? "@tab-active" : "@tab"}"
+                    data-action="tab" data-tab="${t.id}">
+              ${t.label}
+              <span class="@kbd">${i + 1}</span>
+            </button>`
+          ).join("")
+        );
+      }
+
+      function bar(label, value, max, extra) {
+        const pct = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
+        const tone = pct < 25 ? "bg-destructive" : pct < 50 ? "bg-accent" : "";
+        return `
+          <div class="@stack-xs min-w-40 flex-1">
+            <div class="@row-between">
+              <span class="@caption">${label}</span>
+              <span class="@caption">${value}/${max}${extra ?? ""}</span>
+            </div>
+            <div class="@progress-track">
+              <div class="@progress-bar ${tone}" style="width:${pct}%"></div>
+            </div>
+          </div>`;
+      }
+
+      function renderStats() {
+        const worth = netWorth();
+        render(
+          $("stats-panel"),
+          `
+          <div class="@stack-sm">
+            <div class="@row-between flex-wrap">
+              <div class="@row flex-wrap">
+                <span class="@badge-info">Day ${state.day} / ${MAX_DAY}</span>
+                <span class="@badge-outline">📍 ${STATIONS[state.station].name}</span>
+                <span class="${worth >= 0 ? "@badge-success" : "@badge-danger"}">
+                  Net worth ${cr(worth)}
+                </span>
+              </div>
+              <div class="@row">
+                <span class="@heading-sm">${cr(state.credits)}</span>
+                <span class="@badge-danger">Debt ${cr(state.debt)}</span>
+              </div>
+            </div>
+            <div class="@row flex-wrap gap-4">
+              ${bar("Fuel", state.fuel, state.fuelMax)}
+              ${bar("Hull", state.hull, 100)}
+              ${bar("Cargo", cargoUsed(), state.cargoMax)}
+            </div>
+          </div>`
+        );
+      }
+
+      function renderMain() {
+        if (state.busy) return; // travel animation owns the panel
+        const views = { market: marketView, starmap: starmapView, ship: shipView, log: logView };
+        render($("main-panel"), views[state.tab]());
+      }
+
+      // ----- Market ----------------------------------------------------
+      function trendBadge(id) {
+        const prev = state.prevPrices[state.station]?.[id];
+        const now = state.prices[state.station][id];
+        if (!prev || prev === now) return `<span class="@badge-outline">→ flat</span>`;
+        return now > prev
+          ? `<span class="@badge-danger">▲ +${now - prev}</span>`
+          : `<span class="@badge-success">▼ −${prev - now}</span>`;
+      }
+      function dealBadge(id) {
+        const fair = GOODS.find((g) => g.id === id).base * STATIONS[state.station].bias[id];
+        const now = state.prices[state.station][id];
+        if (now < fair * 0.88) return `<span class="@badge-success">bargain</span>`;
+        if (now > fair * 1.12) return `<span class="@badge-warning">steep</span>`;
+        return "";
+      }
+
+      function marketView() {
+        const st = STATIONS[state.station];
+        const rows = GOODS.map((g) => {
+          const price = state.prices[state.station][g.id];
+          const owned = state.cargo[g.id] ?? 0;
+          const basis = owned ? Math.round((state.paid[g.id] ?? 0) / owned) : 0;
+          const canBuy = state.credits >= price && cargoUsed() < state.cargoMax;
+          const profit = owned ? (sellPrice(g.id) - basis) * owned : 0;
+          return `
+            <tr class="@tr-hover">
+              <td class="@td">
+                <div class="@stack-xs">
+                  <span class="@label">${g.name}</span>
+                  <span class="@caption hidden sm:block">${g.blurb}</span>
+                </div>
+              </td>
+              <td class="@td whitespace-nowrap">
+                <div class="@row">${cr(price)} ${trendBadge(g.id)} ${dealBadge(g.id)}</div>
+              </td>
+              <td class="@td whitespace-nowrap">
+                ${
+                  owned
+                    ? `<div class="@stack-xs">
+                         <span>${owned} unit${owned > 1 ? "s" : ""} @ ~${basis}</span>
+                         <span class="${profit >= 0 ? "@badge-success" : "@badge-danger"}">
+                           ${profit >= 0 ? "+" : ""}${cr(profit)} if sold
+                         </span>
+                       </div>`
+                    : `<span class="@muted">—</span>`
+                }
+              </td>
+              <td class="@td">
+                <div class="@row-end flex-wrap">
+                  <button class="@btn-secondary-sm" data-action="buy" data-good="${g.id}" data-qty="1" ${canBuy ? "" : "disabled"}>Buy 1</button>
+                  <button class="@btn-secondary-sm" data-action="buy" data-good="${g.id}" data-qty="max" ${canBuy ? "" : "disabled"}>Max</button>
+                  <button class="@btn-primary-sm" data-action="sell" data-good="${g.id}" data-qty="1" ${owned ? "" : "disabled"}>Sell 1</button>
+                  <button class="@btn-primary-sm" data-action="sell" data-good="${g.id}" data-qty="all" ${owned ? "" : "disabled"}>All</button>
+                </div>
+              </td>
+            </tr>`;
+        }).join("");
+
+        return `
+          <div class="@card @stack-sm">
+            <div class="@card-header @row-between flex-wrap">
+              <div class="@stack-xs">
+                <h2 class="@heading-md">${st.name} commodities exchange</h2>
+                <p class="@muted">${st.tag} — prices reroll every day you spend in transit.</p>
+              </div>
+              ${state.upgrades.license ? `<span class="@badge-info">Guild License: +8% on sales</span>` : ""}
+            </div>
+            <div class="@table-container">
+              <table class="@table @table-zebra">
+                <thead>
+                  <tr>
+                    <th class="@th">Commodity</th>
+                    <th class="@th">Price here</th>
+                    <th class="@th">In hold</th>
+                    <th class="@th text-right">Trade</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>`;
+      }
+
+      // ----- Starmap ---------------------------------------------------
+      function starmapView() {
+        const cards = STATIONS.map((st, i) => {
+          if (i === state.station) {
+            return `
+              <div class="@card-flat @stack-xs">
+                <div class="@row-between">
+                  <h3 class="@heading-sm">${st.name}</h3>
+                  <span class="@badge-info">docked</span>
+                </div>
+                <p class="@muted">${st.tag}</p>
+              </div>`;
+          }
+          const dist = DIST[state.station][i];
+          const fuel = dist * FUEL_PER_JUMP;
+          const ok = state.fuel >= fuel;
+          const hot = GOODS.filter((g) => st.bias[g.id] >= 1.3).map((g) => g.name);
+          const cheap = GOODS.filter((g) => st.bias[g.id] <= 0.7).map((g) => g.name);
+          return `
+            <div class="@card-interactive @stack-sm" data-action="travel" data-dest="${i}" role="button" tabindex="0">
+              <div class="@row-between">
+                <h3 class="@heading-sm">${st.name}</h3>
+                <span class="@badge">${st.tag}</span>
+              </div>
+              <div class="@row flex-wrap">
+                <span class="@badge-outline">${dist} day${dist > 1 ? "s" : ""}</span>
+                <span class="${ok ? "@badge-outline" : "@badge-danger"}">${fuel} fuel</span>
+              </div>
+              <div class="@stack-xs">
+                ${hot.length ? `<span class="@caption">Pays well: ${hot.join(", ")}</span>` : ""}
+                ${cheap.length ? `<span class="@caption">Sells cheap: ${cheap.join(", ")}</span>` : ""}
+              </div>
+              <div class="@card-footer">
+                <button class="@btn-primary-sm" data-action="travel" data-dest="${i}" ${ok && !state.over ? "" : "disabled"}>
+                  Jump
+                </button>
+              </div>
+            </div>`;
+        }).join("");
+
+        return `
+          <div class="@stack-md">
+            <div class="@alert-warning">
+              <span>⚠</span>
+              <p>Every jump burns a day and the Guild's 3% daily interest with it.
+                 Pirates patrol the lanes — shields help.</p>
+            </div>
+            <div class="@grid-3">${cards}</div>
+          </div>`;
+      }
+
+      function travelingView(dest, dist) {
+        return `
+          <div class="@card @stack-md">
+            <div class="@row">
+              <span class="@spinner"></span>
+              <h2 class="@heading-md">Jumping to ${STATIONS[dest].name}…</h2>
+              <span class="@badge-outline">${dist} day${dist > 1 ? "s" : ""} in the black</span>
+            </div>
+            <div class="@stack-sm">
+              <div class="@skeleton-text w-3/4"></div>
+              <div class="@skeleton-text w-1/2"></div>
+              <div class="@skeleton h-24 w-full"></div>
+            </div>
+          </div>`;
+      }
+
+      // ----- Ship ------------------------------------------------------
+      function shipView() {
+        const holdRows = Object.entries(state.cargo).filter(([, q]) => q > 0);
+        const hold = holdRows.length
+          ? `<div class="@list-bordered">
+               ${holdRows
+                 .map(([id, qty]) => {
+                   const g = GOODS.find((x) => x.id === id);
+                   return `<div class="@list-item @row-between">
+                             <span>${g.name}</span>
+                             <span class="@badge">${qty} units</span>
+                           </div>`;
+                 })
+                 .join("")}
+             </div>`
+          : `<div class="@empty">
+               <div class="@empty-icon">∅</div>
+               <p class="@empty-title">Hold is empty</p>
+               <p class="@empty-description">Buy cargo at the market — an empty hold earns nothing and the interest clock keeps running.</p>
+             </div>`;
+
+        const fuelNeed = state.fuelMax - state.fuel;
+        const hullNeed = 100 - state.hull;
+        const upgradeCards = UPGRADES.map((u) => {
+          const owned = state.upgrades[u.id];
+          const maxed = owned >= u.max;
+          const afford = state.credits >= u.cost;
+          return `
+            <div class="@card @stack-sm">
+              <div class="@row-between">
+                <h3 class="@heading-sm">${u.name}</h3>
+                ${owned ? `<span class="@badge-success">owned ×${owned}</span>` : `<span class="@badge-outline">${cr(u.cost)}</span>`}
+              </div>
+              <p class="@muted">${u.desc}</p>
+              <div class="@card-footer">
+                <button class="@btn-secondary-sm" data-action="upgrade" data-id="${u.id}"
+                        ${maxed || !afford || state.over ? "disabled" : ""}>
+                  ${maxed ? "Maxed out" : `Install — ${cr(u.cost)}`}
+                </button>
+              </div>
+            </div>`;
+        }).join("");
+
+        return `
+          <div class="@stack-md">
+            <div class="@grid-2">
+              <div class="@card @stack-sm">
+                <div class="@card-header"><h2 class="@heading-md">Services — ${STATIONS[state.station].name}</h2></div>
+                <div class="@row-between flex-wrap">
+                  <span>Refuel ${fuelNeed} units</span>
+                  <button class="@btn-secondary-sm" data-action="refuel" ${fuelNeed && state.credits >= FUEL_PRICE && !state.over ? "" : "disabled"}>
+                    ${cr(Math.min(fuelNeed, Math.floor(state.credits / FUEL_PRICE)) * FUEL_PRICE)}
+                  </button>
+                </div>
+                <div class="@row-between flex-wrap">
+                  <span>Repair ${hullNeed} hull</span>
+                  <button class="@btn-secondary-sm" data-action="repair" ${hullNeed && state.credits >= REPAIR_PRICE && !state.over ? "" : "disabled"}>
+                    ${cr(Math.min(hullNeed, Math.floor(state.credits / REPAIR_PRICE)) * REPAIR_PRICE)}
+                  </button>
+                </div>
+                <div class="@divider-h"></div>
+                <div class="@callout @stack-sm">
+                  <div class="@row-between flex-wrap">
+                    <span class="@label">Guild debt: ${cr(state.debt)}</span>
+                    <div class="@row">
+                      <button class="@btn-primary-sm" data-action="pay" data-amt="500" ${state.credits >= 500 && state.debt > 0 && !state.over ? "" : "disabled"}>Pay 500</button>
+                      <button class="@btn-primary-sm" data-action="pay" data-amt="all" ${state.credits > 0 && state.debt > 0 && !state.over ? "" : "disabled"}>Pay max</button>
+                    </div>
+                  </div>
+                  <p class="@caption">Clear it before day ${MAX_DAY} and the ship is yours.</p>
+                </div>
+              </div>
+              <div class="@card @stack-sm">
+                <div class="@card-header"><h2 class="@heading-md">Cargo hold</h2></div>
+                ${hold}
+              </div>
+            </div>
+            <h2 class="@heading-md">Outfitting</h2>
+            <div class="@grid-2">${upgradeCards}</div>
+          </div>`;
+      }
+
+      // ----- Log -------------------------------------------------------
+      const LOG_TONE = { info: "@badge-info", good: "@badge-success", bad: "@badge-danger", warn: "@badge-warning" };
+      function logView() {
+        if (!state.log.length) {
+          return `<div class="@empty">
+                    <div class="@empty-icon">…</div>
+                    <p class="@empty-title">Nothing logged yet</p>
+                  </div>`;
+        }
+        const items = state.log
+          .slice()
+          .reverse()
+          .map(
+            (e) => `
+            <div class="@list-item @row">
+              <span class="${LOG_TONE[e.tone]}">day ${e.day}</span>
+              <span class="@body">${e.msg}</span>
+            </div>`
+          )
+          .join("");
+        return `
+          <div class="@card">
+            <div class="@card-header"><h2 class="@heading-md">Captain's log</h2></div>
+            <div class="@list-bordered">${items}</div>
+          </div>`;
+      }
+
+      // ---------------------------------------------------------------
+      // Toasts & dialogs
+      // ---------------------------------------------------------------
+      function toast(tone, msg) {
+        const node = document.createElement("div");
+        node.innerHTML = `
+          <div class="@toast">
+            <span class="${LOG_TONE[tone]}">!</span>
+            <p>${msg}</p>
+          </div>`;
+        const t = node.firstElementChild;
+        $("toast-root").appendChild(t);
+        sw(t);
+        setTimeout(() => t.remove(), 4500);
+      }
+
+      function addLog(tone, msg) {
+        state.log.push({ day: state.day, tone, msg });
+      }
+      function notify(tone, msg) {
+        addLog(tone, msg);
+        toast(tone, msg);
+      }
+
+      function showDialog({ title, sub, body, actions }) {
+        const buttons = actions
+          .map(
+            (a, i) =>
+              `<button class="${a.kind ?? "@btn-secondary"}" data-dialog-action="${i}">${a.label}</button>`
+          )
+          .join("");
+        render(
+          $("dialog-root"),
+          `
+          <div class="@dialog-overlay"></div>
+          <div class="@dialog">
+            <div class="@dialog-content">
+              <div class="@dialog-header">
+                <h2 class="@heading-md">${title}</h2>
+                ${sub ? `<p class="@muted">${sub}</p>` : ""}
+              </div>
+              <div class="@stack-sm">${body}</div>
+              <div class="@dialog-footer">${buttons}</div>
+            </div>
+          </div>`
+        );
+        $("dialog-root").querySelectorAll("[data-dialog-action]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const fn = actions[Number(btn.dataset.dialogAction)].fn;
+            $("dialog-root").innerHTML = "";
+            if (fn) fn();
+          });
+        });
+      }
+
+      // ---------------------------------------------------------------
+      // Game actions
+      // ---------------------------------------------------------------
+      function buy(id, qtyArg) {
+        const price = state.prices[state.station][id];
+        const space = state.cargoMax - cargoUsed();
+        const affordable = Math.floor(state.credits / price);
+        const qty = qtyArg === "max" ? Math.min(space, affordable) : Math.min(1, space, affordable);
+        if (qty <= 0) return;
+        state.credits -= qty * price;
+        state.cargo[id] = (state.cargo[id] ?? 0) + qty;
+        state.paid[id] = (state.paid[id] ?? 0) + qty * price;
+        rerender();
+      }
+
+      function sell(id, qtyArg) {
+        const owned = state.cargo[id] ?? 0;
+        if (!owned) return;
+        const qty = qtyArg === "all" ? owned : 1;
+        const unit = sellPrice(id);
+        const basis = (state.paid[id] ?? 0) / owned;
+        state.credits += qty * unit;
+        state.cargo[id] = owned - qty;
+        state.paid[id] = Math.max(0, (state.paid[id] ?? 0) - basis * qty);
+        const profit = Math.round((unit - basis) * qty);
+        if (qtyArg === "all" && Math.abs(profit) > 1) {
+          notify(profit >= 0 ? "good" : "bad",
+            `Sold ${qty} ${GOODS.find((g) => g.id === id).name} for ${cr(qty * unit)} (${profit >= 0 ? "+" : ""}${cr(profit)}).`);
+        }
+        rerender();
+      }
+
+      function refuel() {
+        const need = state.fuelMax - state.fuel;
+        const units = Math.min(need, Math.floor(state.credits / FUEL_PRICE));
+        state.fuel += units;
+        state.credits -= units * FUEL_PRICE;
+        rerender();
+      }
+
+      function repair() {
+        const need = 100 - state.hull;
+        const pts = Math.min(need, Math.floor(state.credits / REPAIR_PRICE));
+        state.hull += pts;
+        state.credits -= pts * REPAIR_PRICE;
+        rerender();
+      }
+
+      function payDebt(amt) {
+        const pay = Math.min(state.debt, amt === "all" ? state.credits : Math.min(500, state.credits));
+        if (pay <= 0) return;
+        state.credits -= pay;
+        state.debt -= pay;
+        if (state.debt === 0) return win();
+        notify("good", `Paid ${cr(pay)} to the Guild. ${cr(state.debt)} to go.`);
+        rerender();
+      }
+
+      function buyUpgrade(id) {
+        const u = UPGRADES.find((x) => x.id === id);
+        if (state.upgrades[id] >= u.max || state.credits < u.cost) return;
+        state.credits -= u.cost;
+        state.upgrades[id] += 1;
+        if (id === "pods") state.cargoMax += 12;
+        if (id === "tank") { state.fuelMax += 40; }
+        notify("good", `${u.name} installed.`);
+        rerender();
+      }
+
+      function travel(dest) {
+        if (state.busy || state.over || dest === state.station) return;
+        const dist = DIST[state.station][dest];
+        const fuelCost = dist * FUEL_PER_JUMP;
+        if (state.fuel < fuelCost) return;
+
+        state.busy = true;
+        state.fuel -= fuelCost;
+        render($("main-panel"), travelingView(dest, dist));
+        renderStats();
+
+        setTimeout(() => {
+          state.busy = false;
+          for (let d = 0; d < dist; d++) {
+            state.day += 1;
+            state.debt = Math.round(state.debt * (1 + INTEREST));
+            rollAllPrices();
+          }
+          state.station = dest;
+          addLog("info", `Docked at ${STATIONS[dest].name}. Interest accrued; debt is now ${cr(state.debt)}.`);
+
+          if (state.day > MAX_DAY && state.debt > 0) return lose("The Guild's deadline passed with the debt unpaid. They take the ship.");
+
+          state.tab = "market";
+          rerender();
+          rollTravelEvent();
+        }, 900 + dist * 250);
+      }
+
+      // ----- Travel events --------------------------------------------
+      function rollTravelEvent() {
+        const r = Math.random();
+        if (r < 0.22) return pirateEvent();
+        if (r < 0.36) return flareEvent();
+        if (r < 0.50) return salvageEvent();
+        if (r < 0.60) return boomEvent();
+      }
+
+      function pirateEvent() {
+        const bribe = Math.max(50, Math.round(state.credits * 0.2));
+        const fightOdds = Math.min(0.9, 0.35 + state.upgrades.shields * 0.25);
+        showDialog({
+          title: "Pirates off the bow",
+          sub: "A rust-bucket corsair locks weapons and hails you.",
+          body: `
+            <div class="@alert-danger">
+              <span>☠</span>
+              <p>"Toll time, captain. ${cr(bribe)} and you fly on."</p>
+            </div>
+            <p class="@muted">Your odds in a fight: ~${Math.round(fightOdds * 100)}%
+              ${state.upgrades.shields ? `(shield array ×${state.upgrades.shields} helping)` : "(no shields)"}.</p>`,
+          actions: [
+            {
+              label: `Pay ${cr(bribe)}`,
+              kind: "@btn-secondary",
+              fn: () => {
+                state.credits = Math.max(0, state.credits - bribe);
+                notify("warn", `Paid the corsairs ${cr(bribe)} to pass.`);
+                rerender();
+              },
+            },
+            {
+              label: "Fight",
+              kind: "@btn-danger",
+              fn: () => {
+                if (Math.random() < fightOdds) {
+                  const loot = 200 + Math.round(Math.random() * 400);
+                  state.credits += loot;
+                  notify("good", `You drove them off and stripped ${cr(loot)} from the wreck.`);
+                } else {
+                  const dmg = Math.max(8, 30 - state.upgrades.shields * 8);
+                  state.hull -= dmg;
+                  const ids = Object.keys(state.cargo).filter((k) => state.cargo[k] > 0);
+                  if (ids.length) {
+                    const id = ids[Math.floor(Math.random() * ids.length)];
+                    const taken = Math.ceil(state.cargo[id] / 2);
+                    state.cargo[id] -= taken;
+                    notify("bad", `Lost the fight: −${dmg} hull, ${taken} ${GOODS.find((g) => g.id === id).name} seized.`);
+                  } else {
+                    notify("bad", `Lost the fight: −${dmg} hull.`);
+                  }
+                  if (state.hull <= 0) return lose("Hull breach. The escape pod works; the career doesn't.");
+                }
+                rerender();
+              },
+            },
+          ],
+        });
+      }
+
+      function flareEvent() {
+        const dmg = Math.max(5, 18 - state.upgrades.shields * 6);
+        state.hull -= dmg;
+        notify("bad", `Solar flare en route — hull scorched for ${dmg}.`);
+        if (state.hull <= 0) return lose("The flare cooked the reactor. Drifting…");
+        rerender();
+      }
+
+      function salvageEvent() {
+        const space = state.cargoMax - cargoUsed();
+        if (space <= 0) { notify("warn", "Passed a derelict, but the hold is full. It drifts away."); return; }
+        const g = GOODS[Math.floor(Math.random() * 4)]; // common goods only
+        const qty = Math.min(space, 2 + Math.floor(Math.random() * 3));
+        state.cargo[g.id] = (state.cargo[g.id] ?? 0) + qty;
+        notify("good", `Derelict salvage: ${qty} ${g.name}, free of charge.`);
+        rerender();
+      }
+
+      function boomEvent() {
+        const g = GOODS[Math.floor(Math.random() * GOODS.length)];
+        state.prices[state.station][g.id] = Math.round(state.prices[state.station][g.id] * 1.6);
+        notify("info", `Market frenzy at ${STATIONS[state.station].name}: ${g.name} prices spike.`);
+        rerender();
+      }
+
+      // ----- End states ------------------------------------------------
+      function endDialog(title, sub, tone, body) {
+        state.over = true;
+        rerender();
+        showDialog({
+          title, sub,
+          body: `
+            <div class="${tone}"><span>${tone === "@alert-success" ? "✦" : "✖"}</span><p>${body}</p></div>
+            <div class="@dl">
+              <span class="@dt">Days used</span><span class="@dd">${Math.min(state.day, MAX_DAY)} of ${MAX_DAY}</span>
+              <span class="@dt">Final credits</span><span class="@dd">${cr(state.credits)}</span>
+              <span class="@dt">Cargo value</span><span class="@dd">${cr(cargoValue())}</span>
+            </div>`,
+          actions: [{ label: "New run", kind: "@btn-primary", fn: newGame }],
+        });
+      }
+      function win() {
+        notify("good", "Debt cleared. The ship is yours.");
+        const score = state.credits + cargoValue() + (MAX_DAY - state.day) * 100;
+        endDialog("Debt cleared — you win", "The Guild stamps the title transfer without a word.", "@alert-success",
+          `Final score: <strong>${score.toLocaleString("en-US")}</strong> (credits + cargo + 100 per day to spare).`);
+      }
+      function lose(msg) {
+        addLog("bad", msg);
+        endDialog("Run over", "Every freighter career ends somewhere.", "@alert-danger", msg);
+      }
+
+      // ---------------------------------------------------------------
+      // Input wiring
+      // ---------------------------------------------------------------
+      document.addEventListener("click", (e) => {
+        const el = e.target.closest("[data-action]");
+        if (!el || el.disabled || !state || state.busy) return;
+        const a = el.dataset;
+        if (a.action === "tab") { state.tab = a.tab; rerender(); }
+        else if (a.action === "buy") buy(a.good, a.qty);
+        else if (a.action === "sell") sell(a.good, a.qty);
+        else if (a.action === "travel") travel(Number(a.dest));
+        else if (a.action === "refuel") refuel();
+        else if (a.action === "repair") repair();
+        else if (a.action === "pay") payDebt(a.amt);
+        else if (a.action === "upgrade") buyUpgrade(a.id);
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (!state || state.busy || state.over) return;
+        const i = Number(e.key) - 1;
+        if (i >= 0 && i < TABS.length) { state.tab = TABS[i].id; rerender(); }
+      });
+
+      // Boot after the expander has installed window.shortwind (both wait
+      // on DOMContentLoaded; the expander's script tag comes first, so its
+      // listener runs first).
+      window.addEventListener("DOMContentLoaded", newGame);
+    </script>
+  </body>
+</html>
