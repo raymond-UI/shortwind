@@ -15,7 +15,7 @@
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "vite": ">=7.0.0"
+    "vite": ">=5.0.0"
   },
   "dependencies": {
     "@shortwind/core": "workspace:*",
