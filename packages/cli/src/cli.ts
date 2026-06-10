@@ -378,8 +378,22 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
       `vscode settings:   ${result.vscodePath}`,
       `pre-commit:        ${result.huskyPath}`,
       `SKILL.md:          ${result.skillPath}`,
+      `theme:             ${describeTheme(result)}`,
     ].join("\n"),
     "shortwind init",
   );
   p.outro(`Next: run \`${result.packageManager} dev\` to start watching.`);
+}
+
+function describeTheme(result: Awaited<ReturnType<typeof init>>): string {
+  switch (result.themeAction) {
+    case "injected":
+      return `tokens added to ${result.themePath}`;
+    case "created":
+      return `wrote ${result.themePath}`;
+    case "skipped":
+      return result.themePath
+        ? `left existing theme in ${result.themePath} untouched`
+        : "skipped (no Tailwind v4 CSS entry — define color tokens yourself)";
+  }
 }

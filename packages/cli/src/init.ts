@@ -12,6 +12,7 @@ import {
   type RegistrySource,
 } from "./registry-source.js";
 import { readLockfile, writeLockfile } from "./lockfile.js";
+import { scaffoldTheme, type ThemeAction } from "./theme.js";
 
 export const DEFAULT_REGISTRY = "https://shortwind.dev/registry";
 
@@ -40,6 +41,8 @@ export type InitResult = {
   vscodePath: string;
   huskyPath: string;
   skillPath: string;
+  themePath: string | null;
+  themeAction: ThemeAction;
 };
 
 export async function init(options: InitOptions): Promise<InitResult> {
@@ -73,6 +76,10 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const skillPath = path.join(cwd, "skills", "shortwind", "SKILL.md");
   await writeSkillMd(skillPath, recipesDir, families);
 
+  // Recipes reference semantic color tokens; scaffold the default theme so they
+  // render with color on first run instead of as colorless markup.
+  const theme = await scaffoldTheme(cwd);
+
   return {
     packageManager: shape.packageManager,
     preset: options.preset,
@@ -85,6 +92,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
     vscodePath,
     huskyPath,
     skillPath,
+    themePath: theme.themePath,
+    themeAction: theme.action,
   };
 }
 
