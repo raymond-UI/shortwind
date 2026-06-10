@@ -15,7 +15,7 @@ export async function preset(options: PresetOptions): Promise<PresetResult> {
   const cwd = path.resolve(options.cwd);
   const config = await readConfig(cwd);
   const registry = options.registry ?? config.registry;
-  const source = resolveSource(registry);
+  const source = await resolveSource(registry);
 
   if (options.name === "none") {
     throw new Error("Use `shortwind remove` to uninstall families; preset 'none' is for `init` only.");

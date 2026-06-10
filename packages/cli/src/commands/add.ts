@@ -33,7 +33,7 @@ export async function add(options: AddOptions): Promise<AddResult> {
   const cwd = path.resolve(options.cwd);
   const config = await readConfig(cwd);
   const registry = options.registry ?? config.registry;
-  const source = resolveSource(registry);
+  const source = await resolveSource(registry);
   const recipesDir = path.join(cwd, config.recipesDir);
   await mkdir(recipesDir, { recursive: true });
 

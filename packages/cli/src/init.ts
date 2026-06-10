@@ -55,7 +55,7 @@ export type InitResult = {
 export async function init(options: InitOptions): Promise<InitResult> {
   const cwd = path.resolve(options.cwd);
   const registry = options.registry ?? DEFAULT_REGISTRY;
-  const source = resolveSource(registry);
+  const source = await resolveSource(registry);
 
   const shape = detectProject(cwd);
 

@@ -31,7 +31,7 @@ export async function ls(options: LsOptions): Promise<LsResult> {
   let available: string[] = [];
   if (!options.installedOnly) {
     const registry = options.registry ?? config.registry;
-    const source = resolveSource(registry);
+    const source = await resolveSource(registry);
     try {
       available = await source.listAllFamilies();
     } catch {

@@ -32,11 +32,47 @@ export function createRegistrySource(origin: string): RegistrySource {
 }
 
 // Resolve a registry origin to a source. The default (absent, or the bundled
-// sentinel) is the catalog embedded in the CLI; an http(s) URL or a filesystem
-// path is a custom/BYO registry. This is what every command should call.
-export function resolveSource(origin: string | undefined): RegistrySource {
-  if (!origin || origin === BUNDLED_ORIGIN) return bundledSource();
-  return createRegistrySource(origin);
+// sentinel) prefers the latest published @shortwind/catalog (fetched from
+// jsDelivr's immutable CDN) and falls back to the catalog bundled in the CLI
+// when offline. An http(s) URL or filesystem path is a custom/BYO registry.
+// This is what every command should call.
+export async function resolveSource(origin: string | undefined): Promise<RegistrySource> {
+  if (origin && origin !== BUNDLED_ORIGIN) return createRegistrySource(origin);
+  return defaultCatalogSource();
+}
+
+const CATALOG_PACKAGE = "@shortwind/catalog";
+const NPM_TIMEOUT_MS = 3000;
+
+// Prefer the newest published catalog; fall back to the embedded snapshot when
+// the network is unavailable. One decision per run (all-CDN or all-bundle) so a
+// preset can't reference a family resolved at a different version.
+async function defaultCatalogSource(): Promise<RegistrySource> {
+  try {
+    const version = await resolveCatalogVersion();
+    // jsDelivr serves npm package files at immutable, versioned URLs — cached
+    // for free, correctly. The catalog tarball nests its output under
+    // dist/registry, matching the http source's path layout.
+    const base = `https://cdn.jsdelivr.net/npm/${CATALOG_PACKAGE}@${version}/dist/registry`;
+    const cdn = httpSource(base);
+    await cdn.loadPresets(); // probe — throws if unreachable, triggering fallback
+    return cdn;
+  } catch {
+    return bundledSource();
+  }
+}
+
+async function resolveCatalogVersion(): Promise<string> {
+  const res = await fetch(`https://registry.npmjs.org/${CATALOG_PACKAGE}`, {
+    signal: AbortSignal.timeout(NPM_TIMEOUT_MS),
+    headers: { accept: "application/vnd.npm.install-v1+json" },
+  });
+  if (!res.ok) throw new Error(`npm: ${res.status}`);
+  const body = (await res.json()) as { "dist-tags"?: Record<string, string> };
+  const tags = body["dist-tags"] ?? {};
+  const version = tags["latest"] ?? tags["beta"];
+  if (!version) throw new Error("no published catalog version");
+  return version;
 }
 
 // The default catalog, embedded in the CLI (see catalog.generated.ts). Resolves

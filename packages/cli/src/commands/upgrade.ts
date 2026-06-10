@@ -57,7 +57,7 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
   const cwd = path.resolve(options.cwd);
   const config = await readConfig(cwd);
   const registry = options.registry ?? config.registry;
-  const source = options.source ?? resolveSource(registry);
+  const source = options.source ?? (await resolveSource(registry));
   const recipesDir = path.join(cwd, config.recipesDir);
 
   const installed = installedFamilies(recipesDir);
