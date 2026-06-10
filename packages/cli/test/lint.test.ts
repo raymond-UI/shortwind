@@ -220,6 +220,26 @@ describe("lint", () => {
     expect(unused.some((m) => m.includes("@card "))).toBe(false);
   });
 
+  it("counts @-recipes inside cva()/tv() calls as used (matches the build transform)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    // @card and @card-flat are referenced only from a cva() call, never a
+    // className. The build expands these; lint must not call them unused.
+    await writeSource(
+      dir,
+      "src/button.ts",
+      `import { cva } from "class-variance-authority";\n` +
+        `export const card = cva("@card", {\n` +
+        `  variants: { tone: { ghost: "@card-flat" } },\n` +
+        `});\n`,
+    );
+
+    const result = await lint({ cwd: dir, rules: ["recipe/unused"] });
+    const unused = result.findings.filter((f) => f.rule === "recipe/unused").map((f) => f.message);
+    expect(unused.some((m) => m.includes("@card "))).toBe(false);
+    expect(unused.some((m) => m.includes("@card-flat"))).toBe(false);
+  });
+
   it("does NOT rewrite JSX className={...} during --fix (only reports)", async () => {
     const dir = await setupProject(["card"]);
     dirs.push(dir);

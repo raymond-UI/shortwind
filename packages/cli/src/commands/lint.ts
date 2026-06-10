@@ -462,6 +462,10 @@ type ClassUsage = {
 const CLASS_ATTR_STR_RE = /\b(?:class|className)\s*=\s*(["'])([^"']*)\1/g;
 const CLASS_ATTR_BRACE_RE = /\b(?:class|className)\s*=\s*\{/g;
 const STRING_LITERAL_RE = /(["'`])((?:\\.|(?!\1)[^\\])*)\1/g;
+// The build's jsx-transform expands recipes inside variant-authoring calls
+// (cva/tv), not just className attributes. Lint must see those too, or recipes
+// referenced only from a `cva(...)` get falsely reported as recipe/unused.
+const CALL_EXPANDER_RE = /\b(?:cva|tv)\s*\(/g;
 
 export function extractClassUsages(source: string): ClassUsage[] {
   const usages: ClassUsage[] = [];
@@ -492,6 +496,32 @@ export function extractClassUsages(source: string): ClassUsage[] {
       const valueStart = literalStart + 1;
       const { tokens, dynamicTokens } = tokenizeClassString(source, value, valueStart);
       if (tokens.length === 0 && dynamicTokens.length === 0) continue;
+      usages.push({
+        fileOffset: literalStart,
+        valueStart,
+        raw: value,
+        tokens,
+        dynamicTokens,
+        fixable: false,
+      });
+    }
+  }
+
+  for (const m of source.matchAll(CALL_EXPANDER_RE)) {
+    const openParen = (m.index ?? 0) + m[0]!.length - 1;
+    const close = findMatchingDelimiter(source, openParen, "(", ")");
+    if (close === -1) continue;
+    const inner = source.slice(openParen + 1, close);
+    for (const sm of inner.matchAll(STRING_LITERAL_RE)) {
+      const value = sm[2] ?? "";
+      if (value.length === 0) continue;
+      const literalStart = openParen + 1 + (sm.index ?? 0);
+      const valueStart = literalStart + 1;
+      const { tokens, dynamicTokens } = tokenizeClassString(source, value, valueStart);
+      // Only string args that actually reference a recipe matter here; plain
+      // utility strings in cva (the common case) carry no @-tokens and are
+      // ignored so we don't widen unrelated rules.
+      if (!tokens.some((t) => t.value.startsWith("@")) && dynamicTokens.length === 0) continue;
       usages.push({
         fileOffset: literalStart,
         valueStart,
@@ -539,6 +569,18 @@ function tokenizeClassString(
 }
 
 function findMatchingBrace(source: string, openIdx: number): number {
+  return findMatchingDelimiter(source, openIdx, "{", "}");
+}
+
+// Walks past the opening delimiter at openIdx to its match, skipping over
+// string and template-literal contents (and nested `${...}` interpolations,
+// which always use braces regardless of the outer delimiter).
+function findMatchingDelimiter(
+  source: string,
+  openIdx: number,
+  open: string,
+  close: string,
+): number {
   let depth = 1;
   let i = openIdx + 1;
   while (i < source.length && depth > 0) {
@@ -584,8 +626,8 @@ function findMatchingBrace(source: string, openIdx: number): number {
       }
       continue;
     }
-    if (ch === "{") depth++;
-    else if (ch === "}") depth--;
+    if (ch === open) depth++;
+    else if (ch === close) depth--;
     i++;
   }
   return depth === 0 ? i - 1 : -1;
