@@ -15,10 +15,7 @@
   // redirected wrangler config to the top level and drops the `env` block, so
   // a route nested under env.production never reaches wrangler. Declaring it
   // here makes wrangler provision the proxied DNS record + cert for the apex.
-  "routes": [
-    { "pattern": "shortwind.dev", "custom_domain": true },
-    { "pattern": "www.shortwind.dev", "custom_domain": true }
-  ],
+  "routes": [{ "pattern": "shortwind.dev", "custom_domain": true }],
   "vars": {
     "VITE_APP_NAME": "Shortwind",
     "VITE_SITE_URL": "https://shortwind.dev"
@@ -26,10 +23,7 @@
   "env": {
     "production": {
       "workers_dev": false,
-      "routes": [
-    { "pattern": "shortwind.dev", "custom_domain": true },
-    { "pattern": "www.shortwind.dev", "custom_domain": true }
-  ],
+      "routes": [{ "pattern": "shortwind.dev", "custom_domain": true }],
       "vars": {
         "VITE_APP_NAME": "Shortwind",
         "VITE_SITE_URL": "https://shortwind.dev"
