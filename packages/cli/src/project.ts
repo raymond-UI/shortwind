@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
 import type { Recipe } from "@shortwind/core";
+import { BUNDLED_ORIGIN } from "./registry-source.js";
 
 export type ShortwindConfig = {
   registry: string;
@@ -11,7 +12,12 @@ export type ShortwindConfig = {
 };
 
 export const DEFAULT_CONFIG: ShortwindConfig = {
-  registry: "https://shortwind.dev/registry",
+  // Default to the bundled catalog (CDN-first with an offline fallback, via
+  // resolveSource) rather than a hardcoded URL — a project with no explicit
+  // registry must not hit the network for `add`, which was the exact failure
+  // the bundled catalog exists to prevent. The old default also pointed at a
+  // /registry endpoint that 404s in production.
+  registry: BUNDLED_ORIGIN,
   recipesDir: "recipes",
   outputPath: "skills/shortwind/SKILL.md",
 };

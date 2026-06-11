@@ -203,8 +203,12 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
   return { outcomes, hasUpdates, hasTouched, lockfile: lock, skillPath };
 }
 
+let atomicWriteSeq = 0;
 async function atomicWrite(filePath: string, body: string): Promise<void> {
-  const tmp = filePath + ".tmp";
+  // Unique temp name: a fixed `.tmp` suffix collides across concurrent runs (two
+  // processes writing the same family clobber each other's temp file). pid +
+  // counter keeps each write isolated.
+  const tmp = `${filePath}.${process.pid}.${atomicWriteSeq++}.tmp`;
   const fh = await open(tmp, "w");
   try {
     await fh.writeFile(body);
