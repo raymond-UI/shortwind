@@ -22,6 +22,17 @@ Shortwind defines named recipes like `@card` that expand into Tailwind class str
 3. Recipes already include hover, focus, and dark-mode variants where relevant. Don't restate them.
 4. Append raw Tailwind utilities to override. Last position wins on conflicts.
 
+## Dynamic classes
+
+Recipes expand only inside **literal** `class="..."` / `className="..."` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro `class:list`, or a value passed as a component prop — is not expanded and ships as a dead `@recipe` token, so the element renders unstyled. The build warns when it can see such a token; if the recipe reaches the attribute indirectly (via a variable or prop) it stays silent.
+
+```
+<div class="@card-elevated p-6">                 <!-- expands -->
+<a class={active ? "@nav-link-active" : "@nav-link"}>  <!-- does NOT expand -->
+```
+
+Write static class lists literally. For a runtime choice between recipes, expand them at build time with `expandClassList` from `@shortwind/core` and bind the resulting Tailwind — full helper at https://shortwind.dev/docs/dynamic-classes.
+
 ## Available recipes
 
 Each family below opens with a one-line guide on when to reach for which recipe. Read it before picking — it calls out easy-to-confuse neighbours.
@@ -341,6 +352,20 @@ Each family below opens with a one-line guide on when to reach for which recipe.
   @spinner          inline-block h-4 w-4 animate-spin rounded-full border-2
                     border-border border-t-primary
 
+### Site recipes
+
+> Site-authored chrome layered on the default catalog. These demonstrate recipe *composition*: each references catalog recipes (@code-block, @surface) and adds a few utilities. Use @prompt for copy-paste command lines, @doc-callout for admonitions in docs, and @term for terminal-accent text (the green $ marker). The uppercase kicker is the catalog's @eyebrow (text family) — the site no longer defines its own.
+
+  @prompt        overflow-x-auto rounded-md border border-border bg-muted p-4
+                 font-mono text-sm leading-6 text-foreground flex items-center
+                 gap-3 py-3
+  @term          font-mono text-term
+  @doc-callout   bg-muted text-foreground border-l-2 border-term px-4 py-3
+                 text-sm
+  @rule          flex items-center gap-3 text-xs font-mono uppercase
+                 tracking-widest text-muted-foreground before:h-px before:flex-1
+                 before:bg-border after:h-px after:flex-1 after:bg-border
+
 ### Skeleton recipes
 
 > Match the skeleton to the shape it stands in for: @skeleton (block), @skeleton-text (a text line), @skeleton-circle (avatar/icon). Size block and text skeletons with raw width/height utilities.
@@ -376,7 +401,7 @@ Each family below opens with a one-line guide on when to reach for which recipe.
 
 ### Text recipes
 
-> Headings are sized by weight, not HTML level: @heading-xl/lg/md/sm — there is no @h1..@h6. Body copy: @body (default), @lead (intro paragraphs), @muted (secondary), @caption (fine print). Use @label for form labels and @link for inline links. Don't append a -text suffix: it's @body not @body-text, @muted not @muted-text, @link not @link-text.
+> Headings are sized by weight, not HTML level: @heading-xl/lg/md/sm — there is no @h1..@h6. Body copy: @body (default), @lead (intro paragraphs), @muted (secondary), @caption (fine print), @eyebrow (uppercase kicker above a heading). Use @label for form labels and @link for inline links. Don't append a -text suffix: it's @body not @body-text, @muted not @muted-text, @link not @link-text.
 
   @heading-xl   text-4xl font-bold tracking-tight text-foreground
   @heading-lg   text-2xl font-semibold tracking-tight text-foreground
@@ -387,6 +412,8 @@ Each family below opens with a one-line guide on when to reach for which recipe.
   @muted        text-sm text-muted-foreground
   @label        text-sm font-medium text-foreground
   @caption      text-xs text-muted-foreground
+  @eyebrow      font-mono text-xs font-medium uppercase tracking-[0.2em]
+                text-muted-foreground
   @link         text-primary underline-offset-2 hover:underline
                 focus-visible:outline-2 focus-visible:outline-offset-2
                 focus-visible:outline-ring

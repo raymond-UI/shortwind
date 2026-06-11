@@ -721,6 +721,14 @@ exports[`catalog > flattened expansion is a stable snapshot 1`] = `
     "font-semibold",
     "text-foreground",
   ],
+  "eyebrow": [
+    "font-mono",
+    "text-xs",
+    "font-medium",
+    "uppercase",
+    "tracking-[0.2em]",
+    "text-muted-foreground",
+  ],
   "field": [
     "flex",
     "flex-col",

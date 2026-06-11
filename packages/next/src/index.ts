@@ -1,36 +1,25 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { clearRegistryCache } from "./loader.js";
+// Type-only import (next is a peer dependency): the accepted/returned config
+// is Next's OWN NextConfig, resolved against the consumer's installed next, so
+// `withShortwind()(nextConfig)` can never drift from what `next build`'s
+// typecheck expects (#64 — the old local NextConfig type rejected
+// `webpack: null`, which Next's type allows).
+import type { NextConfig } from "next";
 
 export type ShortwindNextOptions = {
   recipesDir?: string;
   cwd?: string;
+  // Fail the build when a known recipe token survives in transformed output
+  // anywhere — including the silent variable-indirection case (#67). Off by
+  // default; the detector is token-based, so prose that legitimately names a
+  // recipe would fail a strict build.
+  strict?: boolean;
 };
 
 type WebpackConfig = {
   module?: { rules?: unknown[] };
-  [k: string]: unknown;
-};
-
-type WebpackContext = {
-  dev: boolean;
-  isServer: boolean;
-};
-
-type TurbopackRule = {
-  loaders: Array<{ loader: string; options?: unknown }>;
-  [k: string]: unknown;
-};
-
-type TurbopackConfig = {
-  rules?: Record<string, TurbopackRule>;
-  [k: string]: unknown;
-};
-
-type NextConfig = {
-  webpack?: (config: WebpackConfig, ctx: WebpackContext) => WebpackConfig;
-  turbopack?: TurbopackConfig;
-  experimental?: Record<string, unknown>;
   [k: string]: unknown;
 };
 
@@ -48,13 +37,19 @@ export function withShortwind(
   const recipesDir = options.recipesDir ?? path.join(cwd, "recipes");
 
   return (nextConfig: NextConfig = {}) => {
-    const loaderOptions = { recipesDir };
+    const loaderOptions = { recipesDir, strict: options.strict ?? false };
     const previousWebpack = nextConfig.webpack;
 
     const wrapped: NextConfig = {
       ...nextConfig,
-      webpack(config, ctx) {
-        const next = previousWebpack ? previousWebpack(config, ctx) : config;
+      // Next types the hook's config as `any`; narrow it locally to the slice
+      // we touch and let `ctx` take its contextual WebpackConfigContext type.
+      // The truthy guard also covers `webpack: null`, which Next's config type
+      // explicitly allows.
+      webpack(config: WebpackConfig, ctx) {
+        const next = previousWebpack
+          ? (previousWebpack(config, ctx) as WebpackConfig)
+          : config;
         next.module ??= {};
         next.module.rules ??= [];
         const rule = {
@@ -69,8 +64,8 @@ export function withShortwind(
       },
     };
 
-    const turbo: TurbopackConfig = nextConfig.turbopack ?? {};
-    const rules: Record<string, TurbopackRule> = { ...(turbo.rules ?? {}) };
+    const turbo = nextConfig.turbopack ?? {};
+    const rules: NonNullable<NextConfig["turbopack"]>["rules"] = { ...(turbo.rules ?? {}) };
     // Asymmetry vs the webpack rule's `exclude: /node_modules/`: Turbopack rule
     // keys are globs with no negation syntax, so a node_modules exclude can't be
     // expressed here. Turbopack does not apply custom loader rules to
@@ -87,3 +82,12 @@ export function withShortwind(
 
 export { default as shortwindLoader } from "./loader.js";
 export type { ShortwindLoaderOptions } from "./loader.js";
+
+// Re-exported so the documented rc() escape hatch resolves from the package
+// init actually installs — `@shortwind/core` is only a transitive dependency
+// (#63). In Next the registry load is server-side (loadRegistryFromDir reads
+// recipes/ from disk); expand in a server component or route and pass the
+// resulting plain-Tailwind string to the client as a prop.
+export { expandClassList } from "@shortwind/core";
+export { loadRegistryFromDir } from "@shortwind/tailwind";
+export type { Registry } from "@shortwind/core";

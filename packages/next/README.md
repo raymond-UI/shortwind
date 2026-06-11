@@ -12,15 +12,19 @@ npm i -D @shortwind/next@beta @shortwind/cli@beta
 
 ## Usage
 
-Wrap your Next config:
+Wrap your Next config. `withShortwind` is curried — the first call takes
+Shortwind options (usually none), the second your Next config:
 
 ```ts
 // next.config.ts
+import type { NextConfig } from "next";
 import { withShortwind } from "@shortwind/next";
 
-export default withShortwind({
+const nextConfig: NextConfig = {
   // your Next config
-});
+};
+
+export default withShortwind()(nextConfig);
 ```
 
 Reads recipes from `./recipes/`. Run `npx @shortwind/cli@beta init` first to scaffold the catalog, theme, and `SKILL.md`.

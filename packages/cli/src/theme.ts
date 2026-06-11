@@ -149,6 +149,50 @@ export async function scaffoldTheme(cwd: string): Promise<ThemeResult> {
   return { themePath: target, action: "created" };
 }
 
+// The color tokens the default block provides — derived from the block itself
+// so the missing-token check can never drift from what we scaffold.
+const THEME_COLOR_TOKENS: ReadonlySet<string> = new Set(
+  [...THEME_BLOCK.matchAll(/--color-([\w-]+)\s*:/g)].map((m) => m[1] ?? ""),
+);
+
+// Utility prefixes that consume a theme color token (`bg-card`,
+// `text-muted-foreground`, `border-border`, …).
+const COLOR_UTILITY_RE =
+  /^(?:bg|text|border|ring|outline|fill|stroke|divide|accent|caret|decoration|shadow|from|via|to|placeholder)-(.+)$/;
+
+// Which default-theme color tokens do the registry's expanded utilities
+// reference? Variants (`hover:`, `dark:`) and opacity suffixes (`/90`) are
+// stripped; only names the default theme block actually defines are reported,
+// so genuine Tailwind palette utilities (`bg-white`) never false-positive.
+function referencedThemeTokens(flattened: Record<string, string[]>): string[] {
+  const out = new Set<string>();
+  for (const utilities of Object.values(flattened)) {
+    for (const raw of utilities) {
+      const base = raw.split(":").pop() ?? raw;
+      const m = base.match(COLOR_UTILITY_RE);
+      if (!m) continue;
+      const name = (m[1] ?? "").replace(/\/.*$/, "");
+      if (THEME_COLOR_TOKENS.has(name)) out.add(name);
+    }
+  }
+  return [...out].sort();
+}
+
+// The skip-existing-theme path is all-or-nothing: "an @theme exists → assume
+// the theme is handled". That silently shipped colorless UIs when the existing
+// theme (e.g. create-next-app's globals.css) defines none of the tokens the
+// installed recipes reference (#62). This diff lets init warn loudly instead.
+// A token counts as defined if the CSS declares `--color-<name>` (Tailwind v4
+// theme key) or `--<name>` (the shadcn custom-property indirection).
+export function findMissingThemeTokens(
+  css: string,
+  flattened: Record<string, string[]>,
+): string[] {
+  return referencedThemeTokens(flattened).filter(
+    (name) => !new RegExp(`--(?:color-)?${name}\\s*:`).test(css),
+  );
+}
+
 function isTailwindV4(cwd: string): boolean {
   try {
     const pkg = JSON.parse(readFileSync(path.join(cwd, "package.json"), "utf8")) as {

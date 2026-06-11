@@ -10,6 +10,7 @@ import {
   buildSourceDirective,
   computeSafelistTokens,
   detectTailwindMajor,
+  findResidualRecipeTokens,
   findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
@@ -179,6 +180,34 @@ describe("transformContent", () => {
     expect(after).toContain("inline-flex"); // a real expanded utility
   });
 
+  it("expands literal-string ternary branches inside className={…} (#66)", () => {
+    // The docs used to claim this does NOT expand — it does: the transform
+    // visits the StringLiteral branches of the conditional.
+    const before = [
+      `export const Tab = ({ active }: { active: boolean }) => (`,
+      `  <a className={active ? "@btn-primary" : "@btn-ghost"}>tab</a>`,
+      `);`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    expect(after).not.toContain("@btn-primary");
+    expect(after).not.toContain("@btn-ghost");
+    expect(after).toContain("inline-flex");
+  });
+
+  it("does NOT expand a recipe that reaches className via a variable or prop (#66)", () => {
+    // The real silent failure: the recipe text is a plain string by the time
+    // it hits the attribute, so the transform never sees it — byte-identical
+    // passthrough, no warning possible at this stage.
+    const before = [
+      `const cfg = { recipe: "@btn-primary" };`,
+      `export const El = () => <a className={cfg.recipe}>go</a>;`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    expect(after).toBe(before);
+  });
+
   it("rewrites configured class helper calls but leaves ordinary calls alone", () => {
     const before = [
       `const styles = cva("@btn-primary", { variants: { tone: { ghost: "@btn-ghost" } } });`,
@@ -251,6 +280,28 @@ describe("quote-bearing token escaping (#47)", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.errors.some((e) => e.code === "resolve/unsafe-token")).toBe(true);
+  });
+});
+
+describe("findResidualRecipeTokens (#67)", () => {
+  const registry = loadRegistryFromDir(REGISTRY_RECIPES);
+
+  it("flags a known recipe ANYWHERE in transformed output, not just class values", () => {
+    // The variable-indirection leak: the token sits at the assignment site,
+    // which the class-value scan (findUnexpandedRecipes) never sees. All three
+    // dogfooding builds shipped leaks a manual grep had to catch.
+    const code = `const cfg = { recipe: "@card" };\nexport const El = () => <div className={cfg.recipe} />;`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual(["@card"]);
+  });
+
+  it("ignores @-tokens that are not recipe names", () => {
+    const code = `// email me @cardholder\n<div className="@md:flex" />`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual([]);
+  });
+
+  it("returns nothing for fully-expanded output", () => {
+    const out = transformContent(`<div className="@card" />`, registry);
+    expect(findResidualRecipeTokens(out, registry)).toEqual([]);
   });
 });
 

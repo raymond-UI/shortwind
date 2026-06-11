@@ -41,6 +41,29 @@ describe("withShortwind", () => {
     expect(typeof wrapped.webpack).toBe("function");
   });
 
+  it("re-exports expandClassList + loadRegistryFromDir for the server-side rc() pattern (#63)", async () => {
+    const mod = await import("../src/index.js");
+    expect(typeof mod.expandClassList).toBe("function");
+    expect(typeof mod.loadRegistryFromDir).toBe("function");
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const registry = mod.loadRegistryFromDir(path.join(dir, "recipes"));
+    const expanded = mod.expandClassList("@card p-6", registry, true);
+    expect(expanded).not.toMatch(/@card\b/);
+    expect(expanded).toContain("p-6");
+  });
+
+  it("the documented snippet shape yields a plain config object, not a function (#61)", async () => {
+    // Mirrors the README / CLI snippet: export default withShortwind()(nextConfig)
+    const dir = await makeProject();
+    dirs.push(dir);
+    const nextConfig = { reactStrictMode: true };
+    const wrapped = withShortwind({ cwd: dir })(nextConfig);
+    expect(typeof wrapped).toBe("object");
+    expect(typeof wrapped).not.toBe("function");
+    expect(wrapped.reactStrictMode).toBe(true);
+  });
+
   it("webpack hook prepends a pre-loader rule for source files", async () => {
     const dir = await makeProject();
     dirs.push(dir);
@@ -102,6 +125,45 @@ describe("withShortwind", () => {
     const rules = wrapped.turbopack?.rules ?? {};
     expect(rules["*.svg"]).toBeTruthy();
     expect(Object.keys(rules).some((k) => k.includes("tsx"))).toBe(true);
+  });
+
+  it("strict loader errors the module on a residual token reached via a variable (#67)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const errors: Error[] = [];
+    const ctx = {
+      getOptions: () => ({ recipesDir: path.join(dir, "recipes"), strict: true }),
+      resourcePath: path.join(dir, "src", "App.tsx"),
+      emitError: (e: Error) => errors.push(e),
+    };
+    const src = `const cfg = { recipe: "@card" };\nexport const El = () => <div className={cfg.recipe} />;\n`;
+    shortwindLoader.call(ctx, src);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toMatch(/unexpanded recipe @card[\s\S]*strict mode/);
+  });
+
+  it("default loader emits a webpack warning for a class-value leftover (#67)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const warnings: Error[] = [];
+    const ctx = {
+      getOptions: () => ({ recipesDir: path.join(dir, "recipes") }),
+      resourcePath: path.join(dir, "src", "Page.astro"),
+      emitWarning: (e: Error) => warnings.push(e),
+    };
+    shortwindLoader.call(ctx, `<a class:list={["@card"]}>x</a>`);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.message).toContain("@card");
+  });
+
+  it("withShortwind forwards strict into the loader options (#67)", async () => {
+    const dir = await makeProject();
+    dirs.push(dir);
+    const wrapped = withShortwind({ cwd: dir, strict: true })({});
+    const cfg = wrapped.webpack!({ module: { rules: [] } }, { dev: false, isServer: false } as never);
+    const rules = (cfg as { module?: { rules?: Array<{ use?: Array<{ options?: { strict?: boolean } }> }> } })
+      .module?.rules;
+    expect(rules?.[0]?.use?.[0]?.options?.strict).toBe(true);
   });
 
   it("loader expands @recipe tokens in source", async () => {

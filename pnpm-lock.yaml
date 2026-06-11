@@ -123,13 +123,13 @@ importers:
       '@shortwind/tailwind':
         specifier: workspace:*
         version: link:../tailwind
-      next:
-        specifier: '>=14.0.0'
-        version: 16.2.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
     devDependencies:
       '@types/node':
         specifier: ^25.7.0
         version: 25.7.0
+      next:
+        specifier: ^16.2.6
+        version: 16.2.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
 
   packages/registry:
     dependencies:

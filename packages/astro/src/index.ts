@@ -4,6 +4,10 @@ import { shortwind as shortwindVite } from "@shortwind/vite";
 export type ShortwindAstroOptions = {
   recipesDir?: string;
   cwd?: string;
+  // Fail the build when a known recipe token survives in transformed output
+  // anywhere — including the silent variable-indirection case (#67).
+  // Forwarded to @shortwind/vite. Off by default.
+  strict?: boolean;
 };
 
 type SetupHookContext = {
@@ -34,12 +38,19 @@ export default function shortwind(options: ShortwindAstroOptions = {}): AstroInt
       "astro:config:setup": ({ config, updateConfig }) => {
         const cwd = options.cwd ?? rootToPath(config.root) ?? process.cwd();
         const recipesDir = options.recipesDir ?? path.join(cwd, "recipes");
-        const plugins = shortwindVite({ cwd, recipesDir });
+        const plugins = shortwindVite({ cwd, recipesDir, strict: options.strict ?? false });
         updateConfig({ vite: { plugins } });
       },
     },
   };
 }
+
+// Re-exported so the documented rc() helper resolves from the package init
+// actually installs — `@shortwind/core` is only a transitive dependency (#63).
+// The integration already composes @shortwind/vite, so the
+// `virtual:shortwind/registry` module (and its ambient type) come along too.
+export { expandClassList, REGISTRY_MODULE_ID } from "@shortwind/vite";
+export type { Registry } from "@shortwind/vite";
 
 function rootToPath(root: { pathname?: string } | URL | string): string | null {
   const raw =

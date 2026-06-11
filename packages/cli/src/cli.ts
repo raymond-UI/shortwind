@@ -21,6 +21,19 @@ import { newFamily, NewFamilyError } from "./commands/new.js";
 import { reseal } from "./commands/reseal.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
+export const DEFAULT_PRESET = "starter";
+
+// Decide the init preset without forcing a TTY: an explicit --preset wins,
+// --yes/-y takes the default, and only the bare interactive call prompts —
+// agents and CI run `init --yes` unattended (#68).
+export async function resolveInitPreset(
+  opts: { preset?: string; yes?: boolean },
+  prompt: () => Promise<string>,
+): Promise<string> {
+  if (opts.preset !== undefined) return opts.preset;
+  if (opts.yes) return DEFAULT_PRESET;
+  return prompt();
+}
 
 export async function run(argv: string[] = process.argv): Promise<void> {
   const cli = cac("shortwind");
@@ -28,10 +41,11 @@ export async function run(argv: string[] = process.argv): Promise<void> {
   cli
     .command("init", "Bootstrap Shortwind in this project")
     .option("--preset <name>", "Preset to install (starter|app|content|all|none)")
+    .option("-y, --yes", `Skip prompts and use the default preset (${DEFAULT_PRESET})`)
     .option("--registry <url>", "Registry origin", { default: DEFAULT_REGISTRY })
     .option("--cwd <dir>", "Working directory", { default: process.cwd() })
-    .action(async (opts: { preset?: string; registry?: string; cwd?: string }) => {
-      const preset = opts.preset ?? (await promptForPreset());
+    .action(async (opts: { preset?: string; yes?: boolean; registry?: string; cwd?: string }) => {
+      const preset = await resolveInitPreset(opts, promptForPreset);
       const options: InitOptions = {
         cwd: opts.cwd ?? process.cwd(),
         preset,
@@ -453,6 +467,14 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
   }
   if (result.bundlerConfigAction === "manual" && result.bundlerConfigSnippet) {
     p.log.warn(`Add the plugin to your bundler config:\n\n${result.bundlerConfigSnippet}`);
+  }
+  if (result.missingThemeTokens.length > 0) {
+    p.log.warn(
+      `Your existing theme (${result.themePath}) does not define ${result.missingThemeTokens.length} design token${result.missingThemeTokens.length === 1 ? "" : "s"} the installed recipes use:\n\n` +
+        `  ${result.missingThemeTokens.join(", ")}\n\n` +
+        `Recipes referencing them will render colorless until you add the tokens to your @theme.\n` +
+        `The default token block is documented at https://shortwind.dev/docs/install#theme-tokens`,
+    );
   }
   p.outro(`Next: run \`${result.packageManager} dev\` to start watching.`);
 }

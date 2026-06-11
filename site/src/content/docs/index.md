@@ -28,7 +28,8 @@ npx @shortwind/cli@beta init
 
 The CLI (the `@shortwind/cli` package — beta for now) detects your bundler, installs
 the matching adapter, copies a `recipes/` directory you own, scaffolds a default
-theme, generates a `SKILL.md` so your agents know the recipe palette, and wires the
-plugin into your bundler config.
+theme, and generates a `SKILL.md` so your agents know the recipe palette. On Vite it
+also wires the plugin into your bundler config; on Next/Astro it prints the
+one-line snippet to paste.
 
 See [install](/docs/install) for the full walkthrough.

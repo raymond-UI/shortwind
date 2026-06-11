@@ -3,7 +3,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { scaffoldTheme, THEME_MARKER } from "../src/theme.js";
+import { findMissingThemeTokens, scaffoldTheme, THEME_MARKER } from "../src/theme.js";
 
 async function project(opts: {
   tailwind?: string;
@@ -89,5 +89,49 @@ describe("scaffoldTheme", () => {
     const result = await scaffoldTheme(dir);
     expect(result.action).toBe("skipped");
     expect(result.themePath).toBeNull();
+  });
+});
+
+describe("findMissingThemeTokens (#62)", () => {
+  // create-next-app ships an @theme that defines only background/foreground —
+  // the skip-existing-theme path must still tell the user which recipe-
+  // referenced tokens that theme does NOT define.
+  const nextAppCss = `@import "tailwindcss";
+:root { --background: #ffffff; --foreground: #171717; }
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+`;
+
+  const flattened = {
+    card: ["bg-card", "text-card-foreground", "rounded-lg", "border-border"],
+    badge: ["hover:bg-primary/90", "text-muted-foreground"],
+  };
+
+  it("reports recipe-referenced tokens the project theme does not define", () => {
+    const missing = findMissingThemeTokens(nextAppCss, flattened);
+    expect(missing).toEqual(["border", "card", "card-foreground", "muted-foreground", "primary"]);
+  });
+
+  it("reports nothing when the theme defines every referenced token", () => {
+    const css = `@theme inline {
+  --color-card: var(--card);
+  --color-card-foreground: oklch(0.1 0 0);
+  --color-border: #eee;
+  --color-muted-foreground: #888;
+  --color-primary: #000;
+}`;
+    expect(findMissingThemeTokens(css, flattened)).toEqual([]);
+  });
+
+  it("accepts shadcn-style --<name> custom properties as defining a token", () => {
+    const css = `:root { --card: #fff; --card-foreground: #000; --border: #eee; --muted-foreground: #888; --primary: #000; }`;
+    expect(findMissingThemeTokens(css, flattened)).toEqual([]);
+  });
+
+  it("ignores utilities that are not theme color tokens", () => {
+    const css = `@theme inline { --color-background: #fff; }`;
+    expect(findMissingThemeTokens(css, { text: ["text-4xl", "font-bold", "tracking-tight"] })).toEqual([]);
   });
 });

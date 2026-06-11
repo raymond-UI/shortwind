@@ -272,6 +272,57 @@ describe("init", () => {
     expect(readFileSync(cardPath, "utf8")).toBe("/* user modified */\n");
   });
 
+  it("reports recipe-referenced tokens missing from a pre-existing @theme (#62)", async () => {
+    // create-next-app ships a globals.css whose @theme defines only
+    // background/foreground; the theme scaffold skips it, so init must surface
+    // which tokens the installed recipes reference that the theme lacks.
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { next: "^15.0.0" },
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+    await mkdir(path.join(dir, "app"), { recursive: true });
+    await writeFile(
+      path.join(dir, "app", "globals.css"),
+      `@import "tailwindcss";\n:root { --background: #fff; --foreground: #171717; }\n@theme inline {\n  --color-background: var(--background);\n  --color-foreground: var(--foreground);\n}\n`,
+    );
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.themeAction).toBe("skipped");
+    // the starter families lean on the shadcn token set — card/border/etc.
+    // must be flagged as missing from the untouched theme
+    expect(result.missingThemeTokens).toContain("card");
+    expect(result.missingThemeTokens).toContain("border");
+    expect(result.missingThemeTokens).not.toContain("background");
+  });
+
+  it("reports no missing tokens when init scaffolds the theme itself", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.themeAction).toBe("created");
+    expect(result.missingThemeTokens).toEqual([]);
+  });
+
   it("detects pnpm via lockfile", async () => {
     const dir = await setupProject();
     cleanup.push(dir);

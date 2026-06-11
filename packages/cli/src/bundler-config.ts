@@ -38,7 +38,7 @@ export async function wireBundler(cwd: string, bundler: Bundler): Promise<Bundle
     return {
       configPath: null,
       action: "manual",
-      snippet: `import { withShortwind } from "@shortwind/next";\n// wrap your Next config: export default withShortwind(nextConfig);`,
+      snippet: `import { withShortwind } from "@shortwind/next";\n// withShortwind is curried — wrap your Next config:\n//   export default withShortwind()(nextConfig);`,
       reason: "Next config wiring is manual",
     };
   }

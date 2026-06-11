@@ -1,11 +1,13 @@
 import path from "node:path";
 import {
+  findResidualRecipeTokens,
   findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
   listRecipeFiles,
   loadRegistryFromDir,
   modeForFile,
+  residualRecipeMessage,
   transformContent,
   TailwindAdapterError,
 } from "@shortwind/tailwind";
@@ -15,6 +17,12 @@ export type ShortwindViteOptions = {
   recipesDir?: string;
   include?: RegExp;
   cwd?: string;
+  // Fail the transform (build error / dev overlay) when a known recipe token
+  // survives in transformed output ANYWHERE — including the silent
+  // variable-indirection case the class-value warning can't see (#67).
+  // Opt-in: the detector is token-based, so prose that legitimately names a
+  // recipe (docs pages, comments) would fail a strict build.
+  strict?: boolean;
 };
 
 type MinimalViteHmrServer = {
@@ -53,6 +61,8 @@ type MinimalVitePlugin = {
   buildStart?: () => void;
   configureServer?: (server: MinimalViteHmrServer) => void | Promise<void>;
   closeBundle?: () => void | Promise<void>;
+  resolveId?: (id: string) => string | null;
+  load?: (id: string) => string | null;
   transform?: (
     this: MinimalTransformContext,
     code: string,
@@ -80,6 +90,7 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
   const include = rawInclude.global
     ? new RegExp(rawInclude.source, rawInclude.flags.replace(/g/g, ""))
     : rawInclude;
+  const strict = options.strict ?? false;
 
   let isBuild = false;
   // Remember an initial parse/resolve failure so a `vite build` can fail loudly
@@ -160,16 +171,31 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
         callExpanders: ["cva", "tv"],
       });
       // Surface recipes the transform couldn't reach (usually a dynamic
-      // className) — they ship as literal @tokens and won't render. Route
-      // through Rollup's `this.warn` (deduped, attributed to this module in the
-      // build log); fall back to console.warn outside a Rollup context (tests).
-      // This is a warning, not a build error, so it does NOT open the dev
-      // overlay — that's reserved for registry load failures (onRecipeEvent).
-      const leftover = findUnexpandedRecipes(out, registry);
-      if (leftover.length > 0) {
-        const msg = `[shortwind] ${cleanId}: unexpanded recipe ${leftover.join(", ")} — likely a dynamic className the build can't statically expand; it will render as raw text.`;
-        if (this.warn) this.warn(msg);
-        else console.warn(msg);
+      // className) — they ship as literal @tokens and won't render.
+      //
+      // strict mode (#67): scan the WHOLE output (the class-value scan misses
+      // the variable-indirection leak) and throw — Rollup fails the build,
+      // dev shows the error overlay — instead of shipping unstyled UI behind
+      // a green build.
+      if (strict) {
+        const residual = findResidualRecipeTokens(out, registry);
+        if (residual.length > 0) {
+          throw new TailwindAdapterError(
+            `${residualRecipeMessage(cleanId, residual)} (strict mode: failing the build — pass strict: false to demote this to a warning)`,
+          );
+        }
+      } else {
+        // Default: a warning, not a build error, so it does NOT open the dev
+        // overlay — that's reserved for registry load failures (onRecipeEvent).
+        // Route through Rollup's `this.warn` (deduped, attributed to this
+        // module in the build log); fall back to console.warn outside a Rollup
+        // context (tests).
+        const leftover = findUnexpandedRecipes(out, registry);
+        if (leftover.length > 0) {
+          const msg = residualRecipeMessage(cleanId, leftover);
+          if (this.warn) this.warn(msg);
+          else console.warn(msg);
+        }
       }
       if (out === code) return null;
       return { code: out, map: null };
@@ -193,6 +219,46 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       const out = injectSourceDirective(code, registry);
       if (out === code) return null;
       return { code: out, map: null };
+    },
+  };
+
+  // Recipe files are not real stylesheets — `@recipe name { … }` at-rules are
+  // Shortwind's registry format, read from disk (loadRegistryFromDir), and
+  // never needed in the bundle. But @tailwindcss/vite's dev transform pulls
+  // any recipes/*.css that lands in the module graph and fails compiling the
+  // at-rules ("Invalid declaration"), throwing fatal overlays in `vite dev` /
+  // `astro dev` (#65). Neutralize the modules at the LOAD phase, which runs
+  // before every plugin's transform regardless of ordering, so Tailwind never
+  // sees the recipe source. Explicit `?raw` imports (the file's literal text)
+  // are left alone — they're strings, not stylesheets, and harmless to CSS
+  // processing.
+  const recipeNeutralizePlugin: MinimalVitePlugin = {
+    name: "shortwind:recipe-neutralize",
+    enforce: "pre",
+    load(id) {
+      const [file, query = ""] = id.split("?");
+      if (/(?:^|&)raw(?:&|=|$)/.test(query)) return null;
+      if (!registryFiles.has(toPosix(file ?? id))) return null;
+      return "/* shortwind: recipe module neutralized — recipes are read from disk, not the bundle */\n";
+    },
+  };
+
+  // The documented rc() escape hatch needs the registry in client code. A
+  // `?raw` glob over recipes/*.css would plant the very `@recipe` definition
+  // tokens the build is supposed to eliminate (#63); this virtual module
+  // serves the FLATTENED registry instead — plain Tailwind utilities, zero
+  // recipe tokens — so `import registry from "virtual:shortwind/registry"`
+  // is bundle-clean by construction. `families` is intentionally empty: its
+  // Recipe entries carry raw `@`-cross-refs, and expandClassList only reads
+  // `flattened`. Recipe edits are covered by the watcher's invalidateAll.
+  const registryModulePlugin: MinimalVitePlugin = {
+    name: "shortwind:registry-module",
+    resolveId(id) {
+      return id === REGISTRY_MODULE_ID ? RESOLVED_REGISTRY_MODULE_ID : null;
+    },
+    load(id) {
+      if (id !== RESOLVED_REGISTRY_MODULE_ID) return null;
+      return `export default ${JSON.stringify({ families: {}, flattened: registry.flattened })};`;
     },
   };
 
@@ -253,7 +319,19 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     },
   };
 
-  return [transformPlugin, cssPlugin, watcherPlugin];
+  return [transformPlugin, cssPlugin, recipeNeutralizePlugin, registryModulePlugin, watcherPlugin];
 }
+
+export const REGISTRY_MODULE_ID = "virtual:shortwind/registry";
+// Rollup convention: prefix the resolved id with \0 so other plugins (and
+// Vite's own resolver) leave the virtual module alone.
+const RESOLVED_REGISTRY_MODULE_ID = "\0" + REGISTRY_MODULE_ID;
+
+// Re-exported so the documented rc() helper resolves from the package init
+// actually installs — `@shortwind/core` is only a transitive dependency and
+// cannot be imported from a fresh project (#63). Types for the virtual module
+// ship in client.d.ts (`/// <reference types="@shortwind/vite/client" />`).
+export { expandClassList } from "@shortwind/core";
+export type { Registry } from "@shortwind/core";
 
 export default shortwind;
