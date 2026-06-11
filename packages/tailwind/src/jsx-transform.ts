@@ -1,5 +1,10 @@
 import { parse, type ParserPlugin } from "@babel/parser";
-import { expandClassList, type Registry } from "@shortwind/core";
+import {
+  escapeForStringLiteral,
+  escapeForTemplateLiteral,
+  expandClassList,
+  type Registry,
+} from "@shortwind/core";
 
 export type JsxTransformOptions = {
   mergeConflicts: boolean;
@@ -43,13 +48,37 @@ export function transformJsxContent(
   const replacements: Replacement[] = [];
   const callExpanders = new Set(options.callExpanders);
 
+  // A bare JSX attribute string (`className='…'`) is HTML-like: it does NOT
+  // honour JS backslash escapes, so `\'` wouldn't escape the quote. The only
+  // safe option is to switch the delimiter — a `'`-bearing expansion goes inside
+  // `"…"` (the resolver gate guarantees the expansion has no `"`).
+  const pushAttributeStringReplacement = (node: Node): void => {
+    const start = node.start ?? 0;
+    const end = node.end ?? 0;
+    if (end <= start) return;
+    const value = typeof node["value"] === "string" ? (node["value"] as string) : null;
+    if (value === null) return;
+    const expanded = expandClassList(value, registry, options.mergeConflicts);
+    if (expanded === value) return;
+    const quote = expanded.includes("'") ? '"' : (content[start] ?? '"');
+    replacements.push({ start, end, value: quote + expanded + quote });
+  };
+
+  // A JS string literal (a cva()/tv() argument, or a string inside a
+  // `className={…}` expression) DOES honour escapes, so keep the delimiter and
+  // escape the expansion for it. Use the COOKED value (Babel resolves source
+  // escapes) so we don't double-escape a pre-existing `\'`. This is what stops a
+  // hostile token like `x'};alert(1);//` from becoming executable code.
   const pushStringReplacement = (node: Node): void => {
-    const start = (node.start ?? 0) + 1;
-    const end = (node.end ?? 0) - 1;
-    if (start >= end) return;
-    const raw = content.slice(start, end);
-    const expanded = expandClassList(raw, registry, options.mergeConflicts);
-    if (expanded !== raw) replacements.push({ start, end, value: expanded });
+    const start = node.start ?? 0;
+    const end = node.end ?? 0;
+    if (end <= start) return;
+    const value = typeof node["value"] === "string" ? (node["value"] as string) : null;
+    if (value === null) return;
+    const expanded = expandClassList(value, registry, options.mergeConflicts);
+    if (expanded === value) return;
+    const quote = (content[start] ?? '"') as '"' | "'" | "`";
+    replacements.push({ start, end, value: quote + escapeForStringLiteral(expanded, quote) + quote });
   };
 
   const pushTemplateReplacement = (node: Node): void => {
@@ -58,15 +87,18 @@ export function transformJsxContent(
     for (const quasi of quasis) {
       const start = quasi.start ?? 0;
       const end = quasi.end ?? 0;
-      if (start >= end) continue;
-      const raw = content.slice(start, end);
-      if (!/\S/.test(raw)) continue;
-      const leadWS = raw.match(/^\s*/)?.[0] ?? "";
-      const trailWS = raw.match(/\s*$/)?.[0] ?? "";
-      const middle = raw.slice(leadWS.length, raw.length - trailWS.length);
+      if (end <= start) continue;
+      const cookedVal = quasi["value"] as { cooked?: string; raw?: string } | undefined;
+      const cooked = cookedVal?.cooked ?? cookedVal?.raw ?? content.slice(start, end);
+      if (!/\S/.test(cooked)) continue;
+      const leadWS = cooked.match(/^\s*/)?.[0] ?? "";
+      const trailWS = cooked.match(/\s*$/)?.[0] ?? "";
+      const middle = cooked.slice(leadWS.length, cooked.length - trailWS.length);
       const expanded = expandClassList(middle, registry, options.mergeConflicts);
-      const next = leadWS + expanded + trailWS;
-      if (next !== raw) replacements.push({ start, end, value: next });
+      if (expanded === middle) continue;
+      // Template-literal context: escape backtick / `${` / backslash so an
+      // expanded token can't terminate the literal or inject an interpolation.
+      replacements.push({ start, end, value: leadWS + escapeForTemplateLiteral(expanded) + trailWS });
     }
   };
 
@@ -91,7 +123,11 @@ export function transformJsxContent(
   const visit = (node: Node): void => {
     if (node.type === "JSXAttribute" && isClassAttribute(node)) {
       const value = node["value"] as Node | null | undefined;
-      if (value) collectClassStrings(value);
+      // A direct string value is a bare HTML-like attribute (delimiter-switch);
+      // anything else is a `{…}` expression container whose strings are JS
+      // (escape). collectClassStrings handles the latter.
+      if (value?.type === "StringLiteral") pushAttributeStringReplacement(value);
+      else if (value) collectClassStrings(value);
       return;
     }
     if (node.type === "CallExpression" && isConfiguredCall(node, callExpanders)) {

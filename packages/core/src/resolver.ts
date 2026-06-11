@@ -50,17 +50,19 @@ export function buildRegistry(
         line: r.sourceLine,
       });
     }
-    // Recipes are a trust boundary (`shortwind add <third-party-family>`). A
-    // token containing a double-quote can break out of a `class="…"` attribute
-    // or the `@source inline("…")` directive it's later interpolated into —
-    // `a"onload="alert(1)` becomes a second HTML attribute. Reject it here so
-    // no downstream sink has to defend against it. Single-quote arbitrary
-    // values (`content-['→']`) are legitimate and handled at emission instead.
+    // Recipes are a trust boundary (`shortwind add <third-party-family>`).
+    // A double-quote breaks out of a `class="…"` attribute / `@source
+    // inline("…")` directive, and a backtick breaks out of a template-literal
+    // host (`cva(\`…\`)`); neither is a legitimate Tailwind class character.
+    // Reject them here so no sink has to. Single-quotes and backslashes ARE
+    // legitimate (`content-['→']`, `content-['\2014']`) and are escaped at
+    // emission instead.
     for (const token of r.tokens) {
-      if (token.includes('"')) {
+      const bad = token.includes('"') ? '"' : token.includes("`") ? "backtick" : null;
+      if (bad) {
         errors.push({
           code: "resolve/unsafe-token",
-          message: `recipe '${r.name}' has token ${JSON.stringify(token)} containing a double-quote, which can break out of a class attribute`,
+          message: `recipe '${r.name}' has token ${JSON.stringify(token)} containing a ${bad}, which can break out of a class attribute or template literal`,
           file: r.sourceFile,
           line: r.sourceLine,
         });
