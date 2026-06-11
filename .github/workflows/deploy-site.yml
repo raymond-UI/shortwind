@@ -1,0 +1,54 @@
+name: Deploy site
+
+# Builds the standalone Astro site in site/ and deploys it to Cloudflare
+# (the shortwind-production Worker that serves shortwind.dev). Runs only when
+# site/ changes so package work doesn't trigger a site redeploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build & deploy to Cloudflare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        # site/ is its own pnpm root, decoupled from the package workspace.
+        working-directory: site
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm run build
+      - name: Deploy to Cloudflare
+        env:
+          # account_id lives in site/wrangler.jsonc; only the token is secret.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN secret not set — built but skipped deploy. Add the secret to enable auto-deploy."
+            exit 0
+          fi
+          pnpm exec wrangler deploy
