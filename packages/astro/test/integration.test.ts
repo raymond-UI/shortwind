@@ -59,10 +59,25 @@ describe("astro integration", () => {
       [
         "shortwind:transform",
         "shortwind:css-source",
+        "shortwind:recipe-neutralize",
         "shortwind:registry-module",
         "shortwind:watcher",
       ].sort(),
     );
+  });
+
+  it("ships the recipe-neutralize plugin so Astro dev doesn't compile @recipe at-rules (#65)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const integration = shortwind({ cwd: dir });
+    const config = runSetup(integration, new URL(`file://${dir}/`));
+    const neutralize = config.vite.plugins.find(
+      (p) => p.name === "shortwind:recipe-neutralize",
+    ) as { load?: (id: string) => string | null } | undefined;
+    expect(neutralize).toBeTruthy();
+    const loaded = neutralize!.load?.(path.join(dir, "recipes", "card.css"));
+    expect(typeof loaded).toBe("string");
+    expect(loaded).not.toContain("@recipe");
   });
 
   it("re-exports expandClassList so the rc() helper resolves from the adapter (#63)", async () => {

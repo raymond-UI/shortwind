@@ -39,17 +39,19 @@ describe("vite plugin", () => {
     for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("returns four plugins (transform + css-source + registry-module + watcher)", async () => {
+  it("returns five plugins (transform + css-source + recipe-neutralize + registry-module + watcher)", async () => {
     const dir = await makeProject({});
     dirs.push(dir);
     const plugins = shortwind({ cwd: dir });
-    expect(plugins).toHaveLength(4);
+    expect(plugins).toHaveLength(5);
     expect(plugins[0]?.name).toBe("shortwind:transform");
     expect(plugins[1]?.name).toBe("shortwind:css-source");
-    expect(plugins[2]?.name).toBe("shortwind:registry-module");
-    expect(plugins[3]?.name).toBe("shortwind:watcher");
+    expect(plugins[2]?.name).toBe("shortwind:recipe-neutralize");
+    expect(plugins[3]?.name).toBe("shortwind:registry-module");
+    expect(plugins[4]?.name).toBe("shortwind:watcher");
     expect(plugins[0]?.enforce).toBe("pre");
     expect(plugins[1]?.enforce).toBe("pre");
+    expect(plugins[2]?.enforce).toBe("pre");
   });
 
   it("transforms @recipe tokens inside class= attributes of HTML", async () => {
@@ -319,5 +321,31 @@ describe("vite plugin", () => {
     expect(typeof mod.expandClassList).toBe("function");
     const registry = { families: {}, flattened: { card: ["rounded-lg", "border"] } };
     expect(mod.expandClassList("@card p-6", registry, true)).toBe("rounded-lg border p-6");
+  });
+
+  it("neutralizes recipe CSS modules so Tailwind's dev transform never compiles @recipe at-rules (#65)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const neutralize = shortwind({ cwd: dir }).find((p) => p.name === "shortwind:recipe-neutralize");
+    expect(neutralize).toBeTruthy();
+
+    // load (which runs before every transform, regardless of plugin order)
+    // serves the recipe module as empty CSS — the @recipe at-rules never
+    // reach @tailwindcss/vite's generate:serve pass
+    const recipeId = path.join(dir, "recipes", "card.css");
+    const loaded = neutralize!.load?.(recipeId);
+    expect(typeof loaded).toBe("string");
+    expect(loaded).not.toContain("@recipe");
+
+    // non-recipe CSS is left to Vite's normal pipeline
+    expect(neutralize!.load?.(path.join(dir, "src", "index.css"))).toBeNull();
+  });
+
+  it("leaves explicit ?raw imports of recipe files untouched (#65)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const neutralize = shortwind({ cwd: dir }).find((p) => p.name === "shortwind:recipe-neutralize");
+    const recipeId = path.join(dir, "recipes", "card.css");
+    expect(neutralize!.load?.(`${recipeId}?raw`)).toBeNull();
   });
 });

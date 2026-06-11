@@ -198,6 +198,27 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     },
   };
 
+  // Recipe files are not real stylesheets — `@recipe name { … }` at-rules are
+  // Shortwind's registry format, read from disk (loadRegistryFromDir), and
+  // never needed in the bundle. But @tailwindcss/vite's dev transform pulls
+  // any recipes/*.css that lands in the module graph and fails compiling the
+  // at-rules ("Invalid declaration"), throwing fatal overlays in `vite dev` /
+  // `astro dev` (#65). Neutralize the modules at the LOAD phase, which runs
+  // before every plugin's transform regardless of ordering, so Tailwind never
+  // sees the recipe source. Explicit `?raw` imports (the file's literal text)
+  // are left alone — they're strings, not stylesheets, and harmless to CSS
+  // processing.
+  const recipeNeutralizePlugin: MinimalVitePlugin = {
+    name: "shortwind:recipe-neutralize",
+    enforce: "pre",
+    load(id) {
+      const [file, query = ""] = id.split("?");
+      if (/(?:^|&)raw(?:&|=|$)/.test(query)) return null;
+      if (!registryFiles.has(toPosix(file ?? id))) return null;
+      return "/* shortwind: recipe module neutralized — recipes are read from disk, not the bundle */\n";
+    },
+  };
+
   // The documented rc() escape hatch needs the registry in client code. A
   // `?raw` glob over recipes/*.css would plant the very `@recipe` definition
   // tokens the build is supposed to eliminate (#63); this virtual module
@@ -274,7 +295,7 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     },
   };
 
-  return [transformPlugin, cssPlugin, registryModulePlugin, watcherPlugin];
+  return [transformPlugin, cssPlugin, recipeNeutralizePlugin, registryModulePlugin, watcherPlugin];
 }
 
 export const REGISTRY_MODULE_ID = "virtual:shortwind/registry";
