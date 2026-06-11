@@ -1,0 +1,16 @@
+# Security headers for shortwind.dev, served by the Cloudflare asset Worker.
+# Cloudflare honors this file in the deployed assets directory (public/ → dist/).
+#
+# CSP notes:
+# - 'unsafe-inline' for script/style is pragmatic: Astro's island hydration and
+#   Tailwind's injected styles both rely on inline content. It still blocks
+#   external script/style from origins not listed here.
+# - https://fonts.googleapis.com (font CSS) + https://fonts.gstatic.com (font
+#   files) are loaded by BaseHead.astro.
+# - https://unpkg.com is the playground iframe's @tailwindcss/browser engine;
+#   the srcDoc iframe inherits this CSP, so the origin must be allowed here.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://unpkg.com; frame-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
