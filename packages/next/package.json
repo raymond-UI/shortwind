@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.typetest.json",
     "test": "vitest run",
     "prepublishOnly": "pnpm run build"
   },
@@ -22,7 +22,8 @@
     "@shortwind/tailwind": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^25.7.0"
+    "@types/node": "^25.7.0",
+    "next": "^16.2.6"
   },
   "publishConfig": {
     "access": "public",
