@@ -124,6 +124,23 @@ describe("vite plugin", () => {
     expect(result).toBeNull();
   });
 
+  it("honors a custom include and stays deterministic across files even with a /g flag (#44/#57)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    // A /g RegExp carries lastIndex between .test() calls; the plugin must strip
+    // the flag, or the SECOND matching file is skipped nondeterministically.
+    const [transformPlugin] = shortwind({ cwd: dir, include: /\.foo$/g });
+    const a = callTransform(transformPlugin!, `<div class="@card"></div>`, path.join(dir, "a.foo"));
+    const b = callTransform(transformPlugin!, `<div class="@card"></div>`, path.join(dir, "b.foo"));
+    for (const r of [a, b]) {
+      const code = typeof r === "string" ? r : r?.code;
+      expect(code, "both .foo files transform").not.toBeNull();
+      expect(code).toMatch(/rounded/);
+    }
+    // a file outside the custom include is ignored
+    expect(callTransform(transformPlugin!, `<div class="@card"></div>`, path.join(dir, "c.tsx"))).toBeNull();
+  });
+
   it("skips the recipe CSS files themselves", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
