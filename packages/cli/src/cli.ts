@@ -387,6 +387,8 @@ function describeVerifyIssue(issue: import("./commands/verify.js").VerifyIssue):
       return "no fingerprint header — recipe was hand-stripped";
     case "header-tampered":
       return `header sha ${issue.recorded} but body hashes to ${issue.actual}`;
+    case "legacy-fingerprint":
+      return `sealed with an older fingerprint format (${issue.recorded}) — run \`shortwind reseal\` to upgrade it (the recipe body is unchanged)`;
     case "lockfile-mismatch":
       return `lockfile expects ${issue.locked} but body hashes to ${issue.actual}`;
     case "missing-lock-entry":

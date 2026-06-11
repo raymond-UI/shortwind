@@ -5,6 +5,7 @@ import { resolveSource, type RegistrySource } from "../registry-source.js";
 import {
   computeBodySha,
   extractHeader,
+  isLegacyFingerprint,
   rewriteHeaderSha,
   verifyFetchedFamily,
 } from "../fingerprint.js";
@@ -115,7 +116,16 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
     const lockedEntry = lock.families[family];
     const lockedVersion = lockedEntry?.version ?? localHeader?.version ?? "";
 
-    const isTouched = recordedSha !== "" && recordedSha !== actualSha;
+    // A legacy 6-hex seal can't be re-derived with the current hash, so a sha
+    // difference is a FORMAT mismatch, not a local edit — don't flag it as
+    // "locally modified". Tell the user to reseal; the upgrade still proceeds.
+    const recordedIsLegacy = isLegacyFingerprint(recordedSha);
+    if (recordedIsLegacy) {
+      console.warn(
+        `[shortwind] ${family}.css uses an older fingerprint format — run \`shortwind reseal\` to upgrade its seal (the recipe body is unchanged).`,
+      );
+    }
+    const isTouched = recordedSha !== "" && recordedSha !== actualSha && !recordedIsLegacy;
     const state: FamilyState = isTouched
       ? "touched"
       : lockedVersion === incomingVersion

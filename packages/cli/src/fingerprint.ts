@@ -43,6 +43,18 @@ export function computeBodySha(source: string): string {
   return createHash("sha256").update(normalized).digest("hex").slice(0, RECIPE_SHA_HEX_LENGTH);
 }
 
+// A fingerprint written by an older CLI (the 6-hex / 24-bit form), as opposed to
+// the current 16-hex form or the `000000` placeholder. Used to give projects
+// sealed before the width change a "run `shortwind reseal`" message instead of a
+// false "tampered" — the body is fine, only the seal format is stale.
+export function isLegacyFingerprint(sha: string): boolean {
+  return (
+    sha !== PLACEHOLDER_SHA &&
+    sha.length < RECIPE_SHA_HEX_LENGTH &&
+    /^[0-9a-f]+$/.test(sha)
+  );
+}
+
 // Verify a family fetched from a registry before trusting/resealing its bytes.
 // A built registry seals each family with a real content sha; if the header sha
 // doesn't match the body we recompute, the response was tampered with or
