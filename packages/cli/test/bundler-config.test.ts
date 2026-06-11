@@ -76,4 +76,15 @@ describe("wireBundler (vite)", () => {
     expect((await wireBundler(dir, "next")).action).toBe("manual");
     expect((await wireBundler(dir, "astro")).snippet).toContain("@shortwind/astro");
   });
+
+  it("the next snippet shows the curried call shape (#61)", async () => {
+    // withShortwind is curried: withShortwind(options?)(nextConfig?). The
+    // non-curried form the snippet used to show passes the Next config as
+    // Shortwind options and exports a function — Next then fails to boot.
+    const dir = await project({});
+    dirs.push(dir);
+    const result = await wireBundler(dir, "next");
+    expect(result.snippet).toContain("withShortwind()(");
+    expect(result.snippet).not.toMatch(/withShortwind\((?!\)\()\w/);
+  });
 });

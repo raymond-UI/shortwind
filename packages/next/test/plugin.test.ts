@@ -41,6 +41,17 @@ describe("withShortwind", () => {
     expect(typeof wrapped.webpack).toBe("function");
   });
 
+  it("the documented snippet shape yields a plain config object, not a function (#61)", async () => {
+    // Mirrors the README / CLI snippet: export default withShortwind()(nextConfig)
+    const dir = await makeProject();
+    dirs.push(dir);
+    const nextConfig = { reactStrictMode: true };
+    const wrapped = withShortwind({ cwd: dir })(nextConfig);
+    expect(typeof wrapped).toBe("object");
+    expect(typeof wrapped).not.toBe("function");
+    expect(wrapped.reactStrictMode).toBe(true);
+  });
+
   it("webpack hook prepends a pre-loader rule for source files", async () => {
     const dir = await makeProject();
     dirs.push(dir);
