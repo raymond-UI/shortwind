@@ -15,8 +15,8 @@ importers:
         specifier: 5.0.7
         version: 5.0.7(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(jiti@2.7.0)(lightningcss@1.32.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@shortwind/core':
-        specifier: 0.1.0-beta.8
-        version: 0.1.0-beta.8
+        specifier: 0.1.0-beta.10
+        version: 0.1.0-beta.10
       astro:
         specifier: 6.4.6
         version: 6.4.6(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.61.1)
@@ -28,11 +28,11 @@ importers:
         version: 19.2.7(react@19.2.7)
     devDependencies:
       '@shortwind/astro':
-        specifier: 0.1.0-beta.8
-        version: 0.1.0-beta.8(astro@6.4.6(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.61.1))(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))
+        specifier: 0.1.0-beta.10
+        version: 0.1.0-beta.10(astro@6.4.6(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.61.1))(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))
       '@shortwind/tailwind':
-        specifier: 0.1.0-beta.8
-        version: 0.1.0-beta.8(tailwindcss@4.3.0)
+        specifier: 0.1.0-beta.10
+        version: 0.1.0-beta.10(tailwindcss@4.3.0)
       '@tailwindcss/vite':
         specifier: ^4.3.0
         version: 4.3.0(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))
@@ -902,21 +902,21 @@ packages:
   '@shikijs/vscode-textmate@10.0.2':
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
 
-  '@shortwind/astro@0.1.0-beta.8':
-    resolution: {integrity: sha512-ttVDc0bx5pljth5JfCHjKAaouLFmEYkdW79KNXvW0a77HAgr7f58ir0WyFa4bcRn7NCQ8bew5OrD9D8b55ZW0A==}
+  '@shortwind/astro@0.1.0-beta.10':
+    resolution: {integrity: sha512-OkKD4tPWvk7QS6M7N9g8hvMsJ7o6P99cJrsLpypwL9gdZ81JlmHuZ4xnNb8cPTwiYBmn0xWy5rPplyZTiL0/Ow==}
     peerDependencies:
       astro: '>=4.0.0'
 
-  '@shortwind/core@0.1.0-beta.8':
-    resolution: {integrity: sha512-0LXxbMgT+1uu0YdxsFddOmnS7at73Ktb7WctBVuK4oJt9j9kPk7S9iiWXZHBeDxTncdQ8AkWhMWTEg2hiuO7tg==}
+  '@shortwind/core@0.1.0-beta.10':
+    resolution: {integrity: sha512-zBM4RJFVQJlt7g3noCH0wun6fDKCkpEpyuq0GZNnMJaUwC96qG3gubkH5490A3XWgRhZVHSL7B1WfrRsamZ7lA==}
 
-  '@shortwind/tailwind@0.1.0-beta.8':
-    resolution: {integrity: sha512-Ez/fAucobM4zpbINQFW3zmZFWnxxXE4yge9BMOAcXaJXppf2ePQFl8zG1av7K128fP0kDe5opWm/KJFNnu10ng==}
+  '@shortwind/tailwind@0.1.0-beta.10':
+    resolution: {integrity: sha512-eWIYzujs58AoV4XJUNJilHRuxEB6gZHGWaO2IhXQh5kyAsw6QvE3NSl3rHvPMytYNqQxohmbWAtNXDRr8NDByA==}
     peerDependencies:
       tailwindcss: '>=3.0.0'
 
-  '@shortwind/vite@0.1.0-beta.8':
-    resolution: {integrity: sha512-1qmHbl5Q8STD0xqLagqtzTjkLDRnWVTqQyGXTkHj75RMziXcwOSuxygcjulGa+0LDOVzXSroiv5qix48C7AnAg==}
+  '@shortwind/vite@0.1.0-beta.10':
+    resolution: {integrity: sha512-ZFeas/tt6h54bgSGOw1bslrHcBXnoyNZzyM0WugerwEnnYGZHilcjr8jkga8Ht/2ayXjMtG9+swszWJjLzVIJQ==}
     peerDependencies:
       vite: '>=5.0.0'
 
@@ -2811,30 +2811,28 @@ snapshots:
 
   '@shikijs/vscode-textmate@10.0.2': {}
 
-  '@shortwind/astro@0.1.0-beta.8(astro@6.4.6(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.61.1))(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))':
+  '@shortwind/astro@0.1.0-beta.10(astro@6.4.6(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.61.1))(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))':
     dependencies:
-      '@shortwind/core': 0.1.0-beta.8
-      '@shortwind/tailwind': 0.1.0-beta.8(tailwindcss@4.3.0)
-      '@shortwind/vite': 0.1.0-beta.8(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))
+      '@shortwind/vite': 0.1.0-beta.10(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))
       astro: 6.4.6(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.61.1)
     transitivePeerDependencies:
       - tailwindcss
       - vite
 
-  '@shortwind/core@0.1.0-beta.8':
+  '@shortwind/core@0.1.0-beta.10':
     dependencies:
       tailwind-merge: 3.6.0
 
-  '@shortwind/tailwind@0.1.0-beta.8(tailwindcss@4.3.0)':
+  '@shortwind/tailwind@0.1.0-beta.10(tailwindcss@4.3.0)':
     dependencies:
       '@babel/parser': 7.29.7
-      '@shortwind/core': 0.1.0-beta.8
+      '@shortwind/core': 0.1.0-beta.10
       tailwindcss: 4.3.0
 
-  '@shortwind/vite@0.1.0-beta.8(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))':
+  '@shortwind/vite@0.1.0-beta.10(tailwindcss@4.3.0)(vite@7.3.5(jiti@2.7.0)(lightningcss@1.32.0))':
     dependencies:
-      '@shortwind/core': 0.1.0-beta.8
-      '@shortwind/tailwind': 0.1.0-beta.8(tailwindcss@4.3.0)
+      '@shortwind/core': 0.1.0-beta.10
+      '@shortwind/tailwind': 0.1.0-beta.10(tailwindcss@4.3.0)
       vite: 7.3.5(jiti@2.7.0)(lightningcss@1.32.0)
     transitivePeerDependencies:
       - tailwindcss
