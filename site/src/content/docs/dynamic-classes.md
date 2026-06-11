@@ -44,30 +44,22 @@ leniency; write for the literal-only rule everywhere and it works in both.
 ## The fix: expand at build time, bind the result
 
 When you genuinely need to pick between recipes at runtime, resolve them to
-plain Tailwind at build time and bind *that* string. Drop a tiny `rc()` helper
-into your project once:
+plain Tailwind and bind *that* string. Drop a tiny `rc()` helper into your
+project once. Everything it needs ships with the adapter `init` installed —
+you never import `@shortwind/core` directly (it's a transitive dependency and
+won't resolve from your project).
+
+### Vite and Astro
+
+The plugin serves your resolved catalog as a virtual module,
+`virtual:shortwind/registry`. It contains only the *flattened* registry —
+plain Tailwind utilities — so importing it never plants `@recipe` tokens in
+your client bundle:
 
 ```ts
-// src/lib/rc.ts — runs at build time only
-import { parseRecipeFile, buildRegistry, expandClassList } from "@shortwind/core";
-import type { Recipe, Registry } from "@shortwind/core";
-
-// Read the recipe families this project owns (scaffolded by `shortwind init`).
-const sources = import.meta.glob("../../recipes/*.css", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-}) as Record<string, string>;
-
-const recipes: Recipe[] = [];
-for (const [path, source] of Object.entries(sources)) {
-  const name = path.split("/").pop()!.replace(/\.css$/, "");
-  const parsed = parseRecipeFile(source, `${name}.css`);
-  if (parsed.ok) recipes.push(...parsed.value.recipes);
-}
-
-const built = buildRegistry(recipes);
-const registry: Registry = built.ok ? built.value : { families: {}, flattened: {} };
+// src/lib/rc.ts
+import { expandClassList } from "@shortwind/vite"; // Astro: "@shortwind/astro"
+import registry from "virtual:shortwind/registry";
 
 // Resolve a recipe class list to its raw Tailwind. The `true` enables the
 // last-wins conflict merge, same as a static `class="@recipe"` attribute.
@@ -75,6 +67,15 @@ export function rc(classList: string): string {
   return expandClassList(classList, registry, true);
 }
 ```
+
+For the virtual module's types, add one line to `src/vite-env.d.ts`
+(Astro: `src/env.d.ts`):
+
+```ts
+/// <reference types="@shortwind/vite/client" />
+```
+
+(Astro projects reference `@shortwind/astro/client` instead.)
 
 Then bind the expanded value — the build only ever sees plain Tailwind:
 
@@ -85,10 +86,31 @@ import { rc } from "../lib/rc";
 <a class={isActive(href) ? rc("@nav-link-active") : rc("@nav-link")}>Home</a>
 ```
 
-`import.meta.glob` is a Vite feature, so this works as-is in Astro and any
-Vite-based setup. On other bundlers, load the same `recipes/*.css` with whatever
-glob-import they provide — `parseRecipeFile` → `buildRegistry` → `expandClassList`
-is the same three-step pipeline your build already runs.
+### Next.js
+
+The recipe catalog lives on disk, so build the registry server-side and pass
+expanded strings to client components as props:
+
+```ts
+// lib/rc.ts — import from server components / route handlers only
+import path from "node:path";
+import { expandClassList, loadRegistryFromDir } from "@shortwind/next";
+
+const registry = loadRegistryFromDir(path.join(process.cwd(), "recipes"));
+
+export function rc(classList: string): string {
+  return expandClassList(classList, registry, true);
+}
+```
+
+### Don't glob the recipe sources into the client
+
+An older version of this page suggested `import.meta.glob("…/recipes/*.css",
+{ query: "?raw" })`. Don't — that inlines the raw recipe *sources*, including
+their `@recipe` definition tokens and cross-references, into the client
+bundle. Those are exactly the tokens the build exists to eliminate, and they
+fail the no-leftover-`@recipe` check. The virtual module (or the server-side
+load in Next) gives you the same registry with none of the leakage.
 
 ## When you don't need `rc()`
 

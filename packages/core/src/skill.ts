@@ -61,7 +61,7 @@ export function renderSkillMarkdown(registry: Registry, options: SkillRenderOpti
   parts.push("```");
   parts.push("");
   parts.push(
-    "Write static class lists literally. For a runtime choice between recipes, expand them at build time with `expandClassList` from `@shortwind/core` and bind the resulting Tailwind — full helper at https://shortwind.dev/docs/dynamic-classes.",
+    "Write static class lists literally. For a runtime choice between recipes, expand them with `expandClassList` from your Shortwind adapter (`@shortwind/vite`, `@shortwind/next`, or `@shortwind/astro`) and bind the resulting Tailwind — full helper at https://shortwind.dev/docs/dynamic-classes.",
   );
   parts.push("");
 

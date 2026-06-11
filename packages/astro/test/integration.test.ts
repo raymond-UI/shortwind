@@ -56,8 +56,20 @@ describe("astro integration", () => {
     const config = runSetup(integration, new URL(`file://${dir}/`));
     const names = config.vite.plugins.map((p) => p.name).sort();
     expect(names).toEqual(
-      ["shortwind:transform", "shortwind:css-source", "shortwind:watcher"].sort(),
+      [
+        "shortwind:transform",
+        "shortwind:css-source",
+        "shortwind:registry-module",
+        "shortwind:watcher",
+      ].sort(),
     );
+  });
+
+  it("re-exports expandClassList so the rc() helper resolves from the adapter (#63)", async () => {
+    const mod = await import("../src/index.js");
+    expect(typeof mod.expandClassList).toBe("function");
+    const registry = { families: {}, flattened: { card: ["rounded-lg", "border"] } };
+    expect(mod.expandClassList("@card p-6", registry, true)).toBe("rounded-lg border p-6");
   });
 
   it("derives recipesDir from astro project root when not specified", async () => {

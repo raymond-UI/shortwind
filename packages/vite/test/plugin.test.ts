@@ -39,14 +39,15 @@ describe("vite plugin", () => {
     for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("returns three plugins (transform + css-source + watcher)", async () => {
+  it("returns four plugins (transform + css-source + registry-module + watcher)", async () => {
     const dir = await makeProject({});
     dirs.push(dir);
     const plugins = shortwind({ cwd: dir });
-    expect(plugins).toHaveLength(3);
+    expect(plugins).toHaveLength(4);
     expect(plugins[0]?.name).toBe("shortwind:transform");
     expect(plugins[1]?.name).toBe("shortwind:css-source");
-    expect(plugins[2]?.name).toBe("shortwind:watcher");
+    expect(plugins[2]?.name).toBe("shortwind:registry-module");
+    expect(plugins[3]?.name).toBe("shortwind:watcher");
     expect(plugins[0]?.enforce).toBe("pre");
     expect(plugins[1]?.enforce).toBe("pre");
   });
@@ -209,7 +210,7 @@ describe("vite plugin", () => {
   it("watcher plugin registers chokidar listeners and emits full-reload on recipe change", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
-    const [, , watcher] = shortwind({ cwd: dir });
+    const watcher = shortwind({ cwd: dir }).find((p) => p.name === "shortwind:watcher");
     const events: string[] = [];
     const handlers: Record<string, ((file: string) => void)[]> = {};
     const sent: { type: string }[] = [];
@@ -252,7 +253,9 @@ describe("vite plugin", () => {
   it("reloads the registry so transforms reflect recipes added after startup (#44)", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
-    const [transformPlugin, , watcher] = shortwind({ cwd: dir });
+    const plugins = shortwind({ cwd: dir });
+    const transformPlugin = plugins.find((p) => p.name === "shortwind:transform");
+    const watcher = plugins.find((p) => p.name === "shortwind:watcher");
     const appId = path.join(dir, "src", "App.tsx");
 
     // button family not installed yet → @btn-primary is unknown, nothing to
@@ -275,5 +278,46 @@ describe("vite plugin", () => {
     const afterCode = typeof after === "string" ? after : after?.code;
     expect(afterCode).not.toBeNull();
     expect(afterCode).not.toMatch(/@btn-primary\b/);
+  });
+
+  it("serves the registry as a bundle-clean virtual module (#63)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const plugins = shortwind({ cwd: dir });
+    const registryPlugin = plugins.find((p) => p.name === "shortwind:registry-module");
+    expect(registryPlugin).toBeTruthy();
+
+    const resolved = registryPlugin!.resolveId?.("virtual:shortwind/registry");
+    expect(resolved).toBeTruthy();
+    const code = registryPlugin!.load?.(resolved as string);
+    expect(typeof code).toBe("string");
+
+    // the module is the FLATTENED registry: plain Tailwind utilities only —
+    // importing it must not plant @recipe definition tokens or @<family>
+    // cross-refs in the client bundle (the leak the ?raw glob pattern caused)
+    expect(code).not.toContain("@recipe");
+    expect(code).not.toMatch(/"@[\w-]+"/);
+    const exported = JSON.parse((code as string).replace(/^export default /, "").replace(/;\s*$/, "")) as {
+      flattened: Record<string, string[]>;
+    };
+    expect(Object.keys(exported.flattened).length).toBeGreaterThan(0);
+    for (const tokens of Object.values(exported.flattened)) {
+      for (const t of tokens) expect(t.startsWith("@")).toBe(false);
+    }
+  });
+
+  it("does not resolve unrelated ids through the registry-module plugin", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const registryPlugin = shortwind({ cwd: dir }).find((p) => p.name === "shortwind:registry-module");
+    expect(registryPlugin!.resolveId?.("virtual:other")).toBeNull();
+    expect(registryPlugin!.load?.("some-id")).toBeNull();
+  });
+
+  it("re-exports expandClassList so the rc() helper resolves from the adapter (#63)", async () => {
+    const mod = await import("../src/index.js");
+    expect(typeof mod.expandClassList).toBe("function");
+    const registry = { families: {}, flattened: { card: ["rounded-lg", "border"] } };
+    expect(mod.expandClassList("@card p-6", registry, true)).toBe("rounded-lg border p-6");
   });
 });

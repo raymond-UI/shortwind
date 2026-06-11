@@ -41,6 +41,13 @@ export default function shortwind(options: ShortwindAstroOptions = {}): AstroInt
   };
 }
 
+// Re-exported so the documented rc() helper resolves from the package init
+// actually installs — `@shortwind/core` is only a transitive dependency (#63).
+// The integration already composes @shortwind/vite, so the
+// `virtual:shortwind/registry` module (and its ambient type) come along too.
+export { expandClassList, REGISTRY_MODULE_ID } from "@shortwind/vite";
+export type { Registry } from "@shortwind/vite";
+
 function rootToPath(root: { pathname?: string } | URL | string): string | null {
   const raw =
     typeof root === "string"

@@ -53,6 +53,8 @@ type MinimalVitePlugin = {
   buildStart?: () => void;
   configureServer?: (server: MinimalViteHmrServer) => void | Promise<void>;
   closeBundle?: () => void | Promise<void>;
+  resolveId?: (id: string) => string | null;
+  load?: (id: string) => string | null;
   transform?: (
     this: MinimalTransformContext,
     code: string,
@@ -196,6 +198,25 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     },
   };
 
+  // The documented rc() escape hatch needs the registry in client code. A
+  // `?raw` glob over recipes/*.css would plant the very `@recipe` definition
+  // tokens the build is supposed to eliminate (#63); this virtual module
+  // serves the FLATTENED registry instead — plain Tailwind utilities, zero
+  // recipe tokens — so `import registry from "virtual:shortwind/registry"`
+  // is bundle-clean by construction. `families` is intentionally empty: its
+  // Recipe entries carry raw `@`-cross-refs, and expandClassList only reads
+  // `flattened`. Recipe edits are covered by the watcher's invalidateAll.
+  const registryModulePlugin: MinimalVitePlugin = {
+    name: "shortwind:registry-module",
+    resolveId(id) {
+      return id === REGISTRY_MODULE_ID ? RESOLVED_REGISTRY_MODULE_ID : null;
+    },
+    load(id) {
+      if (id !== RESOLVED_REGISTRY_MODULE_ID) return null;
+      return `export default ${JSON.stringify({ families: {}, flattened: registry.flattened })};`;
+    },
+  };
+
   let installedListener:
     | { server: MinimalViteHmrServer; fn: (file: string) => void }
     | null = null;
@@ -253,7 +274,19 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     },
   };
 
-  return [transformPlugin, cssPlugin, watcherPlugin];
+  return [transformPlugin, cssPlugin, registryModulePlugin, watcherPlugin];
 }
+
+export const REGISTRY_MODULE_ID = "virtual:shortwind/registry";
+// Rollup convention: prefix the resolved id with \0 so other plugins (and
+// Vite's own resolver) leave the virtual module alone.
+const RESOLVED_REGISTRY_MODULE_ID = "\0" + REGISTRY_MODULE_ID;
+
+// Re-exported so the documented rc() helper resolves from the package init
+// actually installs — `@shortwind/core` is only a transitive dependency and
+// cannot be imported from a fresh project (#63). Types for the virtual module
+// ship in client.d.ts (`/// <reference types="@shortwind/vite/client" />`).
+export { expandClassList } from "@shortwind/core";
+export type { Registry } from "@shortwind/core";
 
 export default shortwind;

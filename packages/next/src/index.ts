@@ -87,3 +87,12 @@ export function withShortwind(
 
 export { default as shortwindLoader } from "./loader.js";
 export type { ShortwindLoaderOptions } from "./loader.js";
+
+// Re-exported so the documented rc() escape hatch resolves from the package
+// init actually installs — `@shortwind/core` is only a transitive dependency
+// (#63). In Next the registry load is server-side (loadRegistryFromDir reads
+// recipes/ from disk); expand in a server component or route and pass the
+// resulting plain-Tailwind string to the client as a prop.
+export { expandClassList } from "@shortwind/core";
+export { loadRegistryFromDir } from "@shortwind/tailwind";
+export type { Registry } from "@shortwind/core";

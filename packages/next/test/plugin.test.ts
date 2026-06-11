@@ -41,6 +41,18 @@ describe("withShortwind", () => {
     expect(typeof wrapped.webpack).toBe("function");
   });
 
+  it("re-exports expandClassList + loadRegistryFromDir for the server-side rc() pattern (#63)", async () => {
+    const mod = await import("../src/index.js");
+    expect(typeof mod.expandClassList).toBe("function");
+    expect(typeof mod.loadRegistryFromDir).toBe("function");
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const registry = mod.loadRegistryFromDir(path.join(dir, "recipes"));
+    const expanded = mod.expandClassList("@card p-6", registry, true);
+    expect(expanded).not.toMatch(/@card\b/);
+    expect(expanded).toContain("p-6");
+  });
+
   it("the documented snippet shape yields a plain config object, not a function (#61)", async () => {
     // Mirrors the README / CLI snippet: export default withShortwind()(nextConfig)
     const dir = await makeProject();
