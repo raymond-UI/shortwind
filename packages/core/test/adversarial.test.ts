@@ -144,6 +144,30 @@ describe("html-mode expansion correctness (#46)", () => {
     const out = expand(src, registry, { mode: "html", callExpanders: ["cva", "tv"] });
     expect(out).toContain(`cva("rounded-lg border")`);
   });
+
+  it("does not let a commented-out <script> swallow following markup", () => {
+    const src = `<!-- <script> --><div class="@card"></div>`;
+    const out = expand(src, registry, { mode: "html" });
+    // the div after the commented script must still expand
+    expect(out).toContain(`<div class="rounded-lg border"></div>`);
+  });
+
+  it("masks an UNCLOSED <script> to EOF so its JS isn't corrupted", () => {
+    const src = `<div class="@card"></div><script>obj.class = "p-2 p-4"`;
+    const out = expand(src, registry, { mode: "html" });
+    expect(out).toContain(`<div class="rounded-lg border"></div>`);
+    // the truncated script's JS is left byte-identical
+    expect(out).toContain(`obj.class = "p-2 p-4"`);
+  });
+
+  it("does not expand cva() sitting in template prose, only in <script>", () => {
+    const src = `<p>call cva("@card") to make a button</p><script>const v = cva("@card");</script>`;
+    const out = expand(src, registry, { mode: "html", callExpanders: ["cva", "tv"] });
+    // prose left untouched
+    expect(out).toContain(`<p>call cva("@card") to make a button</p>`);
+    // script's cva expanded
+    expect(out).toContain(`const v = cva("rounded-lg border");`);
+  });
 });
 
 describe("expandClassList passthrough (#43)", () => {
