@@ -14,8 +14,6 @@ import { extractClassUsages } from "./lint.js";
 export type BenchOptions = {
   cwd: string;
   corpus?: boolean;
-  json?: boolean;
-  registry?: string;
   path?: string;
 };
 

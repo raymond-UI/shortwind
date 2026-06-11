@@ -326,7 +326,6 @@ export async function run(argv: string[] = process.argv): Promise<void> {
     .action(async (pathArg: string | undefined, opts: { corpus?: boolean; json?: boolean; cwd?: string }) => {
       const benchOptions: Parameters<typeof bench>[0] = { cwd: opts.cwd ?? process.cwd() };
       if (opts.corpus) benchOptions.corpus = true;
-      if (opts.json) benchOptions.json = true;
       if (pathArg !== undefined) benchOptions.path = pathArg;
       const result = await bench(benchOptions);
       if (opts.json) {
