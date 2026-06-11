@@ -157,7 +157,13 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       // Declare the recipe files as build dependencies so `vite build --watch`
       // re-runs this transform when a recipe changes.
       for (const file of registryFiles) this.addWatchFile?.(file);
-      const out = transformContent(code, registry, { mode: modeForId(cleanId) });
+      // Pass callExpanders in BOTH modes so a cva()/tv() call in a .vue/.svelte/
+      // .astro <script> block is expanded too — the JSX path already does this,
+      // and without it the identical pattern ships literal @recipe text.
+      const out = transformContent(code, registry, {
+        mode: modeForId(cleanId),
+        callExpanders: ["cva", "tv"],
+      });
       // Surface recipes the transform couldn't reach (usually a dynamic
       // className) — they ship as literal @tokens and won't render. Route
       // through `this.warn` so it dedups and renders in Vite's overlay; fall

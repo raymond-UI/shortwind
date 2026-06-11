@@ -120,6 +120,32 @@ describe("quote-bearing tokens (#47)", () => {
   });
 });
 
+describe("html-mode expansion correctness (#46)", () => {
+  const built = buildRegistry([recipe("card", ["rounded-lg", "border"], "card.css")]);
+  const registry = built.ok ? built.value : { families: {}, flattened: {} };
+
+  it("does not rewrite class assignments or strings inside a <script> block", () => {
+    const src = `<script>obj.class = "px-2 p-4"; const s = 'class="@card"';</script><div class="@card"></div>`;
+    const out = expand(src, registry, { mode: "html" });
+    // script untouched verbatim, template div expanded
+    expect(out).toContain(`obj.class = "px-2 p-4"; const s = 'class="@card"'`);
+    expect(out).toContain(`<div class="rounded-lg border"></div>`);
+  });
+
+  it("masks an Astro `---` frontmatter fence from attribute rewriting", () => {
+    const src = `---\nconst klass = "p-2 p-4";\n---\n<div class="@card"></div>`;
+    const out = expand(src, registry, { mode: "html" });
+    expect(out).toContain(`const klass = "p-2 p-4";`);
+    expect(out).toContain(`<div class="rounded-lg border"></div>`);
+  });
+
+  it("expands cva()/tv() in html mode when callExpanders are passed (#46.3)", () => {
+    const src = `<script>const v = cva("@card");</script>`;
+    const out = expand(src, registry, { mode: "html", callExpanders: ["cva", "tv"] });
+    expect(out).toContain(`cva("rounded-lg border")`);
+  });
+});
+
 describe("expandClassList passthrough (#43)", () => {
   const registry: Registry = {
     flattened: Object.assign(Object.create(null), { card: ["rounded", "border", "p-4"] }),
