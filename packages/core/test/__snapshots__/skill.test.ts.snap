@@ -25,6 +25,17 @@ Shortwind defines named recipes like \`@card\` that expand into Tailwind class s
 3. Recipes already include hover, focus, and dark-mode variants where relevant. Don't restate them.
 4. Append raw Tailwind utilities to override. Last position wins on conflicts.
 
+## Dynamic classes
+
+Recipes expand only inside **literal** \`class="..."\` / \`className="..."\` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro \`class:list\`, or a value passed as a component prop — is invisible to the build and ships as a dead \`@recipe\` token: the element renders unstyled, with no warning.
+
+\`\`\`
+<div class="@card-elevated p-6">                 <!-- expands -->
+<a class={active ? "@nav-link-active" : "@nav-link"}>  <!-- does NOT expand -->
+\`\`\`
+
+Write static class lists literally. For a runtime choice between recipes, expand them at build time with \`expandClassList\` from \`@shortwind/core\` and bind the resulting Tailwind — full helper at https://shortwind.dev/docs/dynamic-classes.
+
 ## Available recipes
 
 ### Card recipes

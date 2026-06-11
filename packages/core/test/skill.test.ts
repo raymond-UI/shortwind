@@ -153,6 +153,22 @@ describe("renderSkillMarkdown", () => {
     expect(md).not.toContain("\n> ");
   });
 
+  it("teaches the dynamic-class rule and the build-time escape hatch", () => {
+    const md = renderSkillMarkdown(buildSampleRegistry());
+    expect(md).toContain("## Dynamic classes");
+    // states the literal-only rule and names the silent failure shapes
+    expect(md).toContain("literal");
+    expect(md).toContain("class:list");
+    // points at the supported build-time expansion path, not a guess
+    expect(md).toContain("expandClassList");
+    expect(md).toContain("https://shortwind.dev/docs/dynamic-classes");
+  });
+
+  it("includes the dynamic-class guidance even for an empty registry", () => {
+    const md = renderSkillMarkdown({ families: {}, flattened: {} });
+    expect(md).toContain("## Dynamic classes");
+  });
+
   it("renders a minimal but valid SKILL.md for an empty registry", () => {
     const md = renderSkillMarkdown({ families: {}, flattened: {} });
     expect(md.startsWith("---\n")).toBe(true);

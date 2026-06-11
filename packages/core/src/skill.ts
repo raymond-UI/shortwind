@@ -49,6 +49,22 @@ export function renderSkillMarkdown(registry: Registry, options: SkillRenderOpti
   parts.push("4. Append raw Tailwind utilities to override. Last position wins on conflicts.");
   parts.push("");
 
+  parts.push("## Dynamic classes");
+  parts.push("");
+  parts.push(
+    "Recipes expand only inside **literal** `class=\"...\"` / `className=\"...\"` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro `class:list`, or a value passed as a component prop — is invisible to the build and ships as a dead `@recipe` token: the element renders unstyled, with no warning.",
+  );
+  parts.push("");
+  parts.push("```");
+  parts.push("<div class=\"@card-elevated p-6\">                 <!-- expands -->");
+  parts.push("<a class={active ? \"@nav-link-active\" : \"@nav-link\"}>  <!-- does NOT expand -->");
+  parts.push("```");
+  parts.push("");
+  parts.push(
+    "Write static class lists literally. For a runtime choice between recipes, expand them at build time with `expandClassList` from `@shortwind/core` and bind the resulting Tailwind — full helper at https://shortwind.dev/docs/dynamic-classes.",
+  );
+  parts.push("");
+
   if (families.length === 0) {
     parts.push("## Available recipes");
     parts.push("");
