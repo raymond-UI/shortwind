@@ -342,13 +342,11 @@ async function writeSkillMd(
     }
   }
   const resolved = buildRegistry(allRecipes, { guidance });
-  if (!resolved.ok) problems.push(...resolved.errors.map((e) => e.message));
-  if (problems.length > 0) {
+  if (problems.length > 0 || !resolved.ok) {
     // Don't write a degraded/empty SKILL.md from broken recipes; surface the
     // problem instead (the installed catalog should always be valid here).
-    console.warn(
-      `[shortwind] SKILL.md not generated — recipe errors:\n  ${problems.join("\n  ")}`,
-    );
+    const all = resolved.ok ? problems : [...problems, ...resolved.errors.map((e) => e.message)];
+    console.warn(`[shortwind] SKILL.md not generated — recipe errors:\n  ${all.join("\n  ")}`);
     return;
   }
   await mkdir(path.dirname(skillPath), { recursive: true });

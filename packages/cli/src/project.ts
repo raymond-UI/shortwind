@@ -113,17 +113,15 @@ export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): P
     }
   }
   const resolved = buildRegistry(allRecipes, { guidance });
-  if (!resolved.ok) {
-    problems.push(...resolved.errors.map((e) => e.message));
-  }
 
   // Don't overwrite a populated SKILL.md with a degraded/empty one when recipes
   // fail to parse or resolve (a cycle, an unknown reference). Leave the existing
   // file untouched and surface what to fix — silently writing an empty SKILL.md
   // is data loss, and `build` rejects the same state.
-  if (problems.length > 0) {
+  if (problems.length > 0 || !resolved.ok) {
+    const all = resolved.ok ? problems : [...problems, ...resolved.errors.map((e) => e.message)];
     console.warn(
-      `[shortwind] SKILL.md not regenerated — fix these recipe errors first:\n  ${problems.join(
+      `[shortwind] SKILL.md not regenerated — fix these recipe errors first:\n  ${all.join(
         "\n  ",
       )}\n  ${path.relative(cwd, skillPath)} left unchanged.`,
     );
