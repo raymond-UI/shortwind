@@ -14,16 +14,37 @@ export type ProjectShape = {
   hasPackageJson: boolean;
 };
 
-export function detectProject(cwd: string): ProjectShape {
-  const pkgPath = path.join(cwd, "package.json");
-  const hasPackageJson = existsSync(pkgPath);
-  const pkg: {
+// Parse a local package.json into a plain object, attaching the file path to a
+// malformed-JSON error so the user sees what to fix rather than a bare
+// `Unexpected token` with no context. A non-object payload is treated as empty.
+function parsePackageJson(pkgPath: string): {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  packageManager?: string;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(pkgPath, "utf8"));
+  } catch (err) {
+    throw new Error(`${pkgPath}: invalid JSON — ${(err as Error).message}`);
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  return parsed as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
     packageManager?: string;
-  } = hasPackageJson
-    ? (JSON.parse(readFileSync(pkgPath, "utf8")) as never)
-    : { dependencies: {}, devDependencies: {} };
+  };
+}
+
+export function detectProject(cwd: string): ProjectShape {
+  const pkgPath = path.join(cwd, "package.json");
+  const hasPackageJson = existsSync(pkgPath);
+  type Pkg = {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    packageManager?: string;
+  };
+  const pkg: Pkg = hasPackageJson ? parsePackageJson(pkgPath) : {};
 
   const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
 

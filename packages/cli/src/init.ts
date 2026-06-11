@@ -270,8 +270,17 @@ async function writeConfig(
     await writeFile(configPath, JSON.stringify(desired, null, 2) + "\n");
     return;
   }
-  const current = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
-  const merged = { ...current, ...desired };
+  let current: unknown;
+  try {
+    current = JSON.parse(await readFile(configPath, "utf8"));
+  } catch (err) {
+    throw new Error(`${configPath}: invalid JSON — ${(err as Error).message}`);
+  }
+  const base =
+    current !== null && typeof current === "object" && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : {};
+  const merged = { ...base, ...desired };
   await writeFile(configPath, JSON.stringify(merged, null, 2) + "\n");
 }
 

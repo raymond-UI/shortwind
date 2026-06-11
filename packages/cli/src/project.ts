@@ -16,19 +16,55 @@ export const DEFAULT_CONFIG: ShortwindConfig = {
   outputPath: "skills/shortwind/SKILL.md",
 };
 
+// shortwind.config.json is committed to a repo and read when the tool runs in a
+// fresh checkout, so it's untrusted input. `recipesDir`/`outputPath` are joined
+// with cwd and then read/written/`rm`'d — a `../` or absolute value would let a
+// cloned repo make `shortwind build`/`add` clobber files outside the project.
+function assertConfigString(value: unknown, field: string, configPath: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${configPath}: "${field}" must be a string`);
+  }
+  return value;
+}
+
+function assertWithinCwd(cwd: string, value: string, field: string, configPath: string): string {
+  const rel = path.relative(cwd, path.resolve(cwd, value));
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(
+      `${configPath}: "${field}" (${JSON.stringify(value)}) must be a path inside the project directory`,
+    );
+  }
+  return value;
+}
+
 export async function readConfig(cwd: string): Promise<ShortwindConfig> {
   const configPath = path.join(cwd, "shortwind.config.json");
   if (!existsSync(configPath)) return DEFAULT_CONFIG;
   const body = await readFile(configPath, "utf8");
-  let parsed: Partial<ShortwindConfig>;
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(body) as Partial<ShortwindConfig>;
+    parsed = JSON.parse(body);
   } catch (err) {
-    throw new Error(
-      `${configPath}: invalid JSON — ${(err as Error).message}`,
-    );
+    throw new Error(`${configPath}: invalid JSON — ${(err as Error).message}`);
   }
-  return { ...DEFAULT_CONFIG, ...parsed };
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${configPath}: expected a JSON object`);
+  }
+  const merged = { ...DEFAULT_CONFIG, ...(parsed as Partial<ShortwindConfig>) };
+  const registry = assertConfigString(merged.registry, "registry", configPath);
+  const recipesDir = assertWithinCwd(
+    cwd,
+    assertConfigString(merged.recipesDir, "recipesDir", configPath),
+    "recipesDir",
+    configPath,
+  );
+  const outputPath = assertWithinCwd(
+    cwd,
+    assertConfigString(merged.outputPath, "outputPath", configPath),
+    "outputPath",
+    configPath,
+  );
+  return { registry, recipesDir, outputPath };
 }
 
 export function installedFamilies(recipesDir: string): string[] {
