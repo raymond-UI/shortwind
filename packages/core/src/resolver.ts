@@ -50,6 +50,22 @@ export function buildRegistry(
         line: r.sourceLine,
       });
     }
+    // Recipes are a trust boundary (`shortwind add <third-party-family>`). A
+    // token containing a double-quote can break out of a `class="…"` attribute
+    // or the `@source inline("…")` directive it's later interpolated into —
+    // `a"onload="alert(1)` becomes a second HTML attribute. Reject it here so
+    // no downstream sink has to defend against it. Single-quote arbitrary
+    // values (`content-['→']`) are legitimate and handled at emission instead.
+    for (const token of r.tokens) {
+      if (token.includes('"')) {
+        errors.push({
+          code: "resolve/unsafe-token",
+          message: `recipe '${r.name}' has token ${JSON.stringify(token)} containing a double-quote, which can break out of a class attribute`,
+          file: r.sourceFile,
+          line: r.sourceLine,
+        });
+      }
+    }
   }
 
   const lookup = new Map<string, Recipe>();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseRecipeFile } from "../src/parser.js";
 import { buildRegistry } from "../src/resolver.js";
-import { expandClassList } from "../src/expander.js";
+import { expand, expandClassList } from "../src/expander.js";
 import type { Recipe, Registry } from "../src/types.js";
 
 function recipe(name: string, tokens: string[], sourceFile = `${name}.css`): Recipe {
@@ -95,6 +95,28 @@ describe("prototype-key names (#40)", () => {
     expect(expandClassList("@constructor @toString", result.value, true)).toBe(
       "@constructor @toString",
     );
+  });
+});
+
+describe("quote-bearing tokens (#47)", () => {
+  it("rejects a recipe token containing a double-quote at resolve time", () => {
+    const result = buildRegistry([recipe("glow", ['x"onload=alert(1)', "p-4"], "glow.css")]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.some((e) => e.code === "resolve/unsafe-token")).toBe(true);
+  });
+
+  it("re-quotes a single-quoted host attribute when the expansion contains a single quote", () => {
+    // content-['→'] is a legitimate Tailwind value; expanded into class='...'
+    // it would break out, so the host switches to double quotes.
+    const built = buildRegistry([recipe("ico", ["before:content-['→']", "inline-block"], "ico.css")]);
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const out = expand(`<i class='@ico'></i>`, built.value, { mode: "html" });
+    expect(out).toContain(`before:content-['→']`);
+    // no broken/unbalanced single-quote attribute
+    expect(out).not.toMatch(/class='[^']*'[^>]*'/);
+    expect(out).toContain(`class="before:content-['→'] inline-block"`);
   });
 });
 

@@ -16,6 +16,16 @@ export type ExpandOptions = {
 
 const DEFAULT_CALL_EXPANDERS_JSX: readonly string[] = ["cva", "tv"];
 
+// Wrap an expanded class value in a host quote, switching delimiter when the
+// value contains it so a legitimate single-quote arbitrary value
+// (`content-['→']`) can't break out of a single-quoted attribute. Double-quotes
+// in tokens are rejected at resolve time, so expanded values never contain `"`
+// — making `"` always a safe fallback delimiter.
+function quoteAttr(preferred: '"' | "'", value: string): string {
+  if (preferred === "'" && value.includes("'")) return `"${value}"`;
+  return `${preferred}${value}${preferred}`;
+}
+
 export function expand(
   input: string,
   registry: Registry,
@@ -28,21 +38,21 @@ export function expand(
 
   out = out.replace(
     /\bclass\s*=\s*"([^"]*)"/g,
-    (_m, cls: string) => `class="${expandClassList(cls, registry, merge)}"`,
+    (_m, cls: string) => `class=${quoteAttr('"', expandClassList(cls, registry, merge))}`,
   );
   out = out.replace(
     /\bclass\s*=\s*'([^']*)'/g,
-    (_m, cls: string) => `class='${expandClassList(cls, registry, merge)}'`,
+    (_m, cls: string) => `class=${quoteAttr("'", expandClassList(cls, registry, merge))}`,
   );
 
   if (mode === "jsx") {
     out = out.replace(
       /\bclassName\s*=\s*"([^"]*)"/g,
-      (_m, cls: string) => `className="${expandClassList(cls, registry, merge)}"`,
+      (_m, cls: string) => `className=${quoteAttr('"', expandClassList(cls, registry, merge))}`,
     );
     out = out.replace(
       /\bclassName\s*=\s*'([^']*)'/g,
-      (_m, cls: string) => `className='${expandClassList(cls, registry, merge)}'`,
+      (_m, cls: string) => `className=${quoteAttr("'", expandClassList(cls, registry, merge))}`,
     );
     out = expandJsxBraced(out, registry, merge);
     const callExpanders = options.callExpanders ?? DEFAULT_CALL_EXPANDERS_JSX;
@@ -352,7 +362,7 @@ function expandJsxExpression(expr: string, registry: Registry, merge: boolean): 
         j++;
       }
       const content = expr.slice(i + 1, j);
-      out += open + expandClassList(content, registry, merge) + open;
+      out += quoteAttr(open as '"' | "'", expandClassList(content, registry, merge));
       i = j + 1;
     } else if (ch === "`") {
       let j = i + 1;

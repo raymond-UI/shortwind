@@ -341,14 +341,15 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
   return { manifest, manifestPath };
 }
 
-// Tokens are concatenated into `className` in the catalog UI. React escapes
-// attribute values, so this is defense-in-depth rather than a live XSS fix —
-// but it ensures a third-party recipe can't sneak `" onload="alert(1)` into
-// the wire format that downstream tools also consume. Tailwind utilities
-// (including arbitrary values like `bg-[url('/x.png')]`) stay within this
-// alphabet; anything outside it is almost certainly a parsing bug or an
-// attempted injection.
-const EXPANSION_TOKEN_RE = /^[\w:\/\-\[\]\(\),.%@!#*+&'"=?]+$/;
+// Tokens are concatenated into `className` in the catalog UI and interpolated
+// into `class="…"` / `@source inline("…")` by the adapters. A double-quote in a
+// token breaks out of those host strings (`a"onload="alert(1)` becomes a second
+// HTML attribute), so it is excluded from the alphabet — the comment used to
+// claim this gate stopped exactly that while still allowing `"`. Single quotes
+// stay (legitimate `bg-[url('/x.png')]` / `content-['→']`); the adapters switch
+// the host delimiter when an expanded value contains one. `=` stays for
+// `data-[state=open]`-style variants.
+const EXPANSION_TOKEN_RE = /^[\w:\/\-\[\]\(\),.%@!#*+&'=?]+$/;
 
 function validateExpansionTokens(manifest: Manifest): void {
   for (const family of manifest.families) {

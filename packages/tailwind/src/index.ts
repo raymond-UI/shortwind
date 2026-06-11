@@ -78,7 +78,10 @@ export function findUnexpandedRecipes(code: string, registry: Registry): string[
 export function computeSafelistTokens(registry: Registry): string[] {
   const set = new Set<string>();
   for (const tokens of Object.values(registry.flattened)) {
-    for (const t of tokens) set.add(t);
+    // A double-quote would break out of the `@source inline("…")` string and
+    // inject arbitrary CSS. buildRegistry already rejects such tokens, but a
+    // registry assembled by other means might not have — drop them defensively.
+    for (const t of tokens) if (!t.includes('"')) set.add(t);
   }
   return [...set].sort();
 }
