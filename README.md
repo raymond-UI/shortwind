@@ -52,7 +52,7 @@ npx @shortwind/cli@beta init      # beta: published on the `beta` tag
 
 - Adds **exactly one** adapter — `@shortwind/vite`, `@shortwind/next`, or `@shortwind/astro` — plus the Tailwind integration, as devDependencies. (`@shortwind/core` comes in transitively; **you never install it directly**.)
 - Copies the recipe catalog into `./recipes/` — yours to edit and own.
-- Writes `skills/shortwind/SKILL.md`, wires the plugin into your config, and installs a pre-commit hook.
+- Writes `skills/shortwind/SKILL.md` and installs a pre-commit hook. On Vite it also patches the plugin into your config; on Next/Astro it prints the one-line snippet to paste.
 
 **You do not install all the `@shortwind/*` packages** — a project needs one adapter, and `init` picks it. The standalone CDN path (`shortwind.dev/expand.js`) needs no install and no `init` at all — just a `<script>` tag.
 

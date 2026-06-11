@@ -7,12 +7,15 @@ order: 1
 # Install
 
 ```bash
-npx @shortwind/cli@beta init
+npx @shortwind/cli@beta init        # interactive (prompts for a preset)
+npx @shortwind/cli@beta init --yes  # non-interactive: default preset, no prompts
 ```
 
 Shortwind's CLI is the **`@shortwind/cli`** package — it provides the `shortwind`
 command. It's in beta, so install with the `@beta` tag (or `npm i -D @shortwind/cli@beta`
-to use the `shortwind` command directly in your scripts).
+to use the `shortwind` command directly in your scripts). In CI or agent
+sessions, pass `--yes`/`-y` (default preset, `starter`) or `--preset <name>`
+so `init` never blocks on a prompt.
 
 `init` detects your bundler and does the whole setup:
 
@@ -20,7 +23,7 @@ to use the `shortwind` command directly in your scripts).
 2. Write `shortwind.config.json` at the repo root.
 3. Copy the recipe catalog into a `recipes/` directory — yours to edit.
 4. Scaffold a default theme so recipes render with color on first run.
-5. Patch your bundler config with the right plugin import.
+5. Wire the plugin: on Vite, `init` patches `vite.config.*` automatically; on Next.js and Astro it prints the one-line snippet to paste into your config.
 6. Generate `skills/shortwind/SKILL.md` — a recipe palette your coding agents can read.
 
 ## Theme tokens

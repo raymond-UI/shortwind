@@ -18,8 +18,14 @@ an `@guide` stub, and an example recipe, then regenerate `SKILL.md`.
 
 ## `shortwind init`
 
-Scaffold Shortwind in the current project. Interactive — detects your bundler,
-writes a config, wires the plugin, generates `SKILL.md`.
+Scaffold Shortwind in the current project: detects your bundler, writes a
+config, copies recipes, scaffolds the theme, and generates `SKILL.md`. On
+**Vite** it also patches the plugin into `vite.config.*`; on **Next/Astro** it
+prints the one-line snippet to paste instead.
+
+Interactive by default (it prompts for a preset). Pass `--preset <name>` to
+pick one explicitly, or `--yes`/`-y` to take the default (`starter`) — both
+skip the prompt, so agents and CI can run `init` unattended.
 
 ## `shortwind add <family...>`
 

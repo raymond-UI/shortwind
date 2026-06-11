@@ -10,7 +10,7 @@ The Shortwind command-line tool. Provides the `shortwind` command: `init`, `add`
 npx @shortwind/cli@beta init      # beta: published on the `beta` tag
 ```
 
-`init` is the one command you need — it detects your bundler, installs the right adapter, copies the recipe catalog into `./recipes/`, scaffolds a default theme, wires the plugin into your config, and generates `skills/shortwind/SKILL.md`.
+`init` is the one command you need — it detects your bundler, installs the right adapter, copies the recipe catalog into `./recipes/`, scaffolds a default theme, and generates `skills/shortwind/SKILL.md`. On Vite it also patches the plugin into your config; on Next/Astro it prints the one-line snippet to paste. Run it with `--yes` (default preset) or `--preset <name>` to skip the interactive prompt in CI and agent sessions.
 
 Install it to get the `shortwind` command in scripts:
 
