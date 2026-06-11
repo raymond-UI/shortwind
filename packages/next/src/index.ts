@@ -71,6 +71,11 @@ export function withShortwind(
 
     const turbo: TurbopackConfig = nextConfig.turbopack ?? {};
     const rules: Record<string, TurbopackRule> = { ...(turbo.rules ?? {}) };
+    // Asymmetry vs the webpack rule's `exclude: /node_modules/`: Turbopack rule
+    // keys are globs with no negation syntax, so a node_modules exclude can't be
+    // expressed here. Turbopack does not apply custom loader rules to
+    // node_modules by default, so dependency files aren't transformed; the
+    // loader is also a no-op on any file without `@recipe` tokens.
     rules["*.{tsx,ts,jsx,js,mdx,md}"] = {
       loaders: [{ loader: LOADER_PATH, options: loaderOptions }],
     };

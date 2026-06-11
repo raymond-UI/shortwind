@@ -1,10 +1,11 @@
 import path from "node:path";
-import { existsSync, readdirSync } from "node:fs";
 import {
   findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
+  listRecipeFiles,
   loadRegistryFromDir,
+  modeForFile,
   transformContent,
   TailwindAdapterError,
 } from "@shortwind/tailwind";
@@ -55,20 +56,8 @@ type MinimalVitePlugin = {
 
 const DEFAULT_INCLUDE = /\.(?:tsx?|jsx?|vue|svelte|astro|html?|md|mdx)$/;
 
-// Real JSX/TSX (and MDX, which compiles to JSX) use `className` and parse with
-// the JSX-aware transform. Template formats — .astro, .vue, .svelte — and
-// .html/.htm are HTML-shaped: they use `class=` (not `className`) and are NOT
-// valid JSX, so the JSX AST parser can't read them and would silently leave
-// every `class="@recipe"` unexpanded. Those go through the html-mode expander,
-// which rewrites `class=` attributes by regex. (.md is markdown, not JSX; it
-// stays on the JSX path, where a parse failure is a safe no-op, to avoid
-// expanding `class="@..."` inside documentation code fences.)
-const JSX_LIKE = new Set(["ts", "tsx", "js", "jsx", "md", "mdx"]);
-
-function modeForId(id: string): "html" | "jsx" {
-  const ext = path.extname(id).slice(1).toLowerCase();
-  return JSX_LIKE.has(ext) ? "jsx" : "html";
-}
+// The html-vs-jsx decision lives in @shortwind/tailwind (modeForFile) so every
+// adapter shares one implementation instead of re-deriving it.
 
 // Normalize to posix separators so on-disk paths (path.join → backslashes on
 // Windows) compare equal to Vite's always-posix module ids.
@@ -107,10 +96,7 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
 
   function refreshRegistryFiles(): void {
     registryFiles = new Set<string>();
-    if (!existsSync(recipesDir)) return;
-    for (const f of readdirSync(recipesDir)) {
-      if (f.endsWith(".css")) registryFiles.add(toPosix(path.join(recipesDir, f)));
-    }
+    for (const f of listRecipeFiles(recipesDir)) registryFiles.add(toPosix(f));
   }
 
   function reloadRegistry(): void {
@@ -161,7 +147,7 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       // .astro <script> block is expanded too — the JSX path already does this,
       // and without it the identical pattern ships literal @recipe text.
       const out = transformContent(code, registry, {
-        mode: modeForId(cleanId),
+        mode: modeForFile(cleanId),
         callExpanders: ["cva", "tv"],
       });
       // Surface recipes the transform couldn't reach (usually a dynamic

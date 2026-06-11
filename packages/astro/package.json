@@ -18,8 +18,6 @@
     "astro": ">=4.0.0"
   },
   "dependencies": {
-    "@shortwind/core": "workspace:*",
-    "@shortwind/tailwind": "workspace:*",
     "@shortwind/vite": "workspace:*"
   },
   "devDependencies": {

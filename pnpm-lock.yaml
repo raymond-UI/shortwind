@@ -42,12 +42,6 @@ importers:
 
   packages/astro:
     dependencies:
-      '@shortwind/core':
-        specifier: workspace:*
-        version: link:../core
-      '@shortwind/tailwind':
-        specifier: workspace:*
-        version: link:../tailwind
       '@shortwind/vite':
         specifier: workspace:*
         version: link:../vite
