@@ -1,4 +1,5 @@
 import { defineConfig } from "astro/config";
+import type { AstroIntegration } from "astro";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import shortwind from "@shortwind/astro";
@@ -15,7 +16,13 @@ export default defineConfig({
     // Expands @recipe tokens in .astro/.tsx/.md before Tailwind's content scan.
     // recipesDir defaults to <root>/recipes — exactly where `shortwind init`
     // scaffolded the catalog we now own.
-    shortwind(),
+    //
+    // Cast: the pinned @shortwind/astro builds its integration object against
+    // its own minimal structural types, which aren't assignable to this astro
+    // version's AstroIntegration under strict function contravariance (the
+    // runtime shape is correct). @shortwind/astro@>0.1.0-beta.9 widens the type
+    // so this cast can drop once the site bumps to it.
+    shortwind() as unknown as AstroIntegration,
   ],
   vite: {
     // Tailwind v4. Shortwind's plugins are enforce:"pre", so they run ahead of

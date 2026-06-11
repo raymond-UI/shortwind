@@ -8,10 +8,16 @@ export type ShortwindAstroOptions = {
 
 type SetupHookContext = {
   config: { root: { pathname?: string } | URL | string };
-  // Newer Astro versions return the merged config from updateConfig. We don't
-  // currently need it (we only register a Vite plugin), but the unknown return
-  // documents the shape so a future caller doesn't add a void-returning hack.
-  updateConfig: (config: { vite: { plugins: unknown[] } }) => unknown;
+  // `updateConfig` is intentionally typed to accept any config shape. Astro's
+  // real signature is `(DeepPartial<AstroConfig>) => AstroConfig`; if we narrow
+  // the parameter (e.g. to `{ vite: { plugins: unknown[] } }`) the integration
+  // stops being assignable to Astro's `AstroIntegration` under strict function
+  // contravariance, which red-lines `astro check` / tsc in consuming sites even
+  // though the runtime shape is fine. Keeping the integration Astro-version-
+  // agnostic (no astro dependency) is the tradeoff this `any` parameter buys
+  // (`unknown` would fail the same contravariance check it's meant to satisfy).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  updateConfig: (config: any) => unknown;
 };
 
 type AstroIntegration = {

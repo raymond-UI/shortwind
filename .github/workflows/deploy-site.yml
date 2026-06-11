@@ -40,6 +40,11 @@ jobs:
           cache-dependency-path: site/pnpm-lock.yaml
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        # site/ is a decoupled pnpm root, outside the workspace turbo typecheck
+        # graph — without this gate a type error (e.g. an integration type skew)
+        # ships silently. astro.config + content collections must type-check.
+        run: pnpm exec tsc --noEmit
       - name: Build
         run: pnpm run build
       - name: Verify CDN runtime artifact is present
