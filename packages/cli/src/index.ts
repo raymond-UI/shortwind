@@ -44,7 +44,7 @@ export {
   rewriteHeaderSha,
   sealRecipeFile,
   buildHeaderLine,
-  normalizeBody,
+  verifyFetchedFamily,
 } from "./fingerprint.js";
 export type { RecipeHeader } from "./fingerprint.js";
 export { renameFamilyInSource } from "./project.js";

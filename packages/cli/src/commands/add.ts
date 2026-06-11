@@ -2,7 +2,12 @@ import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveSource } from "../registry-source.js";
-import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
+import {
+  computeBodySha,
+  extractHeader,
+  rewriteHeaderSha,
+  verifyFetchedFamily,
+} from "../fingerprint.js";
 import { readLockfile, writeLockfile, type Lockfile } from "../lockfile.js";
 import {
   readConfig,
@@ -69,6 +74,10 @@ export async function add(options: AddOptions): Promise<AddResult> {
     }
 
     const sourceCss = await source.loadFamily(family);
+    // Verify the publisher's seal on the bytes that arrived before resealing
+    // them under our own header — a tampered registry/CDN response must not be
+    // silently re-sealed and trusted.
+    verifyFetchedFamily(sourceCss, family);
     const renamed = options.as ? renameFamilyInSource(sourceCss, family, options.as) : sourceCss;
     const sha = computeBodySha(renamed);
     const finalCss = rewriteHeaderSha(renamed, sha);

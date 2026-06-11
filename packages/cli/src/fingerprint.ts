@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  normalizeRecipeBody,
+  PLACEHOLDER_SHA,
+  RECIPE_SHA_HEX_LENGTH,
+} from "@shortwind/core";
 
 // Accept either the canonical short form or the legacy em-dash trailer
 // `— DO NOT EDIT THIS LINE`. The two-hyphen ASCII variant (`-- DO NOT…`) is
@@ -28,17 +33,30 @@ export function bodyAfterHeader(source: string): string {
   return eol === -1 ? "" : source.slice(eol + 1);
 }
 
-export function normalizeBody(body: string): string {
-  const lf = body.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  return lf
-    .split("\n")
-    .map((line) => line.replace(/[\t ]+$/, ""))
-    .join("\n");
+export function computeBodySha(source: string): string {
+  // Normalization and width come from core (RECIPE_SHA_HEX_LENGTH), shared with
+  // the registry sealer so a downloaded family's header sha can be verified
+  // against its body. Previously this truncated to 6 hex (24 bits) — forgeable
+  // by brute force in seconds — and normalized differently from the registry,
+  // so the two could never agree.
+  const normalized = normalizeRecipeBody(bodyAfterHeader(source));
+  return createHash("sha256").update(normalized).digest("hex").slice(0, RECIPE_SHA_HEX_LENGTH);
 }
 
-export function computeBodySha(source: string): string {
-  const normalized = normalizeBody(bodyAfterHeader(source));
-  return createHash("sha256").update(normalized).digest("hex").slice(0, 6);
+// Verify a family fetched from a registry before trusting/resealing its bytes.
+// A built registry seals each family with a real content sha; if the header sha
+// doesn't match the body we recompute, the response was tampered with or
+// corrupted in transit (integrity is otherwise TLS-only). Unsealed content and
+// the `000000` source placeholder have no real fingerprint, so they pass.
+export function verifyFetchedFamily(source: string, family: string): void {
+  const header = extractHeader(source);
+  if (!header || header.sha === PLACEHOLDER_SHA) return;
+  const actual = computeBodySha(source);
+  if (header.sha !== actual) {
+    throw new Error(
+      `integrity check failed for "${family}": header sha ${header.sha} does not match content sha ${actual} — the registry response was tampered with or corrupted in transit`,
+    );
+  }
 }
 
 export function buildHeaderLine(family: string, version: string, sha: string): string {

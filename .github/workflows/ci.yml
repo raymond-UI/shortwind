@@ -62,6 +62,13 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # The catalog build rewrites packages/registry/catalog.lock.json (the
+      # version ledger that machine-checks "content changed → version bumped").
+      # A clean build leaves it byte-identical; any drift means an uncommitted
+      # version bump OR a deleted lock entry that the build silently
+      # re-bootstrapped (the version-enforcement bypass). Fail loudly.
+      - name: Catalog version-lock is committed and unchanged
+        run: git diff --exit-code -- packages/registry/catalog.lock.json
       # Print the measured token savings into the build log. The floor that
       # backs the README claim is asserted by the bench test in `pnpm test`;
       # this step surfaces the actual table for each run.

@@ -5,7 +5,12 @@ import { fileURLToPath } from "node:url";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
-import { computeBodySha, extractHeader, rewriteHeaderSha } from "./fingerprint.js";
+import {
+  computeBodySha,
+  extractHeader,
+  rewriteHeaderSha,
+  verifyFetchedFamily,
+} from "./fingerprint.js";
 import { detectProject, type PackageManager } from "./detect.js";
 import {
   BUNDLED_ORIGIN,
@@ -242,6 +247,8 @@ async function copyRecipes(
       continue;
     }
     const body = await source.loadFamily(family);
+    // Reject a tampered/corrupted registry response before resealing.
+    verifyFetchedFamily(body, family);
     const sha = computeBodySha(body);
     const sealed = rewriteHeaderSha(body, sha);
     await writeFile(target, sealed);

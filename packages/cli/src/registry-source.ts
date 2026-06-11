@@ -25,7 +25,16 @@ export function assertValidFamilyName(family: string): void {
 }
 
 export function createRegistrySource(origin: string): RegistrySource {
-  if (origin.startsWith("http://") || origin.startsWith("https://")) {
+  if (origin.startsWith("http://")) {
+    // Plaintext: recipe content arrives unauthenticated and the header sha we
+    // verify can be rewritten in transit alongside the body. Warn loudly; TLS
+    // is the only transport integrity we have for a remote registry.
+    console.warn(
+      `[shortwind] registry origin ${origin} uses plaintext http:// — recipe content is unauthenticated and tamperable in transit; prefer https://`,
+    );
+    return httpSource(origin);
+  }
+  if (origin.startsWith("https://")) {
     return httpSource(origin);
   }
   return fileSource(origin);

@@ -54,7 +54,9 @@ describe("add", () => {
     expect(result.added).toEqual(["card"]);
     expect(existsSync(path.join(dir, "recipes", "card.css"))).toBe(true);
     expect(result.lockfile.families["card"]?.version).toBe("0.0.1");
-    expect(result.lockfile.families["card"]?.sha).toMatch(/^[a-f0-9]{6}$/);
+    // 16 hex (64 bits) — shared width with the registry sealer; a 6-hex (24-bit)
+    // fingerprint was brute-forceable.
+    expect(result.lockfile.families["card"]?.sha).toMatch(/^[a-f0-9]{16}$/);
     expect(result.lockfile.families["card"]?.sha).not.toBe("000000");
   });
 

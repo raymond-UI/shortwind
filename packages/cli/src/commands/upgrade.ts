@@ -2,7 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { open, rename } from "node:fs/promises";
 import path from "node:path";
 import { resolveSource, type RegistrySource } from "../registry-source.js";
-import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
+import {
+  computeBodySha,
+  extractHeader,
+  rewriteHeaderSha,
+  verifyFetchedFamily,
+} from "../fingerprint.js";
 import { readLockfile, writeLockfile, type Lockfile } from "../lockfile.js";
 import { installedFamilies, readConfig, regenerateSkillMd } from "../project.js";
 
@@ -90,6 +95,8 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
     let incomingBody: string;
     try {
       incomingBody = await source.loadFamily(family);
+      // Reject a tampered/corrupted registry response before it's resealed.
+      verifyFetchedFamily(incomingBody, family);
     } catch (err) {
       errors.push({ family, message: (err as Error).message });
       continue;

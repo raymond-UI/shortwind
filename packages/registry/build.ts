@@ -11,7 +11,14 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { buildRegistry, parseRecipeFile, RESERVED_RECIPE_NAMES } from "@shortwind/core";
+import {
+  buildRegistry,
+  normalizeRecipeBody,
+  parseRecipeFile,
+  PLACEHOLDER_SHA,
+  RECIPE_SHA_HEX_LENGTH,
+  RESERVED_RECIPE_NAMES,
+} from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
 
 export type BuildOptions = {
@@ -57,21 +64,13 @@ export type BuildResult = {
 const HEADER_RE =
   /^\/\*\s*shortwind:\s+(\S+)@(\S+)\s+sha:(?:[0-9a-f]{6}|[0-9a-f]{16})\s*\*\//;
 
-function normalizeBody(body: string): string {
-  // Two recipes that differ only in whether the file ends with `\n` should
-  // hash identically — the writer always re-emits with a trailing newline, so
-  // strip them all before hashing.
-  return body
-    .replace(/\r\n/g, "\n")
-    .replace(/[ \t]+$/gm, "")
-    .replace(/\n+$/g, "");
-}
-
 function computeSha(body: string): string {
-  // 16 hex chars = 64 bits of collision resistance. Long enough that
-  // accidental fingerprint collisions across recipe edits are effectively
-  // impossible while staying readable in the file header.
-  return createHash("sha256").update(normalizeBody(body)).digest("hex").slice(0, 16);
+  // Normalization and truncation width are shared with the CLI via core so a
+  // downloaded family's header sha can be verified against its body.
+  return createHash("sha256")
+    .update(normalizeRecipeBody(body))
+    .digest("hex")
+    .slice(0, RECIPE_SHA_HEX_LENGTH);
 }
 
 function parseHeader(source: string): { family: string; version: string } | null {
@@ -79,6 +78,12 @@ function parseHeader(source: string): { family: string; version: string } | null
   const m = firstLine.match(HEADER_RE);
   if (!m) return null;
   return { family: m[1]!, version: m[2]! };
+}
+
+function parseHeaderSha(source: string): string | null {
+  const firstLine = source.split("\n", 1)[0] ?? "";
+  const m = firstLine.match(/sha:([0-9a-f]{6,16})/);
+  return m ? m[1]! : null;
 }
 
 function bodyWithoutHeader(source: string): string {
@@ -245,6 +250,16 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
     const version = familyVersion(opts, family, source);
     const body = bodyWithoutHeader(source);
     const sha = computeSha(body);
+    // A non-placeholder header sha is a claim about the body — validate it
+    // rather than silently overwriting. A mismatch means the body was edited
+    // without re-sealing (or was tampered with); fail loudly instead of
+    // shipping a header that lies about its content.
+    const declaredSha = parseHeaderSha(source);
+    if (declaredSha && declaredSha !== PLACEHOLDER_SHA && declaredSha !== sha) {
+      throw new Error(
+        `source recipe ${file} declares sha:${declaredSha} but its content hashes to sha:${sha} — re-seal the file or correct the header`,
+      );
+    }
     familySources.push({ family, version, sha, body });
     for (const r of parsed.value.recipes) {
       // `@`-prefixed recipe names share a namespace with Tailwind's own
