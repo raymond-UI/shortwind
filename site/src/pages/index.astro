@@ -27,19 +27,13 @@ const shrink = Math.round(((tok(demoExpanded) - tok(demoSource)) / tok(demoExpan
 <BaseLayout title="Shortwind">
   {/* ── Hero ───────────────────────────────────────────────────────────── */}
   <section class="@wrapper flex flex-col items-center py-20 text-center sm:py-28">
-    <p class="@eyebrow mb-6">token-efficient @recipe layer · tailwind v4</p>
-    <h1 class="font-mono text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
+    <h1 class="font-mono text-3xl font-bold leading-[1.05] tracking-tight sm:text-5xl">
       <span class="text-muted-foreground">LLM</span>
       <span class="@term px-1">→</span>
       <span>@recipe</span>
       <span class="@term px-1">→</span>
       <span class="text-muted-foreground">Tailwind</span>
     </h1>
-    <p class="@lead mt-6 max-w-xl">
-      Every element an LLM generates is a wall of utility classes. Let it write
-      <code class="@code-inline">@card</code> instead — expanded to identical
-      Tailwind at build. Same render, <span class="text-foreground">{shrink}% fewer tokens</span>.
-    </p>
     <div class="@row mt-8 flex-wrap justify-center gap-3">
       <a href="/docs" class="@btn-primary">Get started</a>
       <a href="/playground" class="@btn-secondary">Playground</a>
