@@ -348,8 +348,9 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
 // claim this gate stopped exactly that while still allowing `"`. Single quotes
 // stay (legitimate `bg-[url('/x.png')]` / `content-['→']`); the adapters switch
 // the host delimiter when an expanded value contains one. `=` stays for
-// `data-[state=open]`-style variants.
-const EXPANSION_TOKEN_RE = /^[\w:\/\-\[\]\(\),.%@!#*+&'=?]+$/;
+// `data-[state=open]`-style variants. Non-ASCII ( -￿) is allowed so a
+// unicode arbitrary value like `content-['→']` isn't rejected as invalid.
+const EXPANSION_TOKEN_RE = /^[\w:\/\-\[\]\(\),.%@!#*+&'=?\u00A0-\uFFFF]+$/;
 
 function validateExpansionTokens(manifest: Manifest): void {
   for (const family of manifest.families) {

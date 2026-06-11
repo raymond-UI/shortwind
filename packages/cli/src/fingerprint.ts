@@ -63,6 +63,14 @@ export function isLegacyFingerprint(sha: string): boolean {
 export function verifyFetchedFamily(source: string, family: string): void {
   const header = extractHeader(source);
   if (!header || header.sha === PLACEHOLDER_SHA) return;
+  // The header's family name is also part of the seal: a registry serving
+  // `button.css` in response to a request for `card` is a mismatch even if its
+  // own sha is internally consistent.
+  if (header.family !== family) {
+    throw new Error(
+      `integrity check failed for "${family}": registry returned a recipe sealed as "${header.family}" — wrong family or a tampered/corrupted response`,
+    );
+  }
   const actual = computeBodySha(source);
   if (header.sha !== actual) {
     throw new Error(

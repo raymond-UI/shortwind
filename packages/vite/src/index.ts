@@ -29,7 +29,13 @@ type MinimalViteHmrServer = {
   // invalidate everything on a recipe change — every transformed module may
   // depend on the registry.
   moduleGraph?: { invalidateAll?: () => void };
-  ws: { send: (payload: { type: "full-reload" }) => void };
+  ws: {
+    send: (
+      payload:
+        | { type: "full-reload" }
+        | { type: "error"; err: { message: string; stack: string } },
+    ) => void;
+  };
   httpServer?: { on: (event: "close", cb: () => void) => void } | null;
 };
 
@@ -99,16 +105,19 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
     for (const f of listRecipeFiles(recipesDir)) registryFiles.add(toPosix(f));
   }
 
-  function reloadRegistry(): void {
+  // Returns the load error (kept registry preserved) so the caller can surface
+  // it in the dev overlay, or null on success.
+  function reloadRegistry(): TailwindAdapterError | null {
     try {
       registry = loadRegistryFromDir(recipesDir);
       refreshRegistryFiles();
+      return null;
     } catch (err) {
       if (err instanceof TailwindAdapterError) {
         // Keep the last good registry rather than blanking it — a transient
         // broken edit shouldn't make every recipe ship as raw text mid-session.
         console.error(`[shortwind] ${err.message} — keeping the previous recipes`);
-        return;
+        return err;
       }
       throw err;
     }
@@ -152,8 +161,10 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       });
       // Surface recipes the transform couldn't reach (usually a dynamic
       // className) — they ship as literal @tokens and won't render. Route
-      // through `this.warn` so it dedups and renders in Vite's overlay; fall
-      // back to console.warn outside a Rollup context (tests).
+      // through Rollup's `this.warn` (deduped, attributed to this module in the
+      // build log); fall back to console.warn outside a Rollup context (tests).
+      // This is a warning, not a build error, so it does NOT open the dev
+      // overlay — that's reserved for registry load failures (onRecipeEvent).
       const leftover = findUnexpandedRecipes(out, registry);
       if (leftover.length > 0) {
         const msg = `[shortwind] ${cleanId}: unexpanded recipe ${leftover.join(", ")} — likely a dynamic className the build can't statically expand; it will render as raw text.`;
@@ -216,7 +227,16 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
         const rel = path.relative(path.resolve(recipesDir), normalized);
         if (rel.startsWith("..") || path.isAbsolute(rel)) return;
         if (!normalized.endsWith(".css")) return;
-        reloadRegistry();
+        const loadError = reloadRegistry();
+        if (loadError) {
+          // A broken recipe edit: show it in the browser's error overlay (we
+          // kept the previous registry, so the page itself still works).
+          server.ws.send({
+            type: "error",
+            err: { message: `[shortwind] ${loadError.message}`, stack: loadError.stack ?? "" },
+          });
+          return;
+        }
         // Drop cached module transforms BEFORE the reload signal, or the
         // browser re-fetches output still expanded with the old registry.
         server.moduleGraph?.invalidateAll?.();

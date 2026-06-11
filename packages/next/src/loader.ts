@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import {
   loadRegistryFromDir,
+  modeForFile,
   transformContent,
   type TransformOptions,
 } from "@shortwind/tailwind";
@@ -76,6 +77,6 @@ export default function shortwindLoader(this: LoaderContext, source: string): st
   if (this.addDependency) {
     for (const file of entry.files) this.addDependency(file);
   }
-  const mode = options.mode ?? (this.resourcePath.endsWith(".html") ? "html" : "jsx");
+  const mode = options.mode ?? modeForFile(this.resourcePath);
   return transformContent(source, entry.registry, { mode });
 }
