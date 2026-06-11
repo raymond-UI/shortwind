@@ -291,7 +291,7 @@ describe("ls", () => {
     const installedNames = result.installed.map((i) => i.family).sort();
     expect(installedNames).toEqual(["button", "card", "form", "layout", "text"]);
     for (const entry of result.installed) {
-      expect(entry.version).toBe("0.0.1");
+      expect(entry.version).toMatch(/^0\.0\.\d+$/);
     }
     expect(result.available.length).toBeGreaterThanOrEqual(19);
   });

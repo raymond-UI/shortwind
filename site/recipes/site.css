@@ -1,11 +1,12 @@
-/* shortwind: site@0.0.1 sha:20458f — DO NOT EDIT THIS LINE */
+/* shortwind: site@0.0.2 sha:a0e74a5ea9fb3235 — DO NOT EDIT THIS LINE */
 
 /* @guide
    Site-authored chrome layered on the default catalog. These demonstrate
    recipe *composition*: each references catalog recipes (@code-block, @surface)
-   and adds a few utilities. Use @prompt for copy-paste command lines, @eyebrow
-   for the uppercase kicker above headings, @doc-callout for admonitions in
-   docs, and @term for terminal-accent text (the green $ marker).
+   and adds a few utilities. Use @prompt for copy-paste command lines,
+   @doc-callout for admonitions in docs, and @term for terminal-accent text
+   (the green $ marker). The uppercase kicker is the catalog's @eyebrow (text
+   family) — the site no longer defines its own.
 */
 
 /* Terminal command line — a single mono row with room for a leading $ glyph
@@ -17,11 +18,6 @@
 /* Terminal-accent text — the green used for prompts, markers, active ticks. */
 @recipe term {
   font-mono text-term
-}
-
-/* Uppercase kicker above a heading. */
-@recipe eyebrow {
-  font-mono text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground
 }
 
 /* Documentation admonition — left rule + tinted surface. Composes @surface-muted. */

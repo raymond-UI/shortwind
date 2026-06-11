@@ -1,11 +1,12 @@
-/* shortwind: text@0.0.1 sha:205fea — DO NOT EDIT THIS LINE */
+/* shortwind: text@0.0.2 sha:f39dc7b88afefc8f — DO NOT EDIT THIS LINE */
 
 /* @guide
    Headings are sized by weight, not HTML level: @heading-xl/lg/md/sm — there
    is no @h1..@h6. Body copy: @body (default), @lead (intro paragraphs), @muted
-   (secondary), @caption (fine print). Use @label for form labels and @link for
-   inline links. Don't append a -text suffix: it's @body not @body-text, @muted
-   not @muted-text, @link not @link-text.
+   (secondary), @caption (fine print), @eyebrow (uppercase kicker above a
+   heading). Use @label for form labels and @link for inline links. Don't
+   append a -text suffix: it's @body not @body-text, @muted not @muted-text,
+   @link not @link-text.
 */
 
 /* Top-level page heading. */
@@ -51,6 +52,11 @@
 /* Caption — small supporting text. */
 @recipe caption {
   text-xs text-muted-foreground
+}
+
+/* Eyebrow — uppercase kicker above a heading. */
+@recipe eyebrow {
+  font-mono text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground
 }
 
 /* Inline link with hover/focus states. */

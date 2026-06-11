@@ -6,7 +6,7 @@ exports[`ls > text format is stable for snapshotting 1`] = `
   card  0.0.1
   form  0.0.1
   layout  0.0.1
-  text  0.0.1
+  text  0.0.2
 
 Available:
     badge
