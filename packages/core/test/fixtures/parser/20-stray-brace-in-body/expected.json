@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "parse/unexpected-brace",
+      "message": "unexpected '{' in recipe body — bodies are flat class lists",
+      "file": "input.css",
+      "line": 2,
+      "column": 14
+    }
+  ]
+}

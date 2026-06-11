@@ -86,7 +86,10 @@ export async function lint(options: LintOptions): Promise<LintResult> {
       for (const token of u.tokens) {
         if (!token.value.startsWith("@")) continue;
         const name = token.value.slice(1);
-        if (registry.flattened[name]) usedRecipes.add(name);
+        // `Object.hasOwn`, never a truthy lookup: a token like `@constructor`
+        // would otherwise resolve an inherited Object.prototype member and be
+        // silently treated as a known recipe instead of flagged unknown.
+        if (Object.hasOwn(registry.flattened, name)) usedRecipes.add(name);
         else if (enabledRules.has("recipe/unknown")) {
           findings.push({
             rule: "recipe/unknown",
@@ -319,7 +322,7 @@ function checkUsageSuffixOrder(
   for (const token of tokens) {
     if (!token.value.startsWith("@")) continue;
     const name = token.value.slice(1);
-    if (!registry.flattened[name]) continue;
+    if (!Object.hasOwn(registry.flattened, name)) continue;
     const meta = recipeMeta(name, familyForRecipe(registry, name));
     if (!meta.badOrder) continue;
     findings.push({
@@ -346,7 +349,7 @@ function checkConflictingIntent(
   for (const token of tokens) {
     if (!token.value.startsWith("@")) continue;
     const name = token.value.slice(1);
-    if (!registry.flattened[name]) continue;
+    if (!Object.hasOwn(registry.flattened, name)) continue;
     const meta = recipeMeta(name, familyForRecipe(registry, name));
     if (!meta.intent) continue;
     const familyIntents =
@@ -393,7 +396,7 @@ function checkSiblingOverlap(
   for (const token of tokens) {
     if (!token.value.startsWith("@")) continue;
     const name = token.value.slice(1);
-    if (!registry.flattened[name]) continue;
+    if (!Object.hasOwn(registry.flattened, name)) continue;
     const family = familyForRecipe(registry, name) ?? name.split("-")[0] ?? name;
     const arr = byFamily.get(family) ?? [];
     arr.push({ token, name });

@@ -1,0 +1,33 @@
+{
+  "ok": false,
+  "errors": [
+    {
+      "code": "parse/unexpected",
+      "message": "unexpected character '@' at top level",
+      "file": "input.css",
+      "line": 1,
+      "column": 1
+    },
+    {
+      "code": "parse/unexpected",
+      "message": "unexpected character '{' at top level",
+      "file": "input.css",
+      "line": 1,
+      "column": 10
+    },
+    {
+      "code": "parse/unexpected",
+      "message": "unexpected character 'p' at top level",
+      "file": "input.css",
+      "line": 1,
+      "column": 12
+    },
+    {
+      "code": "parse/unexpected",
+      "message": "unexpected character '}' at top level",
+      "file": "input.css",
+      "line": 1,
+      "column": 16
+    }
+  ]
+}

@@ -28,6 +28,17 @@ export function parseRecipeFile(
   const peek = (offset = 0): string => source[pos + offset] ?? "";
   const starts = (s: string): boolean => source.startsWith(s, pos);
 
+  // `@recipe` only opens a recipe when the next char is a word boundary (space
+  // or `{`) or EOF — `@recipex` / `@recipe-card` are not recipe starts. Both the
+  // top-level dispatch and the error-recovery skip loop consult this single
+  // predicate; when they drifted apart, the skip loop broke on `@recipex`
+  // without advancing and the outer loop spun forever.
+  const isRecipeKeywordStart = (): boolean =>
+    starts(RECIPE_KW) &&
+    (pos + RECIPE_KW.length >= end ||
+      isWS(source[pos + RECIPE_KW.length] ?? "") ||
+      source[pos + RECIPE_KW.length] === "{");
+
   const isWS = (ch: string): boolean =>
     ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f";
   const isIdentStart = (ch: string): boolean => /[A-Za-z_]/.test(ch);
@@ -88,7 +99,11 @@ export function parseRecipeFile(
   };
 
   const tryParseHeader = (body: string, startLine: number): RecipeFileHeader | null => {
-    const m = body.match(/^shortwind:\s+(\S+)@(\S+)\s+sha:(\S+)/);
+    // Bound the input before the regex: `(\S+)@(\S+)\s+sha:` backtracks
+    // polynomially when a long comment is full of `@`s and has no `sha:`, so a
+    // ~1MB line-1 comment could pin the parser for minutes. Legitimate headers
+    // are short; 256 chars is well past the longest real one.
+    const m = body.slice(0, 256).match(/^shortwind:\s+(\S+)@(\S+)\s+sha:(\S+)/);
     if (!m) return null;
     // All three capture groups use `\S+`, so they're non-empty when the regex
     // matches. The non-null assertion documents that — TypeScript can't see
@@ -149,12 +164,27 @@ export function parseRecipeFile(
         continue;
       }
 
+      if (peek() === "{") {
+        // `skipBody` tracks brace depth but the token walker historically let a
+        // stray `{` become a silent class token; flag it instead of nesting.
+        errors.push({
+          code: "parse/unexpected-brace",
+          message: "unexpected '{' in recipe body — bodies are flat class lists",
+          file: filename,
+          line,
+          column: col,
+        });
+        advance();
+        continue;
+      }
+
       const tokenStart = pos;
       while (
         pos < end &&
         !isWS(peek()) &&
         peek() !== ";" &&
         peek() !== "}" &&
+        peek() !== "{" &&
         !starts("/*")
       ) {
         advance();
@@ -260,12 +290,7 @@ export function parseRecipeFile(
       continue;
     }
 
-    if (
-      starts(RECIPE_KW) &&
-      (pos + RECIPE_KW.length >= end ||
-        isWS(source[pos + RECIPE_KW.length] ?? "") ||
-        source[pos + RECIPE_KW.length] === "{")
-    ) {
+    if (isRecipeKeywordStart()) {
       readRecipe();
       continue;
     }
@@ -278,14 +303,20 @@ export function parseRecipeFile(
       column: col,
     });
     // Skip ahead to the next syntactically meaningful boundary so a
-    // garbage run of N bytes produces one diagnostic, not N.
+    // garbage run of N bytes produces one diagnostic, not N. The `@` break
+    // uses the same predicate as the dispatch above — breaking on a non-recipe
+    // `@…` token (e.g. `@recipex`) would leave `pos` unadvanced and spin.
+    const recoveryStart = pos;
     while (pos < end) {
       const c = source[pos] ?? "";
       if (isWS(c)) break;
       if (c === "/" && source[pos + 1] === "*") break;
-      if (c === "@" && starts(RECIPE_KW)) break;
+      if (c === "@" && isRecipeKeywordStart()) break;
       advance();
     }
+    // Guarantee forward progress even if a future edit reintroduces a
+    // break-without-advance: one unrecognized char is always consumed.
+    if (pos === recoveryStart) advance();
     pendingDescription = null;
   }
 

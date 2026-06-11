@@ -63,15 +63,31 @@ export function expandClassList(
 ): string {
   const tokens = classList.split(/\s+/).filter(Boolean);
   const out: string[] = [];
+  let expandedAny = false;
   for (const t of tokens) {
     if (t.startsWith("@")) {
-      const expanded = registry.flattened[t.slice(1)];
-      if (expanded) out.push(...expanded);
-      else out.push(t);
+      const name = t.slice(1);
+      // `Object.hasOwn` + array check, never a bare truthy lookup: a class like
+      // `@constructor` would otherwise resolve an inherited `Object.prototype`
+      // member and crash the spread below with a non-iterable value.
+      const expanded = Object.hasOwn(registry.flattened, name)
+        ? registry.flattened[name]
+        : undefined;
+      if (Array.isArray(expanded)) {
+        for (const e of expanded) out.push(e);
+        expandedAny = true;
+      } else {
+        out.push(t);
+      }
     } else {
       out.push(t);
     }
   }
+  // No recipe token expanded — return the input untouched. Running twMerge on a
+  // recipe-free list would silently rewrite it (drop "duplicates", reorder
+  // conflicts against the cascade, collapse whitespace), so installing one
+  // recipe must not change the rendering of recipe-free markup.
+  if (!expandedAny) return classList;
   const joined = out.join(" ");
   return mergeConflicts ? twMerge(joined) : joined;
 }
