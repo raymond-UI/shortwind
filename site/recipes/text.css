@@ -1,0 +1,59 @@
+/* shortwind: text@0.0.1 sha:205fea — DO NOT EDIT THIS LINE */
+
+/* @guide
+   Headings are sized by weight, not HTML level: @heading-xl/lg/md/sm — there
+   is no @h1..@h6. Body copy: @body (default), @lead (intro paragraphs), @muted
+   (secondary), @caption (fine print). Use @label for form labels and @link for
+   inline links. Don't append a -text suffix: it's @body not @body-text, @muted
+   not @muted-text, @link not @link-text.
+*/
+
+/* Top-level page heading. */
+@recipe heading-xl {
+  text-4xl font-bold tracking-tight text-foreground
+}
+
+/* Large section heading. */
+@recipe heading-lg {
+  text-2xl font-semibold tracking-tight text-foreground
+}
+
+/* Medium heading. */
+@recipe heading-md {
+  text-xl font-semibold text-foreground
+}
+
+/* Small heading. */
+@recipe heading-sm {
+  text-base font-semibold text-foreground
+}
+
+/* Default body text. */
+@recipe body {
+  text-sm leading-6 text-foreground
+}
+
+/* Lead paragraph — larger body copy for hero/intro sections. */
+@recipe lead {
+  text-lg leading-relaxed text-muted-foreground
+}
+
+/* Muted secondary text. */
+@recipe muted {
+  text-sm text-muted-foreground
+}
+
+/* Form label text. */
+@recipe label {
+  text-sm font-medium text-foreground
+}
+
+/* Caption — small supporting text. */
+@recipe caption {
+  text-xs text-muted-foreground
+}
+
+/* Inline link with hover/focus states. */
+@recipe link {
+  text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+}

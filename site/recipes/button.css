@@ -1,0 +1,74 @@
+/* shortwind: button@0.0.1 sha:654ca6 — DO NOT EDIT THIS LINE */
+
+/* @guide
+   Name order is @btn-<intent>[-<size>]: intent first (primary/secondary/ghost/
+   danger/outline), size second (sm/lg; omit for default). One intent per
+   button — never combine @btn-primary with @btn-danger. @btn-ghost is text-only,
+   @btn-outline is bordered with no fill, @btn-icon is a square icon button.
+   @btn-base is the shared shell; don't use it on its own.
+*/
+
+/* Shared button base — sizing, focus ring, disabled state. */
+@recipe btn-base {
+  inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* Primary call-to-action button. */
+@recipe btn-primary {
+  @btn-base bg-primary text-primary-foreground hover:bg-primary/90
+}
+
+/* Small primary button. */
+@recipe btn-primary-sm {
+  @btn-primary px-3 py-1.5 text-xs
+}
+
+/* Large primary button. */
+@recipe btn-primary-lg {
+  @btn-primary px-6 py-3 text-base
+}
+
+/* Secondary button — bordered surface tone. */
+@recipe btn-secondary {
+  @btn-base border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80
+}
+
+/* Small secondary button. */
+@recipe btn-secondary-sm {
+  @btn-secondary px-3 py-1.5 text-xs
+}
+
+/* Large secondary button. */
+@recipe btn-secondary-lg {
+  @btn-secondary px-6 py-3 text-base
+}
+
+/* Ghost button — text only, no background. */
+@recipe btn-ghost {
+  @btn-base text-foreground hover:bg-muted
+}
+
+/* Small ghost button. */
+@recipe btn-ghost-sm {
+  @btn-ghost px-3 py-1.5 text-xs
+}
+
+/* Large ghost button. */
+@recipe btn-ghost-lg {
+  @btn-ghost px-6 py-3 text-base
+}
+
+/* Destructive button. */
+@recipe btn-danger {
+  @btn-base bg-destructive text-destructive-foreground hover:bg-destructive/90
+}
+
+/* Outline button — bordered without fill. */
+@recipe btn-outline {
+  @btn-base border border-primary text-primary hover:bg-primary/10
+}
+
+/* Square icon-only button. */
+@recipe btn-icon {
+  inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}

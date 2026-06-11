@@ -1,0 +1,37 @@
+/* shortwind: list@0.0.1 sha:480e53 — DO NOT EDIT THIS LINE */
+
+/* @guide
+   @list wraps a stack of @list-item rows; use @list-bordered for divided rows.
+   Definition lists are separate: @dl with @dt (term) and @dd (description).
+   For site navigation reach for the navigation family (@nav), not @list.
+*/
+
+/* Vertical list with default gap. */
+@recipe list {
+  flex flex-col gap-1
+}
+
+/* Single list item. */
+@recipe list-item {
+  flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground
+}
+
+/* List with dividing borders between items. */
+@recipe list-bordered {
+  divide-y divide-border rounded-md border border-border
+}
+
+/* Definition list container. */
+@recipe dl {
+  grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-4
+}
+
+/* Definition term. */
+@recipe dt {
+  text-sm font-medium text-muted-foreground
+}
+
+/* Definition description. */
+@recipe dd {
+  text-sm text-foreground sm:col-span-2
+}

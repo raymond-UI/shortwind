@@ -1,0 +1,18 @@
+---
+// Documentation admonition built on the site-authored @doc-callout recipe.
+interface Props {
+  title?: string;
+}
+const { title } = Astro.props;
+---
+
+<aside class="@doc-callout @stack-xs my-6">
+  {
+    title && (
+      <p class="font-mono text-xs font-semibold uppercase tracking-wider text-foreground">
+        {title}
+      </p>
+    )
+  }
+  <div class="@body text-muted-foreground"><slot /></div>
+</aside>

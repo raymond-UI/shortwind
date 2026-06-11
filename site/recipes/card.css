@@ -1,0 +1,43 @@
+/* shortwind: card@0.0.1 sha:0953b6 — DO NOT EDIT THIS LINE */
+
+/* @guide
+   Pick exactly one container: @card (default), @card-elevated (raised shadow),
+   @card-flat (no border), or @card-interactive (clickable hover/focus) — don't
+   stack two container variants on one element. Lay out the inside with
+   @card-header / @card-body / @card-footer.
+*/
+
+/* Default content card with border, padding, and surface color. */
+@recipe card {
+  rounded-lg border border-border bg-card text-card-foreground p-4
+}
+
+/* Card with raised shadow for emphasis. */
+@recipe card-elevated {
+  @card shadow-md
+}
+
+/* Card without border, on a muted surface. */
+@recipe card-flat {
+  rounded-lg bg-muted text-foreground p-4
+}
+
+/* Clickable card with hover and focus-visible states. */
+@recipe card-interactive {
+  @card cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+}
+
+/* Card header region with bottom divider. */
+@recipe card-header {
+  mb-3 border-b border-border pb-3
+}
+
+/* Card body region. */
+@recipe card-body {
+  py-1
+}
+
+/* Card footer with top divider and right-aligned actions. */
+@recipe card-footer {
+  mt-3 flex items-center justify-end gap-2 border-t border-border pt-3
+}

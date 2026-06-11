@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The live shortwind.dev custom domain is bound to the Worker the old
+  // apps/web deployed via `--env production` — i.e. "shortwind-production".
+  // Reusing that exact name replaces it in place and keeps the domain bound
+  // with zero churn. (Name is internal; users only see shortwind.dev.)
+  "name": "shortwind-production",
+  "account_id": "31d65fe8d35768972de29c4199b648ee",
+  "compatibility_date": "2025-04-03",
+  "workers_dev": false,
+  // Assets-only Worker: no `main`, no SSR. Astro static build emits dist/.
+  "assets": { "directory": "./dist" },
+  "routes": [{ "pattern": "shortwind.dev", "custom_domain": true }]
+}

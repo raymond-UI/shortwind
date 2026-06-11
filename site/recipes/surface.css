@@ -1,0 +1,45 @@
+/* shortwind: surface@0.0.2 sha:06a4f9 — DO NOT EDIT THIS LINE */
+
+/* @guide
+   @surface / @surface-muted / @surface-accent set a background+foreground pair
+   for a region — one per section. @wrapper (or @wrapper-tight for prose)
+   centers and width-caps content; there is no @wrapper-lg, set a different cap
+   with max-w-* yourself. (Note: @container is reserved for Tailwind's
+   container-query utility, so the content wrapper is @wrapper.) @divider-h and
+   @divider-v are hairline rules.
+*/
+
+/* Default page/section surface. */
+@recipe surface {
+  bg-background text-foreground
+}
+
+/* Muted surface — secondary background. */
+@recipe surface-muted {
+  bg-muted text-foreground
+}
+
+/* Accent surface — soft brand background. */
+@recipe surface-accent {
+  bg-accent text-accent-foreground
+}
+
+/* Centered content wrapper with a max width. */
+@recipe wrapper {
+  mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8
+}
+
+/* Narrow content wrapper for prose. */
+@recipe wrapper-tight {
+  mx-auto w-full max-w-3xl px-4 sm:px-6
+}
+
+/* Horizontal divider line. */
+@recipe divider-h {
+  shrink-0 h-px w-full bg-border
+}
+
+/* Vertical divider line. */
+@recipe divider-v {
+  shrink-0 h-full w-px bg-border
+}

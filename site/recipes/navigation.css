@@ -1,0 +1,38 @@
+/* shortwind: navigation@0.0.1 sha:8e1942 — DO NOT EDIT THIS LINE */
+
+/* @guide
+   @nav is the container; links are @nav-link with @nav-link-active for the
+   current page. Tabs mirror that pair: @tab and @tab-active. Use @breadcrumb
+   for trail navigation. Active and inactive are separate recipes — swap the
+   whole class rather than combining them.
+*/
+
+/* Top-level nav container. */
+@recipe nav {
+  flex items-center gap-1
+}
+
+/* Inactive nav link with hover/focus states. */
+@recipe nav-link {
+  inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+}
+
+/* Active nav link. */
+@recipe nav-link-active {
+  inline-flex items-center gap-2 rounded-md bg-muted px-3 py-1.5 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+}
+
+/* Breadcrumb trail container. */
+@recipe breadcrumb {
+  flex items-center gap-1.5 text-sm text-muted-foreground
+}
+
+/* Inactive tab control. */
+@recipe tab {
+  inline-flex items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+}
+
+/* Active tab control. */
+@recipe tab-active {
+  inline-flex items-center gap-2 border-b-2 border-primary px-3 py-2 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+}

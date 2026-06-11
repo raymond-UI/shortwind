@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "registry": "bundled:@shortwind/catalog",
+  "families": {
+    "badge": {
+      "version": "0.0.1",
+      "sha": "b671b5"
+    },
+    "button": {
+      "version": "0.0.1",
+      "sha": "654ca6"
+    },
+    "card": {
+      "version": "0.0.1",
+      "sha": "0953b6"
+    },
+    "code": {
+      "version": "0.0.1",
+      "sha": "88a223"
+    },
+    "dialog": {
+      "version": "0.0.1",
+      "sha": "beb426"
+    },
+    "empty": {
+      "version": "0.0.1",
+      "sha": "a8b8b1"
+    },
+    "feedback": {
+      "version": "0.0.1",
+      "sha": "d83940"
+    },
+    "form": {
+      "version": "0.0.1",
+      "sha": "5de1fd"
+    },
+    "icon": {
+      "version": "0.0.1",
+      "sha": "878561"
+    },
+    "layout": {
+      "version": "0.0.1",
+      "sha": "1855b6"
+    },
+    "list": {
+      "version": "0.0.1",
+      "sha": "480e53"
+    },
+    "media": {
+      "version": "0.0.1",
+      "sha": "14901d"
+    },
+    "navigation": {
+      "version": "0.0.1",
+      "sha": "8e1942"
+    },
+    "progress": {
+      "version": "0.0.1",
+      "sha": "c7d7a2"
+    },
+    "site": {
+      "version": "0.0.1",
+      "sha": "20458f"
+    },
+    "skeleton": {
+      "version": "0.0.1",
+      "sha": "c7dc30"
+    },
+    "surface": {
+      "version": "0.0.2",
+      "sha": "06a4f9"
+    },
+    "table": {
+      "version": "0.0.1",
+      "sha": "5425cc"
+    },
+    "text": {
+      "version": "0.0.1",
+      "sha": "205fea"
+    },
+    "tooltip": {
+      "version": "0.0.1",
+      "sha": "c37c6f"
+    }
+  }
+}

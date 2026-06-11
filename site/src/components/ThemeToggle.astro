@@ -1,0 +1,23 @@
+---
+// Framework-free light/dark toggle. The no-flash bootstrap in BaseHead sets the
+// initial class; this just flips and persists it.
+---
+
+<button
+  type="button"
+  id="theme-toggle"
+  aria-label="Toggle color theme"
+  class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+>
+  <span class="hidden font-mono text-sm dark:inline">☀</span>
+  <span class="font-mono text-sm dark:hidden">☾</span>
+</button>
+
+<script is:inline>
+  document.getElementById("theme-toggle")?.addEventListener("click", () => {
+    const isDark = document.documentElement.classList.toggle("dark");
+    try {
+      localStorage.setItem("theme", isDark ? "dark" : "light");
+    } catch {}
+  });
+</script>

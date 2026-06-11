@@ -1,0 +1,15 @@
+# Makes `site/` its own pnpm workspace ROOT, fully decoupled from the package
+# monorepo above it. `pnpm install` here resolves @shortwind/* from the npm
+# registry (published beta), never `workspace:*`. Empty members = single root.
+packages: []
+
+# pnpm 11 blocks postinstall build scripts unless allow-listed.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
+
+# astro pulls devalue 5.8.0 (GHSA-77vg-94rm-hx3p, high-severity DoS); 5.8.1 is
+# the semver-compatible patch. Mirrors the override in the repo-root workspace.
+overrides:
+  devalue: ">=5.8.1"

@@ -1,0 +1,114 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Prompt from "../components/Prompt.astro";
+import { loadCatalog } from "../lib/catalog-data";
+import { expand } from "@shortwind/core";
+
+const { families, registry } = loadCatalog();
+const recipeCount = families.reduce((n, f) => n + f.recipes.length, 0);
+const familyCount = families.length;
+
+// Real, build-time expansion — the value prop, computed by the published core.
+// Splitting the @ keeps the Shortwind transform from expanding this source.
+const AT = "@";
+const demoSource = [
+  `<div class="${AT}card">`,
+  `  <p class="${AT}eyebrow">Revenue</p>`,
+  `  <h3 class="${AT}heading-md">$48,120</h3>`,
+  `  <p class="${AT}muted">+12.5% MoM</p>`,
+  `  <button class="${AT}btn-primary mt-3">Report</button>`,
+  `</div>`,
+].join("\n");
+const demoExpanded = expand(demoSource, registry, { mode: "html" });
+const tok = (s: string) => Math.max(1, Math.ceil(s.length / 4));
+const shrink = Math.round(((tok(demoExpanded) - tok(demoSource)) / tok(demoExpanded)) * 100);
+---
+
+<BaseLayout title="Shortwind">
+  {/* ── Hero ───────────────────────────────────────────────────────────── */}
+  <section class="@wrapper flex flex-col items-center py-20 text-center sm:py-28">
+    <p class="@eyebrow mb-6">token-efficient @recipe layer · tailwind v4</p>
+    <h1 class="font-mono text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
+      <span class="text-muted-foreground">LLM</span>
+      <span class="@term px-1">→</span>
+      <span>@recipe</span>
+      <span class="@term px-1">→</span>
+      <span class="text-muted-foreground">Tailwind</span>
+    </h1>
+    <p class="@lead mt-6 max-w-xl">
+      Every element an LLM generates is a wall of utility classes. Let it write
+      <code class="@code-inline">@card</code> instead — expanded to identical
+      Tailwind at build. Same render, <span class="text-foreground">{shrink}% fewer tokens</span>.
+    </p>
+    <div class="@row mt-8 flex-wrap justify-center gap-3">
+      <a href="/docs" class="@btn-primary">Get started</a>
+      <a href="/playground" class="@btn-secondary">Playground</a>
+    </div>
+    <div class="mt-6 w-full max-w-md"><Prompt code="npx @shortwind/cli@beta init" /></div>
+  </section>
+
+  {/* ── Hero demo: shorthand → rendered ────────────────────────────────── */}
+  <section class="@wrapper pb-20">
+    <div class="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border lg:grid-cols-2">
+      <div class="@stack-sm bg-background p-5">
+        <div class="@row-between">
+          <p class="@eyebrow">the model writes</p>
+          <span class="@badge-outline font-mono">{tok(demoSource)} tok</span>
+        </div>
+        <pre class="overflow-x-auto font-mono text-xs leading-6 text-foreground">{demoSource}</pre>
+      </div>
+      <div class="@stack-sm bg-background p-5">
+        <div class="@row-between">
+          <p class="@eyebrow">renders as</p>
+          <span class="@badge font-mono">vs {tok(demoExpanded)} tok of raw tailwind</span>
+        </div>
+        <div class="flex flex-1 items-center rounded border border-dashed border-border p-5" set:html={demoExpanded} />
+      </div>
+    </div>
+    <p class="@caption mt-3 text-center font-mono">
+      <span class="@term">●</span> identical render · {shrink}% fewer tokens to generate
+    </p>
+  </section>
+
+  {/* ── How it works ───────────────────────────────────────────────────── */}
+  <section class="@wrapper pb-20">
+    <div class="@rule mb-8">how it works</div>
+    <div class="@grid-3">
+      <div class="@stack-xs">
+        <p class="@term font-mono text-sm">01</p>
+        <h3 class="@heading-sm font-mono">Own your recipes</h3>
+        <p class="@muted">
+          <code class="@code-inline">init</code> copies a <code class="@code-inline">recipes/</code> folder you edit — versioned, yours.
+        </p>
+      </div>
+      <div class="@stack-xs">
+        <p class="@term font-mono text-sm">02</p>
+        <h3 class="@heading-sm font-mono">Agents write @card</h3>
+        <p class="@muted">A generated <code class="@code-inline">SKILL.md</code> hands your coding agents the recipe palette.</p>
+      </div>
+      <div class="@stack-xs">
+        <p class="@term font-mono text-sm">03</p>
+        <h3 class="@heading-sm font-mono">Build expands it</h3>
+        <p class="@muted">Recipes compile to Tailwind. Identical CSS, nothing extra in the browser.</p>
+      </div>
+    </div>
+  </section>
+
+  {/* ── Families ───────────────────────────────────────────────────────── */}
+  <section class="@wrapper pb-24">
+    <div class="@rule mb-8">{familyCount} families · {recipeCount} recipes</div>
+    <div class="flex flex-wrap gap-2">
+      {
+        families.map((f) => (
+          <a
+            href={`/catalog#fam-${f.name}`}
+            class="@badge-outline font-mono hover:border-term hover:text-foreground"
+          >
+            {f.name}
+            <span class="text-muted-foreground">{f.recipes.length}</span>
+          </a>
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>

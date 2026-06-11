@@ -1,0 +1,27 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Catalog from "../islands/Catalog.tsx";
+import { loadCatalog } from "../lib/catalog-data";
+
+// Build-time: parse owned recipes → families with expansions. Passed into the
+// island as a prop (serialized into the hydration payload), so there is no
+// runtime fetch.
+const { families } = loadCatalog();
+const recipeCount = families.reduce((n, f) => n + f.recipes.length, 0);
+---
+
+<BaseLayout
+  title="Recipe catalog"
+  description="Every recipe in the default Shortwind registry, with its expanded Tailwind class list and a live preview."
+>
+  <section class="@wrapper py-10">
+    <header class="@stack-sm mb-8">
+      <p class="@eyebrow">{families.length} families · {recipeCount} recipes</p>
+      <h1 class="@heading-xl">Recipe catalog</h1>
+      <p class="@lead max-w-2xl">
+        Every recipe, its full Tailwind expansion, and a live preview.
+      </p>
+    </header>
+    <Catalog client:load families={families} />
+  </section>
+</BaseLayout>

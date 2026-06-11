@@ -1,0 +1,13 @@
+---
+// Terminal command line. Pass the command as `code` or via the default slot.
+// Demonstrates the site-authored @prompt recipe (composes @code-block).
+interface Props {
+  code?: string;
+}
+const { code } = Astro.props;
+---
+
+<div class="@prompt">
+  <span class="@term select-none" aria-hidden="true">$</span>
+  <code class="min-w-0 flex-1 overflow-x-auto whitespace-pre">{code}<slot /></code>
+</div>

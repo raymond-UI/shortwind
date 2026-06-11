@@ -1,0 +1,50 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+const {
+  title,
+  description = "LLMs waste output tokens on Tailwind class soup. Write @card instead — it expands to identical CSS at build. A token-efficient @recipe layer for Tailwind.",
+} = Astro.props;
+const fullTitle = title === "Shortwind" ? title : `${title} — Shortwind`;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href={canonical} />
+<title>{fullTitle}</title>
+<meta name="description" content={description} />
+<meta name="generator" content={Astro.generator} />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content={fullTitle} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta name="twitter:card" content="summary" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap"
+/>
+
+{/* No-flash theme bootstrap. Default = system; an explicit toggle (stored in
+    localStorage) overrides it. With no stored choice we track the OS live. */}
+<script is:inline>
+  (() => {
+    try {
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      const apply = () => {
+        const stored = localStorage.getItem("theme");
+        const dark = stored ? stored === "dark" : mq.matches;
+        document.documentElement.classList.toggle("dark", dark);
+      };
+      apply();
+      mq.addEventListener("change", apply);
+    } catch {}
+  })();
+</script>

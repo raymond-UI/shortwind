@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+/* shortwind:theme — default tokens for the recipe catalog. Edit freely. */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* dev-raw: sharp corners, near-square UI */
+  --radius: 0.25rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  /* terminal accent — used by @prompt glyphs and active markers */
+  --term: oklch(0.62 0.17 150);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --term: oklch(0.78 0.18 150);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-term: var(--term);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+  /* dev-raw type system: mono-forward UI, clean sans for long-form prose */
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  /* Mono reads wide; drop the root a touch so the whole UI feels tool-dense
+     rather than oversized. All rem-based sizes scale with this. */
+  html {
+    font-size: 15px;
+  }
+  body {
+    @apply bg-background text-foreground font-mono antialiased;
+    font-feature-settings: "calt", "liga";
+  }
+  /* Mono headings + UI labels carry the terminal feel; prose body relaxes to
+     sans for readability (see .prose in global doc styles). */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-mono tracking-tight;
+  }
+  ::selection {
+    @apply bg-foreground text-background;
+  }
+}
+/* end shortwind theme */
+
+/* ── Rendered-markdown styling (docs prose) ──────────────────────────────────
+   Markdown HTML elements aren't recipe-classed, so style them here. Dev-raw:
+   mono headings, sans body for readability, terminal-accent link underlines.
+   Code fences keep Shiki's github-dark background on every theme. */
+@layer components {
+  .prose-doc {
+    @apply font-sans text-sm leading-7 text-foreground/90;
+  }
+  .prose-doc > * + * {
+    @apply mt-4;
+  }
+  .prose-doc h2 {
+    @apply mt-10 mb-3 scroll-mt-20 font-mono text-xl font-semibold tracking-tight text-foreground;
+  }
+  .prose-doc h3 {
+    @apply mt-8 mb-2 scroll-mt-20 font-mono text-base font-semibold text-foreground;
+  }
+  .prose-doc p {
+    @apply leading-7 text-foreground/85;
+  }
+  .prose-doc a {
+    @apply font-medium text-foreground underline decoration-term/60 underline-offset-4 transition-colors hover:decoration-term;
+  }
+  .prose-doc strong {
+    @apply font-semibold text-foreground;
+  }
+  .prose-doc ul {
+    @apply list-disc space-y-1.5 pl-5 text-foreground/85;
+  }
+  .prose-doc ol {
+    @apply list-decimal space-y-1.5 pl-5 text-foreground/85;
+  }
+  .prose-doc li::marker {
+    @apply text-muted-foreground;
+  }
+  .prose-doc :not(pre) > code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground;
+  }
+  .prose-doc pre {
+    @apply my-5 overflow-x-auto rounded-md border border-border p-4 text-sm leading-6;
+  }
+  .prose-doc pre code {
+    @apply bg-transparent p-0 font-mono text-inherit;
+  }
+  .prose-doc blockquote {
+    @apply border-l-2 border-term pl-4 text-muted-foreground italic;
+  }
+  /* block + overflow lets wide tables scroll horizontally instead of forcing
+     page overflow on narrow screens. */
+  .prose-doc table {
+    @apply my-6 block w-full max-w-full overflow-x-auto border-collapse text-sm;
+  }
+  .prose-doc th {
+    @apply border-b border-border px-3 py-2 text-left font-mono text-xs font-semibold tracking-wider text-muted-foreground uppercase;
+  }
+  .prose-doc td {
+    @apply border-b border-border/60 px-3 py-2 align-top;
+  }
+  .prose-doc hr {
+    @apply my-8 border-border;
+  }
+}
+
+/* Shiki dual-theme: light renders inline; in dark mode flip every token to the
+   dark theme's CSS vars so docs code blocks track the site theme. */
+.dark .astro-code,
+.dark .astro-code span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}

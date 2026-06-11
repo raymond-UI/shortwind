@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 type Pkg = {
@@ -36,6 +36,7 @@ function workspacePkgs(): { dir: string; pkg: Pkg }[] {
   const result: { dir: string; pkg: Pkg }[] = [];
   for (const group of ["packages", "apps"]) {
     const base = join(ROOT, group);
+    if (!existsSync(base)) continue;
     for (const name of readdirSync(base)) {
       const dir = join(base, name);
       if (!statSync(dir).isDirectory()) continue;

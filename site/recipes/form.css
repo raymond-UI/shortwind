@@ -1,0 +1,67 @@
+/* shortwind: form@0.0.1 sha:5de1fd — DO NOT EDIT THIS LINE */
+
+/* @guide
+   Wrap each label+control+message in @field (use @field-error for the invalid
+   state); group related fields with @fieldset. Controls are bare: @input,
+   @textarea, @select, @checkbox, @radio, plus @input-error for invalid text
+   and @input-shell for the transparent shadcn-style shell. Helper text is
+   @help. There is no @form-group (use @field), @form-input (use @input),
+   @form-helper (use @help) or @form-checkbox (use @checkbox); the field label
+   recipe is @label, in the text family.
+*/
+
+/* Text input field. */
+@recipe input {
+  block w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-2 focus:outline-offset-2 focus:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* shadcn/dinachi-style input shell — transparent background, h-9, file/
+   placeholder/selection/aria-invalid/focus-visible states baked in. */
+@recipe input-shell {
+  flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:border-destructive aria-invalid:ring-destructive/20 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40
+}
+
+/* Input in error state. */
+@recipe input-error {
+  @input border-destructive focus:border-destructive focus:outline-destructive
+}
+
+/* Multi-line textarea. */
+@recipe textarea {
+  block w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-2 focus:outline-offset-2 focus:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* Native select control. */
+@recipe select {
+  block w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-2 focus:outline-offset-2 focus:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* Checkbox input. */
+@recipe checkbox {
+  h-4 w-4 rounded border-input text-primary focus:outline-2 focus:outline-offset-2 focus:outline-ring
+}
+
+/* Radio input. */
+@recipe radio {
+  h-4 w-4 border-input text-primary focus:outline-2 focus:outline-offset-2 focus:outline-ring
+}
+
+/* Form field wrapper — label + input + help/error. */
+@recipe field {
+  flex flex-col gap-1.5
+}
+
+/* Form field in error state. */
+@recipe field-error {
+  flex flex-col gap-1.5
+}
+
+/* Grouped form section with optional legend. */
+@recipe fieldset {
+  flex flex-col gap-4 rounded-md border border-border p-4
+}
+
+/* Field-level helper text. */
+@recipe help {
+  text-xs text-muted-foreground
+}
