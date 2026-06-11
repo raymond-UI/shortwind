@@ -34,6 +34,11 @@ const shrink = Math.round(((tok(demoExpanded) - tok(demoSource)) / tok(demoExpan
       <span class="@term px-1">→</span>
       <span class="text-muted-foreground">Tailwind</span>
     </h1>
+    <p class="@lead mt-5 max-w-xl text-base">
+      Every element an LLM generates is a wall of utility classes. Let it write
+      <code class="@code-inline">@card</code> instead — expanded to identical
+      Tailwind at build. Same render, <span class="text-foreground">{shrink}% fewer tokens</span>.
+    </p>
     <div class="@row mt-8 flex-wrap justify-center gap-3">
       <a href="/docs" class="@btn-primary">Get started</a>
       <a href="/playground" class="@btn-secondary">Playground</a>
