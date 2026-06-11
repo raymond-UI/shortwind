@@ -160,6 +160,17 @@ describe("html-mode expansion correctness (#46)", () => {
     expect(out).toContain(`obj.class = "p-2 p-4"`);
   });
 
+  it("does not let an unclosed <script> mask static recipes downstream (#60)", () => {
+    // Adapter inputs (Astro compiled modules) can contain a `<script` whose
+    // closing tag is not a literal in the same chunk. The EOF fallback must
+    // not blackhole the rest of the document: the script's own JS stays
+    // untouched, but a downstream element with a class attribute still expands.
+    const src = `<script>obj.class = "p-2 p-4";\n\${$$renderHead($$result)}</head><main class="@card">x</main>`;
+    const out = expand(src, registry, { mode: "html" });
+    expect(out).toContain(`obj.class = "p-2 p-4";`);
+    expect(out).toContain(`<main class="rounded-lg border">x</main>`);
+  });
+
   it("does not expand cva() sitting in template prose, only in <script>", () => {
     const src = `<p>call cva("@card") to make a button</p><script>const v = cva("@card");</script>`;
     const out = expand(src, registry, { mode: "html", callExpanders: ["cva", "tv"] });

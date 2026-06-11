@@ -1,0 +1,10 @@
+{
+  "mode": "html",
+  "mergeConflicts": true,
+  "flattened": {
+    "wrapper": ["mx-auto", "max-w-3xl"],
+    "card-elevated": ["rounded-lg", "border", "shadow-md"]
+  },
+  "input": "<head>\n<script>\n  const m = matchMedia(\"(prefers-color-scheme: dark)\");\n  if (m.matches) document.documentElement.classList.add(\"dark\");\n${$$renderHead($$result)}</head>\n<body>\n<main class=\"@wrapper\">\n  <div class=\"@card-elevated\">hi</div>\n</main>\n</body>",
+  "expected": "<head>\n<script>\n  const m = matchMedia(\"(prefers-color-scheme: dark)\");\n  if (m.matches) document.documentElement.classList.add(\"dark\");\n${$$renderHead($$result)}</head>\n<body>\n<main class=\"mx-auto max-w-3xl\">\n  <div class=\"rounded-lg border shadow-md\">hi</div>\n</main>\n</body>"
+}

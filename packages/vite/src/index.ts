@@ -167,7 +167,7 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
       // overlay — that's reserved for registry load failures (onRecipeEvent).
       const leftover = findUnexpandedRecipes(out, registry);
       if (leftover.length > 0) {
-        const msg = `[shortwind] ${cleanId}: unexpanded recipe ${leftover.join(", ")} — likely a dynamic className the build can't statically expand; it will render as raw text.`;
+        const msg = `[shortwind] ${cleanId}: unexpanded recipe ${leftover.join(", ")} — the token never reached the expander as a literal class value (a className built from a variable/prop/template, or markup inside a region the expander treats as opaque, e.g. a <script> block); it will render as raw text.`;
         if (this.warn) this.warn(msg);
         else console.warn(msg);
       }

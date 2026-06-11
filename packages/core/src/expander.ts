@@ -125,8 +125,9 @@ function rewriteClassAttr(
 //
 // Comments are masked FIRST so a commented-out `<script>` (`<!-- <script> -->`)
 // can't make the <script> regex swallow real markup up to the next </script>.
-// Unclosed comments/<script>/<style> are masked to EOF so a truncated file's JS
-// still can't be corrupted by the attribute regexes.
+// Unclosed comments are masked to EOF so a truncated file's contents still
+// can't be corrupted by the attribute regexes; unclosed <script>/<style> get
+// the clipped fallback in maskTagBlocks (#60).
 function maskHtmlOpaqueRegions(input: string): {
   masked: string;
   restore: (s: string) => string;
@@ -146,8 +147,8 @@ function maskHtmlOpaqueRegions(input: string): {
   let masked = input;
   masked = masked.replace(/<!--[\s\S]*?-->|<!--[\s\S]*$/g, mask);
   masked = masked.replace(/^---\r?\n[\s\S]*?\r?\n---/, mask);
-  masked = masked.replace(/<script\b[\s\S]*?<\/script\s*>|<script\b[\s\S]*$/gi, mask);
-  masked = masked.replace(/<style\b[\s\S]*?<\/style\s*>|<style\b[\s\S]*$/gi, mask);
+  masked = maskTagBlocks(masked, "script", mask);
+  masked = maskTagBlocks(masked, "style", mask);
   // A masked region (e.g. a comment) can itself contain a placeholder from an
   // earlier-masked nested region, so restore until stable.
   const maskRe = new RegExp(`${sentinel}(\\d+)__`, "g");
@@ -161,6 +162,59 @@ function maskHtmlOpaqueRegions(input: string): {
     return cur;
   };
   return { masked, restore };
+}
+
+// An element-open that carries a class/className attribute — the shape the
+// clipped unclosed-<script> fallback must never swallow (see maskTagBlocks).
+const CLASS_BEARING_ELEMENT_RE = /<[a-zA-Z][^<>]*\bclass(?:Name)?\s*=/;
+
+// Mask `<tag …>…</tag>` blocks. A paired block is masked whole. An UNCLOSED
+// open tag used to mask all the way to EOF (so a truncated file's JS/CSS can't
+// be corrupted by the attribute regexes) — but adapter inputs legitimately
+// contain a `<script` whose closing tag is not a literal in the same chunk
+// (e.g. Astro's compiled modules, #60), and masking to EOF there silently
+// swallowed every static recipe downstream. Compromise: clip the fallback mask
+// just before the next element that carries a class/className attribute. A
+// genuinely truncated file has no such element after the cut, so its trailing
+// JS still masks to EOF; compiled inputs keep their downstream markup
+// expandable.
+function maskTagBlocks(
+  input: string,
+  tag: "script" | "style",
+  mask: (m: string) => string,
+): string {
+  const openRe = new RegExp(`<${tag}\\b`, "gi");
+  const closeRe = new RegExp(`</${tag}\\s*>`, "i");
+  let out = "";
+  let pos = 0;
+  for (;;) {
+    openRe.lastIndex = pos;
+    const open = openRe.exec(input);
+    if (!open) {
+      out += input.slice(pos);
+      break;
+    }
+    out += input.slice(pos, open.index);
+    const rest = input.slice(open.index);
+    const close = rest.match(closeRe);
+    if (close && close.index !== undefined) {
+      const end = close.index + close[0].length;
+      out += mask(rest.slice(0, end));
+      pos = open.index + end;
+      continue;
+    }
+    // Unclosed: search from index 1 so the open tag's own `<` can't match.
+    const clip = rest.slice(1).match(CLASS_BEARING_ELEMENT_RE);
+    if (clip && clip.index !== undefined) {
+      const end = 1 + clip.index;
+      out += mask(rest.slice(0, end));
+      pos = open.index + end;
+      continue;
+    }
+    out += mask(rest);
+    break;
+  }
+  return out;
 }
 
 export function expandClassList(
