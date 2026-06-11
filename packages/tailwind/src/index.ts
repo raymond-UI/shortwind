@@ -70,6 +70,39 @@ export function findUnexpandedRecipes(code: string, registry: Registry): string[
   return [...found].sort();
 }
 
+// Strict-mode detector (#67): every known recipe name appearing as an
+// `@<name>` token ANYWHERE in transformed output, not just inside class
+// values. The class-value scan above misses the leak that bit every
+// dogfooding build — a recipe assigned to a variable/prop, where the token
+// sits at the assignment site (`const cfg = { recipe: "@badge" }`) and only
+// reaches the attribute at runtime. Still keyed on known recipe names so
+// Tailwind container-query variants (`@md:flex`) and unrelated `@`-mentions
+// never false-positive; prose that legitimately names a recipe (docs,
+// comments) can, which is why strict mode is opt-in.
+export function findResidualRecipeTokens(code: string, registry: Registry): string[] {
+  const known = registry.flattened;
+  const found = new Set<string>();
+  for (const m of code.matchAll(RESIDUAL_TOKEN_RE)) {
+    const token = m[0];
+    if (Object.hasOwn(known, token.slice(1))) found.add(token);
+  }
+  return [...found].sort();
+}
+
+// Like RECIPE_TOKEN_RE, plus a lookbehind so an email-like `user@card.com`
+// never reads as the recipe `@card`.
+const RESIDUAL_TOKEN_RE = /(?<![\w.@-])@[A-Za-z0-9][\w-]*/g;
+
+// One message for every adapter, so Vite/Next/Astro report leaks identically.
+export function residualRecipeMessage(id: string, tokens: string[]): string {
+  return (
+    `[shortwind] ${id}: unexpanded recipe ${tokens.join(", ")} — the token never reached ` +
+    `the expander as a literal class value (a className built from a variable/prop/template, ` +
+    `or markup inside a region the expander treats as opaque, e.g. a <script> block); ` +
+    `it will render as raw text. See https://shortwind.dev/docs/dynamic-classes`
+  );
+}
+
 // Recipe expansions only ever appear in build-time-transformed JSX/HTML, which
 // Tailwind v4's content scanner never reads — it walks files on disk. We hand
 // Tailwind the bounded candidate set via `@source inline(...)`, its official

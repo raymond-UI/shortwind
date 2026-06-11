@@ -1,11 +1,13 @@
 import path from "node:path";
 import {
+  findResidualRecipeTokens,
   findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
   listRecipeFiles,
   loadRegistryFromDir,
   modeForFile,
+  residualRecipeMessage,
   transformContent,
   TailwindAdapterError,
 } from "@shortwind/tailwind";
@@ -15,6 +17,12 @@ export type ShortwindViteOptions = {
   recipesDir?: string;
   include?: RegExp;
   cwd?: string;
+  // Fail the transform (build error / dev overlay) when a known recipe token
+  // survives in transformed output ANYWHERE — including the silent
+  // variable-indirection case the class-value warning can't see (#67).
+  // Opt-in: the detector is token-based, so prose that legitimately names a
+  // recipe (docs pages, comments) would fail a strict build.
+  strict?: boolean;
 };
 
 type MinimalViteHmrServer = {
@@ -82,6 +90,7 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
   const include = rawInclude.global
     ? new RegExp(rawInclude.source, rawInclude.flags.replace(/g/g, ""))
     : rawInclude;
+  const strict = options.strict ?? false;
 
   let isBuild = false;
   // Remember an initial parse/resolve failure so a `vite build` can fail loudly
@@ -162,16 +171,31 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
         callExpanders: ["cva", "tv"],
       });
       // Surface recipes the transform couldn't reach (usually a dynamic
-      // className) — they ship as literal @tokens and won't render. Route
-      // through Rollup's `this.warn` (deduped, attributed to this module in the
-      // build log); fall back to console.warn outside a Rollup context (tests).
-      // This is a warning, not a build error, so it does NOT open the dev
-      // overlay — that's reserved for registry load failures (onRecipeEvent).
-      const leftover = findUnexpandedRecipes(out, registry);
-      if (leftover.length > 0) {
-        const msg = `[shortwind] ${cleanId}: unexpanded recipe ${leftover.join(", ")} — the token never reached the expander as a literal class value (a className built from a variable/prop/template, or markup inside a region the expander treats as opaque, e.g. a <script> block); it will render as raw text.`;
-        if (this.warn) this.warn(msg);
-        else console.warn(msg);
+      // className) — they ship as literal @tokens and won't render.
+      //
+      // strict mode (#67): scan the WHOLE output (the class-value scan misses
+      // the variable-indirection leak) and throw — Rollup fails the build,
+      // dev shows the error overlay — instead of shipping unstyled UI behind
+      // a green build.
+      if (strict) {
+        const residual = findResidualRecipeTokens(out, registry);
+        if (residual.length > 0) {
+          throw new TailwindAdapterError(
+            `${residualRecipeMessage(cleanId, residual)} (strict mode: failing the build — pass strict: false to demote this to a warning)`,
+          );
+        }
+      } else {
+        // Default: a warning, not a build error, so it does NOT open the dev
+        // overlay — that's reserved for registry load failures (onRecipeEvent).
+        // Route through Rollup's `this.warn` (deduped, attributed to this
+        // module in the build log); fall back to console.warn outside a Rollup
+        // context (tests).
+        const leftover = findUnexpandedRecipes(out, registry);
+        if (leftover.length > 0) {
+          const msg = residualRecipeMessage(cleanId, leftover);
+          if (this.warn) this.warn(msg);
+          else console.warn(msg);
+        }
       }
       if (out === code) return null;
       return { code: out, map: null };

@@ -87,6 +87,23 @@ describe("astro integration", () => {
     expect(mod.expandClassList("@card p-6", registry, true)).toBe("rounded-lg border p-6");
   });
 
+  it("forwards strict so a residual token fails the Astro build (#67)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const integration = shortwind({ cwd: dir, strict: true });
+    const config = runSetup(integration, new URL(`file://${dir}/`));
+    const transformPlugin = config.vite.plugins.find(
+      (p) => p.name === "shortwind:transform",
+    ) as { transform?: (code: string, id: string) => unknown } | undefined;
+    expect(() =>
+      transformPlugin!.transform!.call(
+        {},
+        `<a class:list={["@card"]}>x</a>`,
+        path.join(dir, "src", "Page.astro"),
+      ),
+    ).toThrow(/unexpanded recipe @card[\s\S]*strict mode/);
+  });
+
   it("derives recipesDir from astro project root when not specified", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);

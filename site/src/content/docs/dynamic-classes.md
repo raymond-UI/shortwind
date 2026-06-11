@@ -128,6 +128,30 @@ bundle. Those are exactly the tokens the build exists to eliminate, and they
 fail the no-leftover-`@recipe` check. The virtual module (or the server-side
 load in Next) gives you the same registry with none of the leakage.
 
+## Catching leaks: strict mode
+
+The default build *warns* when it can see a stranded token in a class value,
+and stays silent on the indirect cases. Every adapter also takes a
+`strict: true` option that scans the **entire transformed output** for known
+recipe tokens — catching the variable/prop indirection case too — and **fails
+the build** instead of shipping unstyled UI:
+
+```ts
+// vite.config.ts
+shortwind({ strict: true })
+
+// next.config.ts
+export default withShortwind({ strict: true })(nextConfig);
+
+// astro.config.ts
+integrations: [shortwind({ strict: true })]
+```
+
+Strict mode is opt-in because the detector is token-based: a file that
+legitimately *names* a recipe in prose (a docs page, a comment) would fail the
+build. For app code, turn it on — a leak the default warning can't see is
+exactly the one you want to fail loudly.
+
 ## When you don't need `rc()`
 
 - **Static class lists** — just write them literally. `class="@card p-6"` is the

@@ -348,4 +348,45 @@ describe("vite plugin", () => {
     const recipeId = path.join(dir, "recipes", "card.css");
     expect(neutralize!.load?.(`${recipeId}?raw`)).toBeNull();
   });
+
+  it("strict mode fails the transform on a residual recipe token, even via variable indirection (#67)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [transformPlugin] = shortwind({ cwd: dir, strict: true });
+    // the silent case: the token sits at the assignment site, outside any
+    // class value — the default warning path can't see it
+    const src = `const cfg = { recipe: "@card" };\nexport const El = () => <div className={cfg.recipe} />;\n`;
+    expect(() => callTransform(transformPlugin!, src, path.join(dir, "src", "App.tsx"))).toThrow(
+      /unexpanded recipe @card[\s\S]*strict mode/,
+    );
+  });
+
+  it("strict mode passes clean output through unchanged (#67)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [transformPlugin] = shortwind({ cwd: dir, strict: true });
+    const result = callTransform(
+      transformPlugin!,
+      `<div className="@card" />`,
+      path.join(dir, "src", "App.tsx"),
+    );
+    const code = typeof result === "string" ? result : result?.code;
+    expect(code).toContain("rounded");
+    expect(code).not.toMatch(/@card\b/);
+  });
+
+  it("default (non-strict) only warns on a residual token in a class value", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [transformPlugin] = shortwind({ cwd: dir });
+    const warnings: string[] = [];
+    // Astro class:list is a class value html-mode can't expand — the
+    // documented warn-but-don't-fail case
+    transformPlugin!.transform!.call(
+      { warn: (m: string) => warnings.push(m) },
+      `<a class:list={["@card"]}>x</a>`,
+      path.join(dir, "src", "Page.astro"),
+    );
+    expect(warnings.join("\n")).toContain("@card");
+  });
 });

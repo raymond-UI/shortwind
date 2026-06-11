@@ -10,6 +10,7 @@ import {
   buildSourceDirective,
   computeSafelistTokens,
   detectTailwindMajor,
+  findResidualRecipeTokens,
   findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
@@ -279,6 +280,28 @@ describe("quote-bearing token escaping (#47)", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.errors.some((e) => e.code === "resolve/unsafe-token")).toBe(true);
+  });
+});
+
+describe("findResidualRecipeTokens (#67)", () => {
+  const registry = loadRegistryFromDir(REGISTRY_RECIPES);
+
+  it("flags a known recipe ANYWHERE in transformed output, not just class values", () => {
+    // The variable-indirection leak: the token sits at the assignment site,
+    // which the class-value scan (findUnexpandedRecipes) never sees. All three
+    // dogfooding builds shipped leaks a manual grep had to catch.
+    const code = `const cfg = { recipe: "@card" };\nexport const El = () => <div className={cfg.recipe} />;`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual(["@card"]);
+  });
+
+  it("ignores @-tokens that are not recipe names", () => {
+    const code = `// email me @cardholder\n<div className="@md:flex" />`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual([]);
+  });
+
+  it("returns nothing for fully-expanded output", () => {
+    const out = transformContent(`<div className="@card" />`, registry);
+    expect(findResidualRecipeTokens(out, registry)).toEqual([]);
   });
 });
 

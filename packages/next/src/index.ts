@@ -11,6 +11,11 @@ import type { NextConfig } from "next";
 export type ShortwindNextOptions = {
   recipesDir?: string;
   cwd?: string;
+  // Fail the build when a known recipe token survives in transformed output
+  // anywhere — including the silent variable-indirection case (#67). Off by
+  // default; the detector is token-based, so prose that legitimately names a
+  // recipe would fail a strict build.
+  strict?: boolean;
 };
 
 type WebpackConfig = {
@@ -32,7 +37,7 @@ export function withShortwind(
   const recipesDir = options.recipesDir ?? path.join(cwd, "recipes");
 
   return (nextConfig: NextConfig = {}) => {
-    const loaderOptions = { recipesDir };
+    const loaderOptions = { recipesDir, strict: options.strict ?? false };
     const previousWebpack = nextConfig.webpack;
 
     const wrapped: NextConfig = {

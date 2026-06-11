@@ -4,6 +4,10 @@ import { shortwind as shortwindVite } from "@shortwind/vite";
 export type ShortwindAstroOptions = {
   recipesDir?: string;
   cwd?: string;
+  // Fail the build when a known recipe token survives in transformed output
+  // anywhere — including the silent variable-indirection case (#67).
+  // Forwarded to @shortwind/vite. Off by default.
+  strict?: boolean;
 };
 
 type SetupHookContext = {
@@ -34,7 +38,7 @@ export default function shortwind(options: ShortwindAstroOptions = {}): AstroInt
       "astro:config:setup": ({ config, updateConfig }) => {
         const cwd = options.cwd ?? rootToPath(config.root) ?? process.cwd();
         const recipesDir = options.recipesDir ?? path.join(cwd, "recipes");
-        const plugins = shortwindVite({ cwd, recipesDir });
+        const plugins = shortwindVite({ cwd, recipesDir, strict: options.strict ?? false });
         updateConfig({ vite: { plugins } });
       },
     },

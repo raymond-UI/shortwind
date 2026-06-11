@@ -127,6 +127,45 @@ describe("withShortwind", () => {
     expect(Object.keys(rules).some((k) => k.includes("tsx"))).toBe(true);
   });
 
+  it("strict loader errors the module on a residual token reached via a variable (#67)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const errors: Error[] = [];
+    const ctx = {
+      getOptions: () => ({ recipesDir: path.join(dir, "recipes"), strict: true }),
+      resourcePath: path.join(dir, "src", "App.tsx"),
+      emitError: (e: Error) => errors.push(e),
+    };
+    const src = `const cfg = { recipe: "@card" };\nexport const El = () => <div className={cfg.recipe} />;\n`;
+    shortwindLoader.call(ctx, src);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toMatch(/unexpanded recipe @card[\s\S]*strict mode/);
+  });
+
+  it("default loader emits a webpack warning for a class-value leftover (#67)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const warnings: Error[] = [];
+    const ctx = {
+      getOptions: () => ({ recipesDir: path.join(dir, "recipes") }),
+      resourcePath: path.join(dir, "src", "Page.astro"),
+      emitWarning: (e: Error) => warnings.push(e),
+    };
+    shortwindLoader.call(ctx, `<a class:list={["@card"]}>x</a>`);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.message).toContain("@card");
+  });
+
+  it("withShortwind forwards strict into the loader options (#67)", async () => {
+    const dir = await makeProject();
+    dirs.push(dir);
+    const wrapped = withShortwind({ cwd: dir, strict: true })({});
+    const cfg = wrapped.webpack!({ module: { rules: [] } }, { dev: false, isServer: false } as never);
+    const rules = (cfg as { module?: { rules?: Array<{ use?: Array<{ options?: { strict?: boolean } }> }> } })
+      .module?.rules;
+    expect(rules?.[0]?.use?.[0]?.options?.strict).toBe(true);
+  });
+
   it("loader expands @recipe tokens in source", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
