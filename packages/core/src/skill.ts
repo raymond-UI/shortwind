@@ -52,12 +52,24 @@ export function renderSkillMarkdown(registry: Registry, options: SkillRenderOpti
   parts.push("## Dynamic classes");
   parts.push("");
   parts.push(
-    "Recipes expand only inside **literal** `class=\"...\"` / `className=\"...\"` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro `class:list`, or a value passed as a component prop — is not expanded and ships as a dead `@recipe` token, so the element renders unstyled. The build warns when it can see such a token; if the recipe reaches the attribute indirectly (via a variable or prop) it stays silent.",
+    "The rule: the recipe text must appear as a **literal string the build can see** in a `class`/`className` attribute. What counts as visible depends on the file type:",
   );
   parts.push("");
-  parts.push("```");
-  parts.push("<div class=\"@card-elevated p-6\">                 <!-- expands -->");
-  parts.push("<a class={active ? \"@nav-link-active\" : \"@nav-link\"}>  <!-- does NOT expand -->");
+  parts.push(
+    "- **JSX/TSX (`.tsx`, `.jsx`, `.mdx`):** literal strings inside a `className={…}` expression DO expand — including both branches of a ternary, strings inside `clsx(...)`-style arguments, and the static parts of template literals.",
+  );
+  parts.push(
+    "- **HTML-shaped templates (`.astro`, `.vue`, `.svelte`, `.html`):** only plain `class=\"...\"` attribute strings expand. A `class={…}` JS expression and Astro's `class:list={…}` do NOT — the same ternary that works in a `.tsx` island ships dead tokens here.",
+  );
+  parts.push(
+    "- **All modes — the silent failure:** a recipe that reaches the attribute *indirectly* — assigned to a variable first, passed as a component prop, looked up from an object, or built by string concatenation — is never expanded, and the build cannot warn about it.",
+  );
+  parts.push("");
+  parts.push("```tsx");
+  parts.push("<div className=\"@card-elevated p-6\">                    // expands");
+  parts.push("<a className={active ? \"@tab-active\" : \"@tab\"}>         // expands (JSX only)");
+  parts.push("const cfg = { recipe: \"@badge-success\" };");
+  parts.push("<span className={cfg.recipe}>                           // does NOT expand — silent");
   parts.push("```");
   parts.push("");
   parts.push(

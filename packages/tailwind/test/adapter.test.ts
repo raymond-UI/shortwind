@@ -179,6 +179,34 @@ describe("transformContent", () => {
     expect(after).toContain("inline-flex"); // a real expanded utility
   });
 
+  it("expands literal-string ternary branches inside className={…} (#66)", () => {
+    // The docs used to claim this does NOT expand — it does: the transform
+    // visits the StringLiteral branches of the conditional.
+    const before = [
+      `export const Tab = ({ active }: { active: boolean }) => (`,
+      `  <a className={active ? "@btn-primary" : "@btn-ghost"}>tab</a>`,
+      `);`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    expect(after).not.toContain("@btn-primary");
+    expect(after).not.toContain("@btn-ghost");
+    expect(after).toContain("inline-flex");
+  });
+
+  it("does NOT expand a recipe that reaches className via a variable or prop (#66)", () => {
+    // The real silent failure: the recipe text is a plain string by the time
+    // it hits the attribute, so the transform never sees it — byte-identical
+    // passthrough, no warning possible at this stage.
+    const before = [
+      `const cfg = { recipe: "@btn-primary" };`,
+      `export const El = () => <a className={cfg.recipe}>go</a>;`,
+      ``,
+    ].join("\n");
+    const after = transformContent(before, registry);
+    expect(after).toBe(before);
+  });
+
   it("rewrites configured class helper calls but leaves ordinary calls alone", () => {
     const before = [
       `const styles = cva("@btn-primary", { variants: { tone: { ghost: "@btn-ghost" } } });`,

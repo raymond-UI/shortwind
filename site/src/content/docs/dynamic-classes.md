@@ -6,40 +6,56 @@ order: 3.5
 
 # Dynamic classes
 
-Shortwind expands recipes by statically scanning your source for **literal**
-`class="..."` / `className="..."` strings and rewriting the `@recipe` tokens in
-place — before the value is ever evaluated. That keeps it fast and framework-
-agnostic, but it means anything that isn't a literal string in the source is
-invisible to the build:
+Shortwind expands recipes by rewriting `@recipe` tokens it can statically see
+in your source — before the value is ever evaluated. The rule: **the recipe
+text must appear as a literal string the build can see in a `class`/`className`
+attribute.** What counts as visible depends on the file type.
+
+**In JSX/TSX (`.tsx`, `.jsx`, `.mdx`)** the transform parses the
+`className={…}` expression, so literal strings inside it expand — including
+both branches of a ternary, strings inside `clsx(...)`-style call arguments,
+and the static parts of template literals:
+
+```tsx
+<div className="@card-elevated p-6">…</div>              {/* ✅ expands */}
+<a className={active ? "@tab-active" : "@tab"}>Home</a>   {/* ✅ expands */}
+<button className={clsx("@btn-primary", on && "@btn-ghost")} /> {/* ✅ both expand */}
+```
+
+**In HTML-shaped templates (`.astro`, `.vue`, `.svelte`, `.html`)** only plain
+`class="..."` attribute strings expand. A `class={…}` JS expression — including
+the exact ternary that works in a `.tsx` island — and Astro's `class:list` do
+**not**:
 
 ```astro
 <!-- ✅ expands -->
 <div class="@card-elevated p-6">…</div>
 
-<!-- ❌ ships a dead `@nav-link` token — the element renders unstyled -->
+<!-- ❌ ships dead tokens in .astro (would expand in .tsx) -->
 <a class={active ? "@nav-link-active" : "@nav-link"}>Home</a>
 <a class:list={[active ? "@nav-link-active" : "@nav-link"]}>Home</a>
-<span class={`@badge-success`}>shipped</span>
+```
 
-<!-- ❌ recipe passed as a prop is just a string variable inside the component -->
-<Icon class="@icon-sm" />
+**In every mode, the silent failure is indirection.** A recipe that reaches the
+attribute as a *value* — assigned to a variable first, passed as a component
+prop, looked up from an object, or composed into a string — is invisible to the
+build, ships as a dead token, and produces **no warning**:
+
+```tsx
+const cfg = { recipe: "@badge-success" };
+<span className={cfg.recipe}>shipped</span>   // ❌ silent — no expansion, no warning
+<Icon class="@icon-sm" />                      // ❌ silent — a prop is just a string
 ```
 
 An unexpanded `@recipe` is a class name the browser doesn't know, so the element
 simply renders without those styles — no error, just missing CSS. The build
 warns when it can see the stranded token in a `class` / `className` / `class:list`
-value (`[shortwind] … unexpanded recipe @nav-link …`). It can't warn when the
-recipe reaches the attribute indirectly — assigned to a variable first, or passed
-in as a component prop — so don't rely on the warning alone.
+value (`[shortwind] … unexpanded recipe @nav-link …`). It cannot warn about the
+indirect cases above, so don't rely on the warning alone.
 
-## `.astro` vs `.tsx`
-
-The JSX transform that handles `.tsx` islands *can* see into a `className={…}`
-ternary and expand both string operands; the HTML-shaped transform that handles
-`.astro` (and `.vue`, `.svelte`) cannot. So the same conditional behaves
-differently depending on which file it lives in — moving a snippet from a page
-into an island can change whether it renders styled. Don't rely on the JSX
-leniency; write for the literal-only rule everywhere and it works in both.
+Because the same conditional behaves differently in `.astro` and `.tsx`, moving
+a snippet between them can change whether it renders styled. Don't lean on the
+JSX leniency: write for the literal-only rule everywhere and it works in both.
 
 ## The fix: expand at build time, bind the result
 

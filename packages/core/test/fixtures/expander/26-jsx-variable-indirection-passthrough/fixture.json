@@ -1,0 +1,9 @@
+{
+  "mode": "jsx",
+  "mergeConflicts": true,
+  "flattened": {
+    "badge-success": ["bg-green-100", "text-green-800"]
+  },
+  "input": "const cfg = { recipe: \"@badge-success\" };\nexport const El = () => <span className={cfg.recipe}>ok</span>;",
+  "expected": "const cfg = { recipe: \"@badge-success\" };\nexport const El = () => <span className={cfg.recipe}>ok</span>;"
+}

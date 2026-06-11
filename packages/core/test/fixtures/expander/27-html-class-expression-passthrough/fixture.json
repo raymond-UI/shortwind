@@ -1,0 +1,10 @@
+{
+  "mode": "html",
+  "mergeConflicts": true,
+  "flattened": {
+    "tab-active": ["border-b-2", "border-primary"],
+    "tab": ["text-muted-foreground"]
+  },
+  "input": "<a class={active ? \"@tab-active\" : \"@tab\"}>Home</a>\n<a class=\"@tab\">Docs</a>",
+  "expected": "<a class={active ? \"@tab-active\" : \"@tab\"}>Home</a>\n<a class=\"text-muted-foreground\">Docs</a>"
+}
