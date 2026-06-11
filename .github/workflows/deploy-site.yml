@@ -44,7 +44,12 @@ jobs:
         # site/ is a decoupled pnpm root, outside the workspace turbo typecheck
         # graph — without this gate a type error (e.g. an integration type skew)
         # ships silently. astro.config + content collections must type-check.
-        run: pnpm exec tsc --noEmit
+        # `astro sync` first generates the `astro:content` module + `import.meta`
+        # client types; without it tsc fails in a clean checkout (they only exist
+        # after a build locally).
+        run: |
+          pnpm exec astro sync
+          pnpm exec tsc --noEmit
       - name: Build
         run: pnpm run build
       - name: Verify CDN runtime artifact is present
