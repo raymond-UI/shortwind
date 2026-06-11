@@ -25,9 +25,12 @@ invisible to the build:
 <Icon class="@icon-sm" />
 ```
 
-The failure is **quiet**: an unexpanded `@recipe` is a class name the browser
-doesn't know, so the element simply renders without those styles. There's no
-error and, for these shapes, no build warning.
+An unexpanded `@recipe` is a class name the browser doesn't know, so the element
+simply renders without those styles — no error, just missing CSS. The build
+warns when it can see the stranded token in a `class` / `className` / `class:list`
+value (`[shortwind] … unexpanded recipe @nav-link …`). It can't warn when the
+recipe reaches the attribute indirectly — assigned to a variable first, or passed
+in as a component prop — so don't rely on the warning alone.
 
 ## `.astro` vs `.tsx`
 

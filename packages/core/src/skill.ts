@@ -52,7 +52,7 @@ export function renderSkillMarkdown(registry: Registry, options: SkillRenderOpti
   parts.push("## Dynamic classes");
   parts.push("");
   parts.push(
-    "Recipes expand only inside **literal** `class=\"...\"` / `className=\"...\"` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro `class:list`, or a value passed as a component prop — is invisible to the build and ships as a dead `@recipe` token: the element renders unstyled, with no warning.",
+    "Recipes expand only inside **literal** `class=\"...\"` / `className=\"...\"` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro `class:list`, or a value passed as a component prop — is not expanded and ships as a dead `@recipe` token, so the element renders unstyled. The build warns when it can see such a token; if the recipe reaches the attribute indirectly (via a variable or prop) it stays silent.",
   );
   parts.push("");
   parts.push("```");

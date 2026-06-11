@@ -51,8 +51,11 @@ export function transformContent(
 // only flag names that are real recipes, so genuine Tailwind `@`-utilities like
 // `@container` are never false-positived. Heuristic by design (a warning, not a
 // hard error): the regex covers string, template-literal, and `{...}` class
-// values, which is where misses surface in practice.
-const CLASS_VALUE_RE = /\b(?:class|className)\s*=\s*(?:(["'`])([\s\S]*?)\1|\{([\s\S]*?)\})/g;
+// values, plus Astro's `class:list={...}` directive — all the shapes where the
+// static transform can't reach a recipe and it silently ships as raw text.
+// `class:list` is listed first so the longer attribute name wins the match.
+const CLASS_VALUE_RE =
+  /\b(?:class:list|class|className)\s*=\s*(?:(["'`])([\s\S]*?)\1|\{([\s\S]*?)\})/g;
 const RECIPE_TOKEN_RE = /@[A-Za-z0-9][\w-]*/g;
 
 export function findUnexpandedRecipes(code: string, registry: Registry): string[] {

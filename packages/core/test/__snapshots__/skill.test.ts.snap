@@ -27,7 +27,7 @@ Shortwind defines named recipes like \`@card\` that expand into Tailwind class s
 
 ## Dynamic classes
 
-Recipes expand only inside **literal** \`class="..."\` / \`className="..."\` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro \`class:list\`, or a value passed as a component prop — is invisible to the build and ships as a dead \`@recipe\` token: the element renders unstyled, with no warning.
+Recipes expand only inside **literal** \`class="..."\` / \`className="..."\` strings. A recipe placed in a JS expression — a ternary, a template literal, an Astro \`class:list\`, or a value passed as a component prop — is not expanded and ships as a dead \`@recipe\` token, so the element renders unstyled. The build warns when it can see such a token; if the recipe reaches the attribute indirectly (via a variable or prop) it stays silent.
 
 \`\`\`
 <div class="@card-elevated p-6">                 <!-- expands -->

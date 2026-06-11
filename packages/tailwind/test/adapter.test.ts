@@ -222,6 +222,25 @@ describe("findUnexpandedRecipes", () => {
     expect(found).toContain("@btn-primary");
     expect(found).toContain("@btn-ghost");
   });
+
+  it("catches recipes inside an Astro class:list array directive", () => {
+    const code = `<a class:list={[active ? "@nav-link-active" : "@nav-link"]}>Home</a>`;
+    const found = findUnexpandedRecipes(code, registry);
+    expect(found).toContain("@nav-link");
+    expect(found).toContain("@nav-link-active");
+  });
+
+  it("catches a recipe inside an Astro class:list object directive", () => {
+    const code = `<a class:list={{ "@nav-link": true }}>Home</a>`;
+    expect(findUnexpandedRecipes(code, registry)).toContain("@nav-link");
+  });
+
+  it("does not mistake a single-class directive (class:name) for a class value", () => {
+    // Svelte `class:active={cond}` toggles the literal class `active`; there's no
+    // recipe string to miss, so it must not be scanned as a class value.
+    const code = `<a class:active={isOn}>Home</a>`;
+    expect(findUnexpandedRecipes(code, registry)).toEqual([]);
+  });
 });
 
 describe("source directive injection", () => {
