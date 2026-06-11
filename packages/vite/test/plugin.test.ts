@@ -124,6 +124,23 @@ describe("vite plugin", () => {
     expect(result).toBeNull();
   });
 
+  it("honors a custom include and stays deterministic across files even with a /g flag (#44/#57)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    // A /g RegExp carries lastIndex between .test() calls; the plugin must strip
+    // the flag, or the SECOND matching file is skipped nondeterministically.
+    const [transformPlugin] = shortwind({ cwd: dir, include: /\.foo$/g });
+    const a = callTransform(transformPlugin!, `<div class="@card"></div>`, path.join(dir, "a.foo"));
+    const b = callTransform(transformPlugin!, `<div class="@card"></div>`, path.join(dir, "b.foo"));
+    for (const r of [a, b]) {
+      const code = typeof r === "string" ? r : r?.code;
+      expect(code, "both .foo files transform").not.toBeNull();
+      expect(code).toMatch(/rounded/);
+    }
+    // a file outside the custom include is ignored
+    expect(callTransform(transformPlugin!, `<div class="@card"></div>`, path.join(dir, "c.tsx"))).toBeNull();
+  });
+
   it("skips the recipe CSS files themselves", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
@@ -196,6 +213,7 @@ describe("vite plugin", () => {
     const events: string[] = [];
     const handlers: Record<string, ((file: string) => void)[]> = {};
     const sent: { type: string }[] = [];
+    let invalidatedAll = 0;
     const server = {
       watcher: {
         add(p: string | string[]) {
@@ -206,8 +224,9 @@ describe("vite plugin", () => {
         },
       },
       moduleGraph: {
-        getModulesByFile: () => undefined,
-        invalidateModule: () => {},
+        invalidateAll: () => {
+          invalidatedAll++;
+        },
       },
       ws: { send: (payload: { type: "full-reload" }) => sent.push(payload) },
     };
@@ -222,5 +241,39 @@ describe("vite plugin", () => {
       cb(path.join(dir, "recipes", "card.css")),
     );
     expect(sent).toContainEqual({ type: "full-reload" });
+    // Stale-cache regression (#44): the module graph MUST be invalidated, or the
+    // browser reloads with output expanded against the old registry. Asserting
+    // the ws message alone is exactly how the original bug passed CI.
+    expect(invalidatedAll).toBeGreaterThan(0);
+  });
+
+  // Outcome test (not mechanism): after a recipe file is added on disk and the
+  // watcher fires, a fresh transform must reflect the new registry.
+  it("reloads the registry so transforms reflect recipes added after startup (#44)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const [transformPlugin, , watcher] = shortwind({ cwd: dir });
+    const appId = path.join(dir, "src", "App.tsx");
+
+    // button family not installed yet → @btn-primary is unknown, nothing to
+    // expand, so the transform reports no change.
+    expect(callTransform(transformPlugin!, `<button className="@btn-primary" />`, appId)).toBeNull();
+
+    const handlers: Record<string, ((file: string) => void)[]> = {};
+    const server = {
+      watcher: { add() {}, on(e: string, cb: (f: string) => void) { (handlers[e] ??= []).push(cb); } },
+      moduleGraph: { invalidateAll: () => {} },
+      ws: { send: () => {} },
+    };
+    await watcher!.configureServer?.(server);
+
+    // install button.css and fire the watcher's change event
+    await writeFile(path.join(dir, "recipes", "button.css"), BUTTON_CSS);
+    handlers["add"]?.forEach((cb) => cb(path.join(dir, "recipes", "button.css")));
+
+    const after = callTransform(transformPlugin!, `<button className="@btn-primary" />`, appId);
+    const afterCode = typeof after === "string" ? after : after?.code;
+    expect(afterCode).not.toBeNull();
+    expect(afterCode).not.toMatch(/@btn-primary\b/);
   });
 });

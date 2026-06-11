@@ -5,7 +5,7 @@ import { glob } from "tinyglobby";
 import { Tiktoken } from "js-tiktoken/lite";
 import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 import { buildRegistry, parseRecipeFile, type Registry, type Recipe } from "@shortwind/core";
-import { transformContent, loadRegistryFromDir } from "@shortwind/tailwind";
+import { transformContent, loadRegistryFromDir, modeForFile } from "@shortwind/tailwind";
 import { readConfig } from "../project.js";
 import { DEFAULT_RECIPES_CSS } from "../bench-corpus/default-recipes.js";
 import { CORPUS_FILES } from "../bench-corpus/corpus.js";
@@ -14,8 +14,6 @@ import { extractClassUsages } from "./lint.js";
 export type BenchOptions = {
   cwd: string;
   corpus?: boolean;
-  json?: boolean;
-  registry?: string;
   path?: string;
 };
 
@@ -97,9 +95,7 @@ export async function bench(options: BenchOptions): Promise<BenchResult> {
   };
 
   for (const { filename, content } of filesToBench) {
-    const expanded = transformContent(content, registry, {
-      mode: filename.endsWith(".html") ? "html" : "jsx",
-    });
+    const expanded = transformContent(content, registry, { mode: modeForFile(filename) });
 
     const compactUsages = extractClassUsages(content);
     const expandedUsages = extractClassUsages(expanded);

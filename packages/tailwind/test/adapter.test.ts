@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parse } from "@babel/parser";
+import { buildRegistry, type Recipe } from "@shortwind/core";
 import {
   buildSourceDirective,
   computeSafelistTokens,
@@ -194,6 +196,61 @@ describe("transformContent", () => {
     const after = transformContent(before, registry, { callExpanders: ["styled"] });
     expect(after).not.toContain("@btn-primary");
     expect(after).toContain("inline-flex");
+  });
+});
+
+describe("quote-bearing token escaping (#47)", () => {
+  const recipe = (name: string, tokens: string[]): Recipe => ({
+    name,
+    description: null,
+    tokens,
+    references: [],
+    sourceFile: `${name}.css`,
+    sourceLine: 1,
+  });
+  const reg = (recipes: Recipe[]) => {
+    const r = buildRegistry(recipes);
+    if (!r.ok) throw new Error("registry build failed: " + JSON.stringify(r.errors));
+    return r.value;
+  };
+  const reparses = (code: string): boolean => {
+    try {
+      parse(code, { sourceType: "module", plugins: ["jsx", "typescript"] });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it("keeps a single-quoted className valid JS when expansion contains a single quote", () => {
+    const registry = reg([recipe("icon", ["before:content-['x']", "inline-block"])]);
+    const out = transformContent(`const C = () => <i className='@icon' />;`, registry);
+    expect(reparses(out), `transform produced invalid JS: ${out}`).toBe(true);
+    // bare JSX attribute → delimiter switched to ", single quotes kept literal
+    expect(out).toContain(`"before:content-['x'] inline-block"`);
+  });
+
+  it("neutralizes a hostile breakout token inside cva() instead of emitting code", () => {
+    // `x'};alert(1);//` would close the string + inject a statement if unescaped;
+    // unescaped, `cva('x'};alert(1);//')` is itself a syntax error, so a passing
+    // reparse proves the quote was escaped.
+    const registry = reg([recipe("evil", ["x'};alert(1);//"])]);
+    const out = transformContent(`const v = cva('@evil');`, registry);
+    expect(reparses(out), `injection produced broken JS: ${out}`).toBe(true);
+    expect(out).toContain("\\'"); // the quote was escaped, not left to break out
+  });
+
+  it("escapes an expansion spliced into a template-literal className", () => {
+    const registry = reg([recipe("icon", ["before:content-['x']"])]);
+    const out = transformContent("const C = () => <i className={`@icon base`} />;", registry);
+    expect(reparses(out), out).toBe(true);
+  });
+
+  it("rejects a backtick-bearing token at the registry boundary", () => {
+    const r = buildRegistry([recipe("tick", ["a`b"])]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.some((e) => e.code === "resolve/unsafe-token")).toBe(true);
   });
 });
 

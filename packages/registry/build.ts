@@ -11,7 +11,14 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { buildRegistry, parseRecipeFile, RESERVED_RECIPE_NAMES } from "@shortwind/core";
+import {
+  buildRegistry,
+  normalizeRecipeBody,
+  parseRecipeFile,
+  PLACEHOLDER_SHA,
+  RECIPE_SHA_HEX_LENGTH,
+  RESERVED_RECIPE_NAMES,
+} from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
 
 export type BuildOptions = {
@@ -57,21 +64,13 @@ export type BuildResult = {
 const HEADER_RE =
   /^\/\*\s*shortwind:\s+(\S+)@(\S+)\s+sha:(?:[0-9a-f]{6}|[0-9a-f]{16})\s*\*\//;
 
-function normalizeBody(body: string): string {
-  // Two recipes that differ only in whether the file ends with `\n` should
-  // hash identically — the writer always re-emits with a trailing newline, so
-  // strip them all before hashing.
-  return body
-    .replace(/\r\n/g, "\n")
-    .replace(/[ \t]+$/gm, "")
-    .replace(/\n+$/g, "");
-}
-
 function computeSha(body: string): string {
-  // 16 hex chars = 64 bits of collision resistance. Long enough that
-  // accidental fingerprint collisions across recipe edits are effectively
-  // impossible while staying readable in the file header.
-  return createHash("sha256").update(normalizeBody(body)).digest("hex").slice(0, 16);
+  // Normalization and truncation width are shared with the CLI via core so a
+  // downloaded family's header sha can be verified against its body.
+  return createHash("sha256")
+    .update(normalizeRecipeBody(body))
+    .digest("hex")
+    .slice(0, RECIPE_SHA_HEX_LENGTH);
 }
 
 function parseHeader(source: string): { family: string; version: string } | null {
@@ -79,6 +78,12 @@ function parseHeader(source: string): { family: string; version: string } | null
   const m = firstLine.match(HEADER_RE);
   if (!m) return null;
   return { family: m[1]!, version: m[2]! };
+}
+
+function parseHeaderSha(source: string): string | null {
+  const firstLine = source.split("\n", 1)[0] ?? "";
+  const m = firstLine.match(/sha:([0-9a-f]{6,16})/);
+  return m ? m[1]! : null;
 }
 
 function bodyWithoutHeader(source: string): string {
@@ -245,6 +250,16 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
     const version = familyVersion(opts, family, source);
     const body = bodyWithoutHeader(source);
     const sha = computeSha(body);
+    // A non-placeholder header sha is a claim about the body — validate it
+    // rather than silently overwriting. A mismatch means the body was edited
+    // without re-sealing (or was tampered with); fail loudly instead of
+    // shipping a header that lies about its content.
+    const declaredSha = parseHeaderSha(source);
+    if (declaredSha && declaredSha !== PLACEHOLDER_SHA && declaredSha !== sha) {
+      throw new Error(
+        `source recipe ${file} declares sha:${declaredSha} but its content hashes to sha:${sha} — re-seal the file or correct the header`,
+      );
+    }
     familySources.push({ family, version, sha, body });
     for (const r of parsed.value.recipes) {
       // `@`-prefixed recipe names share a namespace with Tailwind's own
@@ -326,14 +341,16 @@ export function buildRegistryPipeline(opts: BuildOptions): BuildResult {
   return { manifest, manifestPath };
 }
 
-// Tokens are concatenated into `className` in the catalog UI. React escapes
-// attribute values, so this is defense-in-depth rather than a live XSS fix —
-// but it ensures a third-party recipe can't sneak `" onload="alert(1)` into
-// the wire format that downstream tools also consume. Tailwind utilities
-// (including arbitrary values like `bg-[url('/x.png')]`) stay within this
-// alphabet; anything outside it is almost certainly a parsing bug or an
-// attempted injection.
-const EXPANSION_TOKEN_RE = /^[\w:\/\-\[\]\(\),.%@!#*+&'"=?]+$/;
+// Tokens are concatenated into `className` in the catalog UI and interpolated
+// into `class="…"` / `@source inline("…")` by the adapters. A double-quote in a
+// token breaks out of those host strings (`a"onload="alert(1)` becomes a second
+// HTML attribute), so it is excluded from the alphabet — the comment used to
+// claim this gate stopped exactly that while still allowing `"`. Single quotes
+// stay (legitimate `bg-[url('/x.png')]` / `content-['→']`); the adapters switch
+// the host delimiter when an expanded value contains one. `=` stays for
+// `data-[state=open]`-style variants. Non-ASCII ( -￿) is allowed so a
+// unicode arbitrary value like `content-['→']` isn't rejected as invalid.
+const EXPANSION_TOKEN_RE = /^[\w:\/\-\[\]\(\),.%@!#*+&'=?\u00A0-\uFFFF]+$/;
 
 function validateExpansionTokens(manifest: Manifest): void {
   for (const family of manifest.families) {

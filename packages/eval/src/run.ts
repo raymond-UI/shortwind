@@ -30,15 +30,23 @@ function parseArgs(argv: string[]): CliArgs {
     // a credit-limited key can't afford — OpenRouter 402s the whole request).
     maxTokens: 8192,
   };
+  const numericArg = (flag: string, raw: string | undefined): number => {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      console.error(`error: ${flag} expects a number, got ${JSON.stringify(raw)}`);
+      process.exit(2);
+    }
+    return n;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--offline") args.offline = true;
     else if (a === "--json") args.json = true;
     else if (a === "--models") args.models = (argv[++i] ?? "").split(",").filter(Boolean);
     else if (a === "--tasks") args.tasks = (argv[++i] ?? "").split(",").filter(Boolean);
-    else if (a === "--limit") args.limit = Number(argv[++i]);
+    else if (a === "--limit") args.limit = numericArg("--limit", argv[++i]);
     else if (a === "--out") args.out = argv[++i] ?? null;
-    else if (a === "--max-tokens") args.maxTokens = Number(argv[++i]);
+    else if (a === "--max-tokens") args.maxTokens = numericArg("--max-tokens", argv[++i]);
   }
   return args;
 }

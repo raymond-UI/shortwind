@@ -375,4 +375,20 @@ describe("verify", () => {
     expect(result.ok).toBe(false);
     expect(result.issues.some((i) => i.kind === "missing-file" && i.family === "card")).toBe(true);
   });
+
+  it("reports a legacy 6-hex seal as legacy-fingerprint, not tampered (#42 migration)", async () => {
+    const dir = await setupProject();
+    dirs.push(dir);
+    const cardPath = path.join(dir, "recipes", "card.css");
+    // simulate a project sealed by the old CLI: a real-looking 6-hex header sha,
+    // body otherwise untouched.
+    const legacy = rewriteHeaderSha(readFileSync(cardPath, "utf8"), "abc123");
+    writeFileSync(cardPath, legacy);
+    const result = await verify({ cwd: dir });
+    expect(result.ok).toBe(false);
+    const issue = result.issues.find((i) => i.family === "card");
+    expect(issue?.kind).toBe("legacy-fingerprint");
+    // must NOT be misreported as tampering
+    expect(result.issues.some((i) => i.kind === "header-tampered")).toBe(false);
+  });
 });

@@ -25,7 +25,16 @@ export function assertValidFamilyName(family: string): void {
 }
 
 export function createRegistrySource(origin: string): RegistrySource {
-  if (origin.startsWith("http://") || origin.startsWith("https://")) {
+  if (origin.startsWith("http://")) {
+    // Plaintext: recipe content arrives unauthenticated and the header sha we
+    // verify can be rewritten in transit alongside the body. Warn loudly; TLS
+    // is the only transport integrity we have for a remote registry.
+    console.warn(
+      `[shortwind] registry origin ${origin} uses plaintext http:// — recipe content is unauthenticated and tamperable in transit; prefer https://`,
+    );
+    return httpSource(origin);
+  }
+  if (origin.startsWith("https://")) {
     return httpSource(origin);
   }
   return fileSource(origin);
@@ -43,6 +52,8 @@ export async function resolveSource(origin: string | undefined): Promise<Registr
 
 const CATALOG_PACKAGE = "@shortwind/catalog";
 const NPM_TIMEOUT_MS = 3000;
+// Bound every registry content fetch so a stalled host can't hang init/add.
+const FETCH_TIMEOUT_MS = 10000;
 
 // Prefer the newest published catalog; fall back to the embedded snapshot when
 // the network is unavailable. One decision per run (all-CDN or all-bundle) so a
@@ -133,21 +144,33 @@ function fileSource(origin: string): RegistrySource {
 
 function httpSource(origin: string): RegistrySource {
   const base = origin.replace(/\/+$/, "");
+  // Every content fetch is bounded: without a signal a stalled connection hangs
+  // `init`/`add` forever, defeating the offline-fallback (the bundled catalog
+  // only triggers when the probe rejects, not when it hangs).
+  const get = (url: string): Promise<Response> =>
+    fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  // The reachability probe (defaultCatalogSource) fetches presets.json, then
+  // `init` immediately fetches it again — cache the first result so the second
+  // call is free.
+  let presetsCache: Promise<Presets> | null = null;
   return {
     origin,
-    async loadPresets() {
-      const res = await fetch(`${base}/presets.json`);
-      if (!res.ok) throw new Error(`presets.json: ${res.status} ${res.statusText}`);
-      return (await res.json()) as Presets;
+    loadPresets() {
+      presetsCache ??= (async () => {
+        const res = await get(`${base}/presets.json`);
+        if (!res.ok) throw new Error(`presets.json: ${res.status} ${res.statusText}`);
+        return (await res.json()) as Presets;
+      })();
+      return presetsCache;
     },
     async loadFamily(family) {
       assertValidFamilyName(family);
-      const res = await fetch(`${base}/recipes/${family}.css`);
+      const res = await get(`${base}/recipes/${family}.css`);
       if (!res.ok) throw new Error(`${family}.css: ${res.status} ${res.statusText}`);
       return res.text();
     },
     async listAllFamilies() {
-      const res = await fetch(`${base}/index.json`);
+      const res = await get(`${base}/index.json`);
       if (!res.ok) throw new Error(`index.json: ${res.status} ${res.statusText}`);
       const body = (await res.json()) as { families: string[] };
       return body.families.filter((name) => FAMILY_RE.test(name));

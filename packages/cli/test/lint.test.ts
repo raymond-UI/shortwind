@@ -101,6 +101,33 @@ describe("lint", () => {
     expect(await readFile(file, "utf8")).toBe(after);
   });
 
+  it("preserves a ${...} dynamic token through --fix (#50)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    const file = await writeSource(
+      dir,
+      "src/page.html",
+      `<div class="@card \${cls} rounded-lg p-4"></div>\n`,
+    );
+    await lint({ cwd: dir, rules: ["recipe/no-redundant-utility"], fix: true });
+    const after = await readFile(file, "utf8");
+    // rounded-lg + p-4 are redundant (in @card) and removed; ${cls} survives.
+    expect(after).toContain("${cls}");
+    expect(after).toContain(`class="@card \${cls}"`);
+    expect(after).not.toMatch(/rounded-lg|p-4/);
+  });
+
+  it("leaves a clean class attribute (recipe, no redundancy) byte-identical incl. whitespace (#50)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    const original = `<div class="@card\n  shadow\n  ring-2"></div>\n`;
+    const file = await writeSource(dir, "src/page.html", original);
+    const result = await lint({ cwd: dir, rules: ["recipe/no-redundant-utility"], fix: true });
+    // nothing redundant → no rewrite, interior newlines preserved
+    expect(result.filesFixed).toEqual([]);
+    expect(await readFile(file, "utf8")).toBe(original);
+  });
+
   it("surfaces duplicate-recipe diagnostics from the registry", async () => {
     const dir = await setupProject([]);
     dirs.push(dir);

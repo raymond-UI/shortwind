@@ -78,7 +78,10 @@ export function findUnexpandedRecipes(code: string, registry: Registry): string[
 export function computeSafelistTokens(registry: Registry): string[] {
   const set = new Set<string>();
   for (const tokens of Object.values(registry.flattened)) {
-    for (const t of tokens) set.add(t);
+    // A double-quote would break out of the `@source inline("…")` string and
+    // inject arbitrary CSS. buildRegistry already rejects such tokens, but a
+    // registry assembled by other means might not have — drop them defensively.
+    for (const t of tokens) if (!t.includes('"')) set.add(t);
   }
   return [...set].sort();
 }
@@ -111,14 +114,35 @@ export function injectSourceDirective(css: string, registry: Registry): string {
   );
 }
 
+// Single source of truth for the html-vs-jsx decision, shared by every adapter
+// (vite/next/cli) so they can't drift. Real JSX/TSX (and MD/MDX, which compile
+// to JSX) use `className` and parse with the JSX AST transform; template
+// formats (.astro/.vue/.svelte) and .html are HTML-shaped (`class=`, not valid
+// JSX) and go through the regex html-mode expander.
+const JSX_LIKE_EXTS = new Set(["ts", "tsx", "js", "jsx", "md", "mdx"]);
+
+export function modeForFile(filePath: string): ExpandMode {
+  const ext = path.extname(filePath.split("?")[0] ?? filePath).slice(1).toLowerCase();
+  return JSX_LIKE_EXTS.has(ext) ? "jsx" : "html";
+}
+
+// Single source of truth for "which files in this dir are recipes" — the
+// sorted absolute paths of every `.css` file. Used by loadRegistryFromDir and
+// by the adapters' change-watchers so they agree on the recipe set.
+export function listRecipeFiles(recipesDir: string): string[] {
+  if (!existsSync(recipesDir)) return [];
+  return readdirSync(recipesDir)
+    .filter((f) => f.endsWith(".css"))
+    .sort()
+    .map((f) => path.join(recipesDir, f));
+}
+
 export function loadRegistryFromDir(recipesDir: string): Registry {
   if (!existsSync(recipesDir)) return { families: {}, flattened: {} };
-  const files = readdirSync(recipesDir)
-    .filter((f) => f.endsWith(".css"))
-    .sort();
   const recipes: Recipe[] = [];
-  for (const file of files) {
-    const source = readFileSync(path.join(recipesDir, file), "utf8");
+  for (const filePath of listRecipeFiles(recipesDir)) {
+    const file = path.basename(filePath);
+    const source = readFileSync(filePath, "utf8");
     const parsed = parseRecipeFile(source, file);
     if (!parsed.ok) {
       throw new TailwindAdapterError(

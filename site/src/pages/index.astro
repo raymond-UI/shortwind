@@ -61,6 +61,10 @@ const shrink = Math.round(((tok(demoExpanded) - tok(demoSource)) / tok(demoExpan
           <p class="@eyebrow">renders as</p>
           <span class="@badge font-mono">vs {tok(demoExpanded)} tok of raw tailwind</span>
         </div>
+        {/* SECURITY: set:html is the one raw-HTML sink in the tree. `demoExpanded`
+            MUST stay a build-time constant (expand() over the hardcoded demoSource
+            above) — never feed user/runtime input here. The site-wide CSP in
+            public/_headers is the backstop. */}
         <div class="flex flex-1 items-center rounded border border-dashed border-border p-5" set:html={demoExpanded} />
       </div>
     </div>

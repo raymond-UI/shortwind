@@ -86,7 +86,10 @@ export async function lint(options: LintOptions): Promise<LintResult> {
       for (const token of u.tokens) {
         if (!token.value.startsWith("@")) continue;
         const name = token.value.slice(1);
-        if (registry.flattened[name]) usedRecipes.add(name);
+        // `Object.hasOwn`, never a truthy lookup: a token like `@constructor`
+        // would otherwise resolve an inherited Object.prototype member and be
+        // silently treated as a known recipe instead of flagged unknown.
+        if (Object.hasOwn(registry.flattened, name)) usedRecipes.add(name);
         else if (enabledRules.has("recipe/unknown")) {
           findings.push({
             rule: "recipe/unknown",
@@ -319,7 +322,7 @@ function checkUsageSuffixOrder(
   for (const token of tokens) {
     if (!token.value.startsWith("@")) continue;
     const name = token.value.slice(1);
-    if (!registry.flattened[name]) continue;
+    if (!Object.hasOwn(registry.flattened, name)) continue;
     const meta = recipeMeta(name, familyForRecipe(registry, name));
     if (!meta.badOrder) continue;
     findings.push({
@@ -346,7 +349,7 @@ function checkConflictingIntent(
   for (const token of tokens) {
     if (!token.value.startsWith("@")) continue;
     const name = token.value.slice(1);
-    if (!registry.flattened[name]) continue;
+    if (!Object.hasOwn(registry.flattened, name)) continue;
     const meta = recipeMeta(name, familyForRecipe(registry, name));
     if (!meta.intent) continue;
     const familyIntents =
@@ -393,7 +396,7 @@ function checkSiblingOverlap(
   for (const token of tokens) {
     if (!token.value.startsWith("@")) continue;
     const name = token.value.slice(1);
-    if (!registry.flattened[name]) continue;
+    if (!Object.hasOwn(registry.flattened, name)) continue;
     const family = familyForRecipe(registry, name) ?? name.split("-")[0] ?? name;
     const arr = byFamily.get(family) ?? [];
     arr.push({ token, name });
@@ -572,6 +575,29 @@ function findMatchingBrace(source: string, openIdx: number): number {
   return findMatchingDelimiter(source, openIdx, "{", "}");
 }
 
+// Remove only the redundant tokens from the original attribute value, leaving
+// every other character — interior whitespace/newlines AND `${...}` dynamic
+// tokens — exactly as written. Rebuilding via `tokens.join(" ")` instead would
+// delete dynamic tokens (they're tracked separately) and collapse whitespace in
+// attributes that had nothing to fix.
+function spliceRedundantTokens(raw: string, isRedundant: (token: string) => boolean): string {
+  const pieces = raw.split(/(\s+)/); // alternating content / whitespace runs
+  const drop = new Array<boolean>(pieces.length).fill(false);
+  for (let i = 0; i < pieces.length; i++) {
+    const piece = pieces[i] ?? "";
+    if (piece.length === 0 || /^\s+$/.test(piece)) continue;
+    if (piece.startsWith("@") || piece.includes("${")) continue; // never touch recipes/dynamic
+    if (!isRedundant(piece)) continue;
+    drop[i] = true;
+    // Also drop one adjacent whitespace run so removing a token doesn't leave a
+    // double gap; prefer the leading run (collapses cleanly against the
+    // preceding token), fall back to the trailing one for a leading token.
+    if (i > 0 && /^\s+$/.test(pieces[i - 1] ?? "")) drop[i - 1] = true;
+    else if (/^\s+$/.test(pieces[i + 1] ?? "")) drop[i + 1] = true;
+  }
+  return pieces.filter((_, i) => !drop[i]).join("");
+}
+
 // Walks past the opening delimiter at openIdx to its match, skipping over
 // string and template-literal contents (and nested `${...}` interpolations,
 // which always use braces regardless of the outer delimiter).
@@ -666,7 +692,6 @@ function checkRedundantUtility(
     }
     if (expansions.size === 0) continue;
 
-    const kept: string[] = [];
     for (const tok of usage.tokens) {
       if (!tok.value.startsWith("@") && expansions.has(tok.value)) {
         findings.push({
@@ -677,17 +702,16 @@ function checkRedundantUtility(
           column: tok.column,
           message: `${tok.value} is already included by a recipe on this element`,
         });
-        continue;
       }
-      kept.push(tok.value);
     }
 
     if (fixed !== null && usage.fixable) {
       // valueStart is the exact offset of the first content char (just past
-      // the opening quote); raw.length is the content length.
+      // the opening quote); raw.length is the content length. Splice out only
+      // the redundant tokens so dynamic tokens and whitespace survive verbatim.
       if (usage.valueStart < cursor) continue;
       fixed += source.slice(cursor, usage.valueStart);
-      fixed += kept.join(" ");
+      fixed += spliceRedundantTokens(usage.raw, (t) => expansions.has(t));
       cursor = usage.valueStart + usage.raw.length;
     }
   }

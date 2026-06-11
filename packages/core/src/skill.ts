@@ -127,8 +127,14 @@ function renderFamily(
   const out: string[] = [];
   for (const recipe of recipes) {
     if (verbose && recipe.description) out.push(`  # ${recipe.description}`);
-    const expanded = registry.flattened[recipe.name];
-    const tokens = expanded && expanded.length > 0 ? expanded.join(" ") : "(no tokens)";
+    // Object.hasOwn + array check: on a registry deserialized from JSON
+    // (plain prototype), a recipe named `constructor`/`toString` would otherwise
+    // resolve an inherited member and throw `.length`/`.join` on a non-array.
+    const expanded = Object.hasOwn(registry.flattened, recipe.name)
+      ? registry.flattened[recipe.name]
+      : undefined;
+    const tokens =
+      Array.isArray(expanded) && expanded.length > 0 ? expanded.join(" ") : "(no tokens)";
     const prefix = `  @${recipe.name}${" ".repeat(nameCol - recipe.name.length - 1)}`;
     out.push(...wrapTokens(prefix, tokens, wrapAt));
   }

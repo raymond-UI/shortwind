@@ -2,7 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
-import type { Recipe, Registry } from "@shortwind/core";
+import type { Recipe } from "@shortwind/core";
+import { BUNDLED_ORIGIN } from "./registry-source.js";
 
 export type ShortwindConfig = {
   registry: string;
@@ -11,24 +12,65 @@ export type ShortwindConfig = {
 };
 
 export const DEFAULT_CONFIG: ShortwindConfig = {
-  registry: "https://shortwind.dev/registry",
+  // Default to the bundled catalog (CDN-first with an offline fallback, via
+  // resolveSource) rather than a hardcoded URL — a project with no explicit
+  // registry must not hit the network for `add`, which was the exact failure
+  // the bundled catalog exists to prevent. The old default also pointed at a
+  // /registry endpoint that 404s in production.
+  registry: BUNDLED_ORIGIN,
   recipesDir: "recipes",
   outputPath: "skills/shortwind/SKILL.md",
 };
+
+// shortwind.config.json is committed to a repo and read when the tool runs in a
+// fresh checkout, so it's untrusted input. `recipesDir`/`outputPath` are joined
+// with cwd and then read/written/`rm`'d — a `../` or absolute value would let a
+// cloned repo make `shortwind build`/`add` clobber files outside the project.
+function assertConfigString(value: unknown, field: string, configPath: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`${configPath}: "${field}" must be a string`);
+  }
+  return value;
+}
+
+function assertWithinCwd(cwd: string, value: string, field: string, configPath: string): string {
+  const rel = path.relative(cwd, path.resolve(cwd, value));
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(
+      `${configPath}: "${field}" (${JSON.stringify(value)}) must be a path inside the project directory`,
+    );
+  }
+  return value;
+}
 
 export async function readConfig(cwd: string): Promise<ShortwindConfig> {
   const configPath = path.join(cwd, "shortwind.config.json");
   if (!existsSync(configPath)) return DEFAULT_CONFIG;
   const body = await readFile(configPath, "utf8");
-  let parsed: Partial<ShortwindConfig>;
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(body) as Partial<ShortwindConfig>;
+    parsed = JSON.parse(body);
   } catch (err) {
-    throw new Error(
-      `${configPath}: invalid JSON — ${(err as Error).message}`,
-    );
+    throw new Error(`${configPath}: invalid JSON — ${(err as Error).message}`);
   }
-  return { ...DEFAULT_CONFIG, ...parsed };
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${configPath}: expected a JSON object`);
+  }
+  const merged = { ...DEFAULT_CONFIG, ...(parsed as Partial<ShortwindConfig>) };
+  const registry = assertConfigString(merged.registry, "registry", configPath);
+  const recipesDir = assertWithinCwd(
+    cwd,
+    assertConfigString(merged.recipesDir, "recipesDir", configPath),
+    "recipesDir",
+    configPath,
+  );
+  const outputPath = assertWithinCwd(
+    cwd,
+    assertConfigString(merged.outputPath, "outputPath", configPath),
+    "outputPath",
+    configPath,
+  );
+  return { registry, recipesDir, outputPath };
 }
 
 export function installedFamilies(recipesDir: string): string[] {
@@ -55,11 +97,10 @@ export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): P
   const recipesDir = path.join(cwd, config.recipesDir);
   const families = installedFamilies(recipesDir);
   const skillPath = path.join(cwd, config.outputPath);
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(path.dirname(skillPath), { recursive: true });
 
   const allRecipes: Recipe[] = [];
   const guidance: Record<string, string> = {};
+  const problems: string[] = [];
   for (const family of families) {
     const filePath = path.join(recipesDir, `${family}.css`);
     const source = readFileSync(filePath, "utf8");
@@ -67,13 +108,29 @@ export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): P
     if (parsed.ok) {
       allRecipes.push(...parsed.value.recipes);
       if (parsed.value.guidance) guidance[family] = parsed.value.guidance;
+    } else {
+      problems.push(`${family}.css: ${parsed.errors.map((e) => e.message).join("; ")}`);
     }
   }
-  let registry: Registry = { families: {}, flattened: {} };
   const resolved = buildRegistry(allRecipes, { guidance });
-  if (resolved.ok) registry = resolved.value;
-  const order = families;
-  await writeFile(skillPath, renderSkillMarkdown(registry, { order }));
+
+  // Don't overwrite a populated SKILL.md with a degraded/empty one when recipes
+  // fail to parse or resolve (a cycle, an unknown reference). Leave the existing
+  // file untouched and surface what to fix — silently writing an empty SKILL.md
+  // is data loss, and `build` rejects the same state.
+  if (problems.length > 0 || !resolved.ok) {
+    const all = resolved.ok ? problems : [...problems, ...resolved.errors.map((e) => e.message)];
+    console.warn(
+      `[shortwind] SKILL.md not regenerated — fix these recipe errors first:\n  ${all.join(
+        "\n  ",
+      )}\n  ${path.relative(cwd, skillPath)} left unchanged.`,
+    );
+    return skillPath;
+  }
+
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
   return skillPath;
 }
 

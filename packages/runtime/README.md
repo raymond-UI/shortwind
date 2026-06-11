@@ -20,6 +20,11 @@ autostart();        // expand the DOM now, ship the bundled catalog
 // or: install(window) for manual control
 ```
 
-Same parser/resolver/`tailwind-merge` semantics as the build-time path — byte-identical class output.
+> **Divergence from the build-time path:** to stay within the ~8KB budget, the
+> CDN runtime expands `@recipe` tokens but does **not** run `tailwind-merge`. So
+> conflicting utilities are left as-is (`@card p-2` ships `… p-4 p-2`, last one
+> wins per the CSS cascade) rather than deduped to `p-2` the way the build-time
+> adapters do. Recipe expansion itself is identical; only the conflict-merge
+> step is omitted — use a bundler adapter if you need merged output.
 
 Docs: <https://shortwind.dev>

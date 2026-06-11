@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { computeBodySha, extractHeader } from "../fingerprint.js";
+import { computeBodySha, extractHeader, isLegacyFingerprint } from "../fingerprint.js";
 import { readLockfile } from "../lockfile.js";
 import { installedFamilies, readConfig } from "../project.js";
 
 export type VerifyIssue =
   | { family: string; kind: "missing-header"; file: string }
   | { family: string; kind: "header-tampered"; file: string; recorded: string; actual: string }
+  | { family: string; kind: "legacy-fingerprint"; file: string; recorded: string }
   | { family: string; kind: "lockfile-mismatch"; file: string; locked: string; actual: string }
   | { family: string; kind: "missing-lock-entry"; file: string }
   | { family: string; kind: "missing-file"; file: string };
@@ -42,6 +43,13 @@ export async function verify(options: VerifyOptions): Promise<VerifyResult> {
     }
     const actual = computeBodySha(source);
     if (header.sha !== actual) {
+      // A 6-hex header was sealed by an older CLI; the body is fine, the seal
+      // format is just stale. Tell the user to reseal instead of crying tamper,
+      // and skip the (also-legacy) lockfile comparison for this family.
+      if (isLegacyFingerprint(header.sha)) {
+        issues.push({ family, kind: "legacy-fingerprint", file: filePath, recorded: header.sha });
+        continue;
+      }
       issues.push({
         family,
         kind: "header-tampered",

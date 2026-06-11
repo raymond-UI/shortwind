@@ -326,7 +326,6 @@ export async function run(argv: string[] = process.argv): Promise<void> {
     .action(async (pathArg: string | undefined, opts: { corpus?: boolean; json?: boolean; cwd?: string }) => {
       const benchOptions: Parameters<typeof bench>[0] = { cwd: opts.cwd ?? process.cwd() };
       if (opts.corpus) benchOptions.corpus = true;
-      if (opts.json) benchOptions.json = true;
       if (pathArg !== undefined) benchOptions.path = pathArg;
       const result = await bench(benchOptions);
       if (opts.json) {
@@ -339,7 +338,13 @@ export async function run(argv: string[] = process.argv): Promise<void> {
 
   cli.help();
   cli.version(cliVersion() ?? "0.0.0");
-  cli.parse(argv);
+  // cac's parse() invokes the matched command's async action but does NOT await
+  // it, so a rejection inside any async command (network failure in `add`, a
+  // rethrow in `build`/`upgrade`, …) escapes bin.ts's `run().catch` and prints
+  // a raw unhandled-rejection dump. Parse without running, then await the
+  // command so its promise flows back to the caller's catch.
+  cli.parse(argv, { run: false });
+  await cli.runMatchedCommand();
 }
 
 function makeInteractiveResolver() {
@@ -382,6 +387,8 @@ function describeVerifyIssue(issue: import("./commands/verify.js").VerifyIssue):
       return "no fingerprint header — recipe was hand-stripped";
     case "header-tampered":
       return `header sha ${issue.recorded} but body hashes to ${issue.actual}`;
+    case "legacy-fingerprint":
+      return `sealed with an older fingerprint format (${issue.recorded}) — run \`shortwind reseal\` to upgrade it (the recipe body is unchanged)`;
     case "lockfile-mismatch":
       return `lockfile expects ${issue.locked} but body hashes to ${issue.actual}`;
     case "missing-lock-entry":

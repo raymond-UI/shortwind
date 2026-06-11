@@ -87,6 +87,14 @@ export default function Playground({
           </pre>
         </Pane>
         <Pane title="rendered">
+          {/*
+            SECURITY: a #share= link can put attacker-controlled markup into
+            `output`, which is injected here via srcDoc. The sandbox MUST stay
+            "allow-scripts" only — never add "allow-same-origin" (it would give
+            that markup access to this page's DOM/cookies/storage), nor
+            allow-forms/allow-popups/allow-top-navigation. referrerPolicy stays
+            no-referrer so the iframe leaks no URL.
+          */}
           <iframe
             title="Rendered preview"
             sandbox="allow-scripts"
@@ -128,9 +136,16 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
+// Pinned to an exact version + SRI rather than the floating `@4` tag: a floating
+// tag can't carry an integrity hash, so unpkg serving compromised bytes would
+// run unsandboxed-of-SRI. Bump the version and recompute the hash periodically:
+//   curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
+const TW_BROWSER_SRC = "https://unpkg.com/@tailwindcss/browser@4.3.0/dist/index.global.js";
+const TW_BROWSER_SRI = "sha384-nWTzRTCY/9V4Bo352ehygr1c4cnst4XN6lMR3fipakEQrhVpc0hEM5Dii3Amz0sT";
+
 function renderIframe(html: string, dark: boolean): string {
   const cls = dark ? ' class="dark"' : "";
-  return `<!doctype html><html${cls}><head><meta charset="utf-8"><script src="https://unpkg.com/@tailwindcss/browser@4"></script><style type="text/tailwindcss">${IFRAME_THEME}</style><style>body{font-family:ui-sans-serif,system-ui,sans-serif;margin:16px;background:var(--background);color:var(--foreground)}</style></head><body>${html}</body></html>`;
+  return `<!doctype html><html${cls}><head><meta charset="utf-8"><script src="${TW_BROWSER_SRC}" integrity="${TW_BROWSER_SRI}" crossorigin="anonymous"></script><style type="text/tailwindcss">${IFRAME_THEME}</style><style>body{font-family:ui-sans-serif,system-ui,sans-serif;margin:16px;background:var(--background);color:var(--foreground)}</style></head><body>${html}</body></html>`;
 }
 
 // CDN Tailwind in the iframe doesn't know our @theme tokens, so inline them.

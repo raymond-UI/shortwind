@@ -1,4 +1,17 @@
+import { isProtoPollutionKey } from "./reserved.js";
 import type { Diagnostic, Recipe, Registry, Result } from "./types.js";
+
+// A single recipe expanding past this many tokens is treated as hostile input,
+// not a real catalog: a doubling reference chain (`a1 { @a0 @a0 }` …) amplifies
+// exponentially, and without a cap the flattened array exhausts memory (or, via
+// spread-push, overflows the engine argument limit). Real recipes are dozens of
+// tokens; 10k is far above any legitimate expansion.
+const MAX_FLATTENED_TOKENS = 10_000;
+
+// Reference nesting past this depth is likewise hostile (a non-branching chain
+// of thousands of recipes), and the recursive flattener would otherwise blow the
+// call stack before any token cap is reached.
+const MAX_REFERENCE_DEPTH = 1_000;
 
 export type BuildRegistryOptions = {
   // Family-level guidance keyed by family name. Callers that parsed `@guide`
@@ -12,6 +25,50 @@ export function buildRegistry(
   options: BuildRegistryOptions = {},
 ): Result<Registry, Diagnostic[]> {
   const errors: Diagnostic[] = [];
+
+  // Reject names that collide with `Object.prototype` members before they reach
+  // any property write/lookup. The registry containers below are null-prototype
+  // too, but rejecting the name gives the author a diagnostic instead of a
+  // vanished recipe.
+  const reportedReservedFamilies = new Set<string>();
+  for (const r of recipes) {
+    if (isProtoPollutionKey(r.name)) {
+      errors.push({
+        code: "resolve/reserved-name",
+        message: `recipe name '${r.name}' is reserved (collides with a JavaScript object prototype member)`,
+        file: r.sourceFile,
+        line: r.sourceLine,
+      });
+    }
+    const fam = familyOf(r.sourceFile);
+    if (isProtoPollutionKey(fam) && !reportedReservedFamilies.has(fam)) {
+      reportedReservedFamilies.add(fam);
+      errors.push({
+        code: "resolve/reserved-name",
+        message: `family name '${fam}' is reserved (collides with a JavaScript object prototype member)`,
+        file: r.sourceFile,
+        line: r.sourceLine,
+      });
+    }
+    // Recipes are a trust boundary (`shortwind add <third-party-family>`).
+    // A double-quote breaks out of a `class="…"` attribute / `@source
+    // inline("…")` directive, and a backtick breaks out of a template-literal
+    // host (`cva(\`…\`)`); neither is a legitimate Tailwind class character.
+    // Reject them here so no sink has to. Single-quotes and backslashes ARE
+    // legitimate (`content-['→']`, `content-['\2014']`) and are escaped at
+    // emission instead.
+    for (const token of r.tokens) {
+      const bad = token.includes('"') ? '"' : token.includes("`") ? "backtick" : null;
+      if (bad) {
+        errors.push({
+          code: "resolve/unsafe-token",
+          message: `recipe '${r.name}' has token ${JSON.stringify(token)} containing a ${bad}, which can break out of a class attribute or template literal`,
+          file: r.sourceFile,
+          line: r.sourceLine,
+        });
+      }
+    }
+  }
 
   const lookup = new Map<string, Recipe>();
   for (const r of recipes) {
@@ -47,14 +104,29 @@ export function buildRegistry(
   const resolved = new Map<string, string[]>();
   const errored = new Set<string>();
   const reportedCycles = new Set<string>();
+  // `stackSet` mirrors `stack` so cycle detection is O(1) per node instead of
+  // the O(n) `stack.indexOf` it replaces — the index is only recovered (rare)
+  // when a cycle actually fires.
+  const stackSet = new Set<string>();
 
   const flatten = (name: string, stack: string[]): string[] | null => {
     const cached = resolved.get(name);
     if (cached) return cached;
     if (errored.has(name)) return null;
 
-    const cycleIdx = stack.indexOf(name);
-    if (cycleIdx !== -1) {
+    if (stack.length >= MAX_REFERENCE_DEPTH) {
+      errors.push({
+        code: "resolve/expansion-too-large",
+        message: `recipe '${name}' nests references more than ${MAX_REFERENCE_DEPTH} deep`,
+        file: lookup.get(name)?.sourceFile ?? "",
+        line: lookup.get(name)?.sourceLine ?? 1,
+      });
+      errored.add(name);
+      return null;
+    }
+
+    if (stackSet.has(name)) {
+      const cycleIdx = stack.indexOf(name);
       const cyclePath = [...stack.slice(cycleIdx), name];
       const cycleKey = [...new Set(cyclePath)].slice().sort().join(",");
       if (!reportedCycles.has(cycleKey)) {
@@ -79,8 +151,10 @@ export function buildRegistry(
     if (!recipe) return null;
 
     stack.push(name);
+    stackSet.add(name);
     const out: string[] = [];
     let failed = false;
+    let tooLarge = false;
     // Walk the parser's `references` set in lockstep with the token list so
     // we trust a single source of truth for "is this token a ref?" rather
     // than re-deriving it from the leading `@`.
@@ -97,14 +171,27 @@ export function buildRegistry(
           failed = true;
           continue;
         }
-        out.push(...sub);
+        // Append element-by-element, never `out.push(...sub)` — a spread of a
+        // large sub-expansion overflows the engine's argument limit.
+        for (const t of sub) out.push(t);
       } else {
         out.push(token);
       }
+      if (out.length > MAX_FLATTENED_TOKENS) {
+        errors.push({
+          code: "resolve/expansion-too-large",
+          message: `recipe '${name}' expands to more than ${MAX_FLATTENED_TOKENS} tokens`,
+          file: recipe.sourceFile,
+          line: recipe.sourceLine,
+        });
+        tooLarge = true;
+        break;
+      }
     }
     stack.pop();
+    stackSet.delete(name);
 
-    if (failed) {
+    if (failed || tooLarge) {
       errored.add(name);
       return null;
     }
@@ -117,13 +204,18 @@ export function buildRegistry(
     flatten(r.name, []);
   }
 
-  const families: Record<string, Recipe[]> = {};
+  // Null-prototype containers: a recipe or family named after an inherited
+  // object member (`__proto__`, `constructor`) writes/reads an own property
+  // instead of mutating the prototype, so the registry stays plain serializable
+  // data. Proto-key names are also rejected above, but this keeps the structure
+  // sound even for registries assembled by other means.
+  const families: Record<string, Recipe[]> = Object.create(null);
   for (const r of recipes) {
     const fam = familyOf(r.sourceFile);
     (families[fam] ??= []).push(r);
   }
 
-  const flattened: Record<string, string[]> = {};
+  const flattened: Record<string, string[]> = Object.create(null);
   for (const [name, tokens] of resolved) {
     flattened[name] = tokens;
   }
@@ -132,7 +224,7 @@ export function buildRegistry(
 
   // Only surface guidance for families that actually resolved, and drop empty
   // strings so consumers can treat presence as "has guidance".
-  const guidance: Record<string, string> = {};
+  const guidance: Record<string, string> = Object.create(null);
   for (const [fam, text] of Object.entries(options.guidance ?? {})) {
     if (families[fam] && text.trim().length > 0) guidance[fam] = text;
   }

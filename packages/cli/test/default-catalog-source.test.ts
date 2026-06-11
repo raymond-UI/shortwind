@@ -46,4 +46,33 @@ describe("resolveSource default — npm-first with bundle fallback", () => {
     const httpSrc = await resolveSource("https://corp.example.com/registry");
     expect(httpSrc.origin).toBe("https://corp.example.com/registry");
   });
+
+  it("caches presets.json so the probe + init don't double-fetch it (#52)", async () => {
+    let presetsHits = 0;
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes("registry.npmjs.org")) {
+        return new Response(JSON.stringify({ "dist-tags": { latest: "0.1.0-beta.9" } }), {
+          status: 200,
+        });
+      }
+      if (url.endsWith("/presets.json")) {
+        presetsHits++;
+        return new Response(JSON.stringify({ starter: ["card"] }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const src = await resolveSource(undefined); // probe fetches presets.json once
+    await src.loadPresets(); // init's call — must reuse the cached result
+    expect(presetsHits).toBe(1);
+  });
+});
+
+describe("default config registry (#52)", () => {
+  it("defaults to the bundled origin, not a hardcoded URL", async () => {
+    const { DEFAULT_CONFIG } = await import("../src/project.js");
+    expect(DEFAULT_CONFIG.registry).toBe(BUNDLED_ORIGIN);
+  });
 });

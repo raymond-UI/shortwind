@@ -2,7 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { open, rename } from "node:fs/promises";
 import path from "node:path";
 import { resolveSource, type RegistrySource } from "../registry-source.js";
-import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
+import {
+  computeBodySha,
+  extractHeader,
+  isLegacyFingerprint,
+  rewriteHeaderSha,
+  verifyFetchedFamily,
+} from "../fingerprint.js";
 import { readLockfile, writeLockfile, type Lockfile } from "../lockfile.js";
 import { installedFamilies, readConfig, regenerateSkillMd } from "../project.js";
 
@@ -90,6 +96,8 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
     let incomingBody: string;
     try {
       incomingBody = await source.loadFamily(family);
+      // Reject a tampered/corrupted registry response before it's resealed.
+      verifyFetchedFamily(incomingBody, family);
     } catch (err) {
       errors.push({ family, message: (err as Error).message });
       continue;
@@ -108,7 +116,16 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
     const lockedEntry = lock.families[family];
     const lockedVersion = lockedEntry?.version ?? localHeader?.version ?? "";
 
-    const isTouched = recordedSha !== "" && recordedSha !== actualSha;
+    // A legacy 6-hex seal can't be re-derived with the current hash, so a sha
+    // difference is a FORMAT mismatch, not a local edit — don't flag it as
+    // "locally modified". Tell the user to reseal; the upgrade still proceeds.
+    const recordedIsLegacy = isLegacyFingerprint(recordedSha);
+    if (recordedIsLegacy) {
+      console.warn(
+        `[shortwind] ${family}.css uses an older fingerprint format — run \`shortwind reseal\` to upgrade its seal (the recipe body is unchanged).`,
+      );
+    }
+    const isTouched = recordedSha !== "" && recordedSha !== actualSha && !recordedIsLegacy;
     const state: FamilyState = isTouched
       ? "touched"
       : lockedVersion === incomingVersion
@@ -196,8 +213,12 @@ export async function upgrade(options: UpgradeOptions): Promise<UpgradeResult> {
   return { outcomes, hasUpdates, hasTouched, lockfile: lock, skillPath };
 }
 
+let atomicWriteSeq = 0;
 async function atomicWrite(filePath: string, body: string): Promise<void> {
-  const tmp = filePath + ".tmp";
+  // Unique temp name: a fixed `.tmp` suffix collides across concurrent runs (two
+  // processes writing the same family clobber each other's temp file). pid +
+  // counter keeps each write isolated.
+  const tmp = `${filePath}.${process.pid}.${atomicWriteSeq++}.tmp`;
   const fh = await open(tmp, "w");
   try {
     await fh.writeFile(body);

@@ -4,8 +4,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
-import type { Recipe, Registry } from "@shortwind/core";
-import { computeBodySha, extractHeader, rewriteHeaderSha } from "./fingerprint.js";
+import type { Recipe } from "@shortwind/core";
+import {
+  computeBodySha,
+  extractHeader,
+  rewriteHeaderSha,
+  verifyFetchedFamily,
+} from "./fingerprint.js";
 import { detectProject, type PackageManager } from "./detect.js";
 import {
   BUNDLED_ORIGIN,
@@ -242,6 +247,8 @@ async function copyRecipes(
       continue;
     }
     const body = await source.loadFamily(family);
+    // Reject a tampered/corrupted registry response before resealing.
+    verifyFetchedFamily(body, family);
     const sha = computeBodySha(body);
     const sealed = rewriteHeaderSha(body, sha);
     await writeFile(target, sealed);
@@ -263,8 +270,17 @@ async function writeConfig(
     await writeFile(configPath, JSON.stringify(desired, null, 2) + "\n");
     return;
   }
-  const current = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
-  const merged = { ...current, ...desired };
+  let current: unknown;
+  try {
+    current = JSON.parse(await readFile(configPath, "utf8"));
+  } catch (err) {
+    throw new Error(`${configPath}: invalid JSON — ${(err as Error).message}`);
+  }
+  const base =
+    current !== null && typeof current === "object" && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : {};
+  const merged = { ...base, ...desired };
   await writeFile(configPath, JSON.stringify(merged, null, 2) + "\n");
 }
 
@@ -310,9 +326,9 @@ async function writeSkillMd(
   recipesDir: string,
   families: string[],
 ): Promise<void> {
-  await mkdir(path.dirname(skillPath), { recursive: true });
   const allRecipes: Recipe[] = [];
   const guidance: Record<string, string> = {};
+  const problems: string[] = [];
   for (const family of families) {
     const filePath = path.join(recipesDir, `${family}.css`);
     if (!existsSync(filePath)) continue;
@@ -321,10 +337,18 @@ async function writeSkillMd(
     if (parsed.ok) {
       allRecipes.push(...parsed.value.recipes);
       if (parsed.value.guidance) guidance[family] = parsed.value.guidance;
+    } else {
+      problems.push(`${family}.css: ${parsed.errors.map((e) => e.message).join("; ")}`);
     }
   }
-  let registry: Registry = { families: {}, flattened: {} };
   const resolved = buildRegistry(allRecipes, { guidance });
-  if (resolved.ok) registry = resolved.value;
-  await writeFile(skillPath, renderSkillMarkdown(registry, { order: families }));
+  if (problems.length > 0 || !resolved.ok) {
+    // Don't write a degraded/empty SKILL.md from broken recipes; surface the
+    // problem instead (the installed catalog should always be valid here).
+    const all = resolved.ok ? problems : [...problems, ...resolved.errors.map((e) => e.message)];
+    console.warn(`[shortwind] SKILL.md not generated — recipe errors:\n  ${all.join("\n  ")}`);
+    return;
+  }
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
 }

@@ -43,6 +43,17 @@ describe("@shortwind/runtime", () => {
     expect(cls).toContain("@notarecipe-zzz");
   });
 
+  it("does not crash on a prototype-key class and keeps expanding the rest of the page (#40)", () => {
+    // A page-content class like `@constructor` would resolve an inherited
+    // Object.prototype member with a bare lookup and throw mid-walk.
+    document.body.innerHTML = `<div class="@constructor @__proto__ @toString"></div><div class="@card"></div>`;
+    expect(() => expandDOM(document.body, DEFAULT_REGISTRY)).not.toThrow();
+    const first = document.body.children[0]!.getAttribute("class")!;
+    expect(first).toBe("@constructor @__proto__ @toString");
+    // the walk must not abort early — the sibling still expands
+    expect(document.body.children[1]!.getAttribute("class")).not.toMatch(/@card\b/);
+  });
+
   it("leaves attributes with no @ tokens untouched", () => {
     document.body.innerHTML = `<div class="text-base font-bold"></div>`;
     const before = document.body.firstElementChild!.getAttribute("class");

@@ -1,8 +1,13 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { resolveSource } from "../registry-source.js";
-import { computeBodySha, extractHeader, rewriteHeaderSha } from "../fingerprint.js";
+import { resolveSource, assertValidFamilyName } from "../registry-source.js";
+import {
+  computeBodySha,
+  extractHeader,
+  rewriteHeaderSha,
+  verifyFetchedFamily,
+} from "../fingerprint.js";
 import { readLockfile, writeLockfile, type Lockfile } from "../lockfile.js";
 import {
   readConfig,
@@ -47,6 +52,11 @@ export async function add(options: AddOptions): Promise<AddResult> {
   if (options.as && requested.length !== 1) {
     throw new Error("--as requires exactly one family argument");
   }
+  // The source family is validated by loadFamily, but the --as target flows
+  // into the written filename and into renameFamilyInSource's replacement
+  // strings — an unvalidated `../../x` writes outside recipesDir and `$&`/`$1`
+  // patterns corrupt the output. Hold it to the same family-name alphabet.
+  if (options.as !== undefined) assertValidFamilyName(options.as);
 
   const added: string[] = [];
   const skipped: string[] = [];
@@ -69,6 +79,10 @@ export async function add(options: AddOptions): Promise<AddResult> {
     }
 
     const sourceCss = await source.loadFamily(family);
+    // Verify the publisher's seal on the bytes that arrived before resealing
+    // them under our own header — a tampered registry/CDN response must not be
+    // silently re-sealed and trusted.
+    verifyFetchedFamily(sourceCss, family);
     const renamed = options.as ? renameFamilyInSource(sourceCss, family, options.as) : sourceCss;
     const sha = computeBodySha(renamed);
     const finalCss = rewriteHeaderSha(renamed, sha);

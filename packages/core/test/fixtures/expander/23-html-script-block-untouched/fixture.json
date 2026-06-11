@@ -1,0 +1,7 @@
+{
+  "mode": "html",
+  "mergeConflicts": true,
+  "flattened": { "card": ["rounded-lg", "border"] },
+  "input": "<script>obj.class = \"px-2 p-4\";</script>\n<div class=\"@card\"></div>",
+  "expected": "<script>obj.class = \"px-2 p-4\";</script>\n<div class=\"rounded-lg border\"></div>"
+}

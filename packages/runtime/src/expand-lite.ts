@@ -11,8 +11,15 @@ export function expandClassList(classList: string, registry: Registry): string {
   const out: string[] = [];
   for (const t of tokens) {
     if (t.charCodeAt(0) === AT_CHAR_CODE) {
-      const expanded = registry.flattened[t.slice(1)];
-      if (expanded) {
+      const name = t.slice(1);
+      // `Object.hasOwn` + array check, never a bare truthy lookup: a class like
+      // `@constructor` in page content (CMS/markdown that survives sanitization)
+      // would otherwise resolve an inherited `Object.prototype` member and throw
+      // mid-walk, DoSing expansion for the whole page.
+      const expanded = Object.hasOwn(registry.flattened, name)
+        ? registry.flattened[name]
+        : undefined;
+      if (Array.isArray(expanded)) {
         for (const e of expanded) out.push(e);
         continue;
       }
@@ -25,9 +32,15 @@ export function expandClassList(classList: string, registry: Registry): string {
 export function expandDOM(root: Element, registry: Registry): void {
   const all: Element[] = [root, ...Array.from(root.querySelectorAll("*"))];
   for (const el of all) {
-    const cls = el.getAttribute("class");
-    if (cls === null) continue;
-    const expanded = expandClassList(cls, registry);
-    if (expanded !== cls) el.setAttribute("class", expanded);
+    // Isolate each element: a malformed attribute on one node must not abort
+    // the walk and leave the rest of the page unexpanded.
+    try {
+      const cls = el.getAttribute("class");
+      if (cls === null) continue;
+      const expanded = expandClassList(cls, registry);
+      if (expanded !== cls) el.setAttribute("class", expanded);
+    } catch {
+      // skip this element; continue expanding the rest of the document
+    }
   }
 }

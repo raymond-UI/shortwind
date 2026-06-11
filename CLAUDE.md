@@ -5,8 +5,8 @@
 ```
 cli ──┐
 vite ─┼──► tailwind ──► core
-next ─┤
-astro ┘
+next ─┘
+astro ──► vite        (Astro is Vite-based; the integration composes @shortwind/vite)
 registry ──► core
 ```
 

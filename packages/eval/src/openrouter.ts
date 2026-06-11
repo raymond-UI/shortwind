@@ -80,10 +80,21 @@ export function createOpenRouterClient(options: OpenRouterClientOptions): ModelC
         );
       }
 
-      const json = (await res.json()) as {
+      // A 200 with a non-JSON body (proxy error page, truncated stream) makes
+      // res.json() reject; wrap it so the failure names the model instead of a
+      // bare SyntaxError.
+      let json: {
         choices?: Array<{ message?: { content?: string } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
+      try {
+        json = (await res.json()) as typeof json;
+      } catch (err) {
+        throw new OpenRouterError(
+          res.status,
+          `OpenRouter ${opts.model}: 200 OK but body was not valid JSON — ${(err as Error).message}`,
+        );
+      }
       const text = json.choices?.[0]?.message?.content ?? "";
       const usage = json.usage
         ? {

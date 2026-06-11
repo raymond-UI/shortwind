@@ -7,5 +7,10 @@ allowBuilds:
 # Force the patched devalue: astro pulls 5.8.0, which carries a high-severity
 # DoS advisory (GHSA-77vg-94rm-hx3p). 5.8.1 is the patch and is a semver-
 # compatible bump. Drop this once astro ships a release that pins >=5.8.1.
+#
+# Force the patched postcss: next pulls 8.4.31, which has a moderate XSS
+# advisory (GHSA-qx2v-qp2m-jg93 — unescaped </style> in stringify output).
+# >=8.5.10 is the patch and a semver-compatible bump. Drop once next pins it.
 overrides:
   devalue: ">=5.8.1"
+  postcss: ">=8.5.10"

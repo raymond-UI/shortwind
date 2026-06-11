@@ -54,7 +54,9 @@ describe("add", () => {
     expect(result.added).toEqual(["card"]);
     expect(existsSync(path.join(dir, "recipes", "card.css"))).toBe(true);
     expect(result.lockfile.families["card"]?.version).toBe("0.0.1");
-    expect(result.lockfile.families["card"]?.sha).toMatch(/^[a-f0-9]{6}$/);
+    // 16 hex (64 bits) — shared width with the registry sealer; a 6-hex (24-bit)
+    // fingerprint was brute-forceable.
+    expect(result.lockfile.families["card"]?.sha).toMatch(/^[a-f0-9]{16}$/);
     expect(result.lockfile.families["card"]?.sha).not.toBe("000000");
   });
 
@@ -170,6 +172,25 @@ describe("add", () => {
     });
     // card itself has no cross-family refs in our catalog, so missingDependencies for card is empty
     expect(result.missingDependencies).toEqual([]);
+  });
+
+  it("does not overwrite a populated SKILL.md with an empty one when a sibling family is broken (#49)", async () => {
+    const dir = await setupInitialized("starter");
+    dirs.push(dir);
+    const skillPath = path.join(dir, "skills", "shortwind", "SKILL.md");
+    const before = readFileSync(skillPath, "utf8");
+    expect(before).toContain("@card");
+
+    // introduce an unresolvable cycle in a sibling family
+    await writeFile(
+      path.join(dir, "recipes", "loop.css"),
+      `/* shortwind: loop@0.0.1 sha:000000 */\n@recipe a { @b }\n@recipe b { @a }\n`,
+    );
+    // a further command that regenerates SKILL.md must skip the write, not blank it
+    await remove({ cwd: dir, families: ["button"] });
+    const after = readFileSync(skillPath, "utf8");
+    expect(after).toBe(before); // untouched — no data loss
+    expect(after).toContain("@card");
   });
 });
 
