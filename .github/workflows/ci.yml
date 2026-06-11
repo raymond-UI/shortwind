@@ -69,6 +69,17 @@ jobs:
       # re-bootstrapped (the version-enforcement bypass). Fail loudly.
       - name: Catalog version-lock is committed and unchanged
         run: git diff --exit-code -- packages/registry/catalog.lock.json
+      # The committed CDN bundle (site/public/expand.js, served at
+      # shortwind.dev/expand.js) is a build artifact that can silently go stale
+      # when the runtime changes — the site deploy only triggers on site/**, so
+      # a runtime-only change would never refresh it. `pnpm build` just rebuilt
+      # the canonical artifact; fail if the committed copy doesn't match.
+      - name: Committed CDN bundle is in sync with the runtime
+        run: |
+          cmp packages/registry/dist/expand.js site/public/expand.js || {
+            echo "::error::site/public/expand.js is stale — run 'pnpm tsx scripts/sync-runtime-to-site.ts' and commit the result"
+            exit 1
+          }
       # Print the measured token savings into the build log. The floor that
       # backs the README claim is asserted by the bench test in `pnpm test`;
       # this step surfaces the actual table for each run.
