@@ -127,15 +127,19 @@ function rewriteClassAttr(
 // can't make the <script> regex swallow real markup up to the next </script>.
 // Unclosed comments/<script>/<style> are masked to EOF so a truncated file's JS
 // still can't be corrupted by the attribute regexes.
-const MASK_RE = /__SHORTWIND_MASK_(\d+)__/g;
-
 function maskHtmlOpaqueRegions(input: string): {
   masked: string;
   restore: (s: string) => string;
 } {
   const stash: string[] = [];
+  // Collision defense: the input may legitimately contain text that looks like
+  // a placeholder (documentation about shortwind, tests of this very file).
+  // Grow the sentinel until it occurs nowhere in the input, so restore() can
+  // only ever match tokens this call minted — never user text.
+  let sentinel = "__SHORTWIND_MASK_";
+  while (input.includes(sentinel)) sentinel = sentinel.replace("MASK", "MASKX");
   const mask = (m: string): string => {
-    const token = `__SHORTWIND_MASK_${stash.length}__`;
+    const token = `${sentinel}${stash.length}__`;
     stash.push(m);
     return token;
   };
@@ -146,12 +150,13 @@ function maskHtmlOpaqueRegions(input: string): {
   masked = masked.replace(/<style\b[\s\S]*?<\/style\s*>|<style\b[\s\S]*$/gi, mask);
   // A masked region (e.g. a comment) can itself contain a placeholder from an
   // earlier-masked nested region, so restore until stable.
+  const maskRe = new RegExp(`${sentinel}(\\d+)__`, "g");
   const restore = (s: string): string => {
     let prev: string;
     let cur = s;
     do {
       prev = cur;
-      cur = cur.replace(MASK_RE, (whole, i: string) => stash[Number(i)] ?? whole);
+      cur = cur.replace(maskRe, (whole, i: string) => stash[Number(i)] ?? whole);
     } while (cur !== prev);
     return cur;
   };

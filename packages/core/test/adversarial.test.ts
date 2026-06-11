@@ -168,6 +168,24 @@ describe("html-mode expansion correctness (#46)", () => {
     // script's cva expanded
     expect(out).toContain(`const v = cva("rounded-lg border");`);
   });
+
+  it("survives source that contains the mask sentinel itself (collision defense)", () => {
+    // Prose that happens to look like the placeholder (docs about shortwind,
+    // this very test file) must never be rewritten into stash content on
+    // restore — the masker grows its sentinel until it's not present in input.
+    const src = `<p>__SHORTWIND_MASK_0__</p><script>const a = 1;</script><div class="@card"></div>`;
+    const out = expand(src, registry, { mode: "html" });
+    expect(out).toContain(`<p>__SHORTWIND_MASK_0__</p>`);
+    expect(out).toContain(`<script>const a = 1;</script>`);
+    expect(out).toContain(`<div class="rounded-lg border"></div>`);
+  });
+
+  it("collision defense holds for the grown sentinel too", () => {
+    const src = `<p>__SHORTWIND_MASK_0__ and __SHORTWIND_MASKX_1__</p><script>const a = 1;</script>`;
+    const out = expand(src, registry, { mode: "html" });
+    expect(out).toContain(`<p>__SHORTWIND_MASK_0__ and __SHORTWIND_MASKX_1__</p>`);
+    expect(out).toContain(`<script>const a = 1;</script>`);
+  });
 });
 
 describe("expandClassList passthrough (#43)", () => {
