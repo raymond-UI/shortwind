@@ -71,6 +71,12 @@ export async function dev(options: DevOptions): Promise<{ stop: () => Promise<vo
   };
 
   watcher.on("add", schedule).on("change", schedule).on("unlink", schedule);
+  // chokidar emits `error` on EPERM/ENOENT bursts; an unhandled `error` event
+  // on an EventEmitter throws and kills the process. Report it as a dev status
+  // instead so the watcher stays up.
+  watcher.on("error", (err: unknown) => {
+    status({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+  });
 
   let stopped = false;
   const stop = async (): Promise<void> => {

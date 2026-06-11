@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
-import type { Recipe, Registry } from "@shortwind/core";
+import type { Recipe } from "@shortwind/core";
 
 export type ShortwindConfig = {
   registry: string;
@@ -91,11 +91,10 @@ export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): P
   const recipesDir = path.join(cwd, config.recipesDir);
   const families = installedFamilies(recipesDir);
   const skillPath = path.join(cwd, config.outputPath);
-  const { mkdir } = await import("node:fs/promises");
-  await mkdir(path.dirname(skillPath), { recursive: true });
 
   const allRecipes: Recipe[] = [];
   const guidance: Record<string, string> = {};
+  const problems: string[] = [];
   for (const family of families) {
     const filePath = path.join(recipesDir, `${family}.css`);
     const source = readFileSync(filePath, "utf8");
@@ -103,13 +102,31 @@ export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): P
     if (parsed.ok) {
       allRecipes.push(...parsed.value.recipes);
       if (parsed.value.guidance) guidance[family] = parsed.value.guidance;
+    } else {
+      problems.push(`${family}.css: ${parsed.errors.map((e) => e.message).join("; ")}`);
     }
   }
-  let registry: Registry = { families: {}, flattened: {} };
   const resolved = buildRegistry(allRecipes, { guidance });
-  if (resolved.ok) registry = resolved.value;
-  const order = families;
-  await writeFile(skillPath, renderSkillMarkdown(registry, { order }));
+  if (!resolved.ok) {
+    problems.push(...resolved.errors.map((e) => e.message));
+  }
+
+  // Don't overwrite a populated SKILL.md with a degraded/empty one when recipes
+  // fail to parse or resolve (a cycle, an unknown reference). Leave the existing
+  // file untouched and surface what to fix — silently writing an empty SKILL.md
+  // is data loss, and `build` rejects the same state.
+  if (problems.length > 0) {
+    console.warn(
+      `[shortwind] SKILL.md not regenerated — fix these recipe errors first:\n  ${problems.join(
+        "\n  ",
+      )}\n  ${path.relative(cwd, skillPath)} left unchanged.`,
+    );
+    return skillPath;
+  }
+
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
   return skillPath;
 }
 

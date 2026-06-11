@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
-import type { Recipe, Registry } from "@shortwind/core";
+import type { Recipe } from "@shortwind/core";
 import {
   computeBodySha,
   extractHeader,
@@ -326,9 +326,9 @@ async function writeSkillMd(
   recipesDir: string,
   families: string[],
 ): Promise<void> {
-  await mkdir(path.dirname(skillPath), { recursive: true });
   const allRecipes: Recipe[] = [];
   const guidance: Record<string, string> = {};
+  const problems: string[] = [];
   for (const family of families) {
     const filePath = path.join(recipesDir, `${family}.css`);
     if (!existsSync(filePath)) continue;
@@ -337,10 +337,20 @@ async function writeSkillMd(
     if (parsed.ok) {
       allRecipes.push(...parsed.value.recipes);
       if (parsed.value.guidance) guidance[family] = parsed.value.guidance;
+    } else {
+      problems.push(`${family}.css: ${parsed.errors.map((e) => e.message).join("; ")}`);
     }
   }
-  let registry: Registry = { families: {}, flattened: {} };
   const resolved = buildRegistry(allRecipes, { guidance });
-  if (resolved.ok) registry = resolved.value;
-  await writeFile(skillPath, renderSkillMarkdown(registry, { order: families }));
+  if (!resolved.ok) problems.push(...resolved.errors.map((e) => e.message));
+  if (problems.length > 0) {
+    // Don't write a degraded/empty SKILL.md from broken recipes; surface the
+    // problem instead (the installed catalog should always be valid here).
+    console.warn(
+      `[shortwind] SKILL.md not generated — recipe errors:\n  ${problems.join("\n  ")}`,
+    );
+    return;
+  }
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
 }

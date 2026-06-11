@@ -339,7 +339,13 @@ export async function run(argv: string[] = process.argv): Promise<void> {
 
   cli.help();
   cli.version(cliVersion() ?? "0.0.0");
-  cli.parse(argv);
+  // cac's parse() invokes the matched command's async action but does NOT await
+  // it, so a rejection inside any async command (network failure in `add`, a
+  // rethrow in `build`/`upgrade`, …) escapes bin.ts's `run().catch` and prints
+  // a raw unhandled-rejection dump. Parse without running, then await the
+  // command so its promise flows back to the caller's catch.
+  cli.parse(argv, { run: false });
+  await cli.runMatchedCommand();
 }
 
 function makeInteractiveResolver() {
