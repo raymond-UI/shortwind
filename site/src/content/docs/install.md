@@ -23,6 +23,32 @@ to use the `shortwind` command directly in your scripts).
 5. Patch your bundler config with the right plugin import.
 6. Generate `skills/shortwind/SKILL.md` — a recipe palette your coding agents can read.
 
+## Theme tokens
+
+The recipe catalog is authored against semantic color tokens — `bg-card`,
+`text-muted-foreground`, `border-border`, `bg-primary`, and friends. On a fresh
+project, `init` appends a default token block (the shadcn-style oklch palette,
+mapped through `@theme inline`) to your Tailwind CSS entry so every recipe
+renders with color on first run.
+
+If your CSS **already contains an `@theme` block or `--background` token**
+(create-next-app ships one), `init` leaves your theme untouched — and then
+checks whether the tokens the installed recipes reference are actually defined.
+Any missing names are listed in a warning like:
+
+```
+Your existing theme (app/globals.css) does not define 12 design tokens the
+installed recipes use:
+
+  accent, border, card, card-foreground, destructive, input, muted,
+  muted-foreground, primary, primary-foreground, ring, secondary
+```
+
+Recipes referencing a missing token render colorless. Fix it by defining each
+listed token in your theme — either as a Tailwind v4 theme key
+(`--color-card: …` inside `@theme`) or shadcn-style (`--card: …` in `:root`
+plus `--color-card: var(--card)` in `@theme inline`).
+
 ## What the plugin does
 
 The plugin scans your source files for `class="..."` and `className="..."`

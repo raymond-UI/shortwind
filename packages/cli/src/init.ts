@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
-import type { Recipe } from "@shortwind/core";
+import type { Recipe, Registry } from "@shortwind/core";
 import {
   computeBodySha,
   extractHeader,
@@ -19,7 +19,7 @@ import {
   type RegistrySource,
 } from "./registry-source.js";
 import { readLockfile, writeLockfile } from "./lockfile.js";
-import { scaffoldTheme, type ThemeAction } from "./theme.js";
+import { findMissingThemeTokens, scaffoldTheme, type ThemeAction } from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
 import { wireAgentsInstructions, type AgentsFileAction } from "./agents-file.js";
 
@@ -54,6 +54,9 @@ export type InitResult = {
   skillPath: string;
   themePath: string | null;
   themeAction: ThemeAction;
+  // Design tokens the installed recipes reference that the project's existing
+  // (untouched) theme does not define — empty when the theme was scaffolded.
+  missingThemeTokens: string[];
   bundlerConfigPath: string | null;
   bundlerConfigAction: BundlerWireAction;
   bundlerConfigSnippet?: string;
@@ -110,11 +113,22 @@ export async function init(options: InitOptions): Promise<InitResult> {
   await installHuskyHook(huskyPath);
 
   const skillPath = path.join(cwd, "skills", "shortwind", "SKILL.md");
-  await writeSkillMd(skillPath, recipesDir, families);
+  const skillRegistry = await writeSkillMd(skillPath, recipesDir, families);
 
   // Recipes reference semantic color tokens; scaffold the default theme so they
   // render with color on first run instead of as colorless markup.
   const theme = await scaffoldTheme(cwd);
+
+  // When an existing theme was left untouched, it may define none of the
+  // tokens the installed recipes reference (create-next-app's @theme has only
+  // background/foreground) — every @card/@badge would render colorless with no
+  // signal (#62). Diff what the recipes use against what the theme defines so
+  // the CLI can warn loudly with the exact missing names.
+  let missingThemeTokens: string[] = [];
+  if (theme.action === "skipped" && theme.themePath && skillRegistry) {
+    const css = await readFile(theme.themePath, "utf8");
+    missingThemeTokens = findMissingThemeTokens(css, skillRegistry.flattened);
+  }
 
   // Wire the plugin into the bundler config (Vite auto-patches; Next/Astro
   // return a snippet for the summary).
@@ -137,6 +151,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
     skillPath,
     themePath: theme.themePath,
     themeAction: theme.action,
+    missingThemeTokens,
     bundlerConfigPath: bundlerConfig.configPath,
     bundlerConfigAction: bundlerConfig.action,
     ...(bundlerConfig.snippet ? { bundlerConfigSnippet: bundlerConfig.snippet } : {}),
@@ -321,11 +336,14 @@ async function installHuskyHook(huskyPath: string): Promise<void> {
   await writeFile(huskyPath, next, { mode: 0o755 });
 }
 
+// Writes SKILL.md and returns the resolved registry (null when recipes were
+// broken) so init can reuse it for the missing-theme-token diff without
+// parsing the catalog twice.
 async function writeSkillMd(
   skillPath: string,
   recipesDir: string,
   families: string[],
-): Promise<void> {
+): Promise<Registry | null> {
   const allRecipes: Recipe[] = [];
   const guidance: Record<string, string> = {};
   const problems: string[] = [];
@@ -347,8 +365,9 @@ async function writeSkillMd(
     // problem instead (the installed catalog should always be valid here).
     const all = resolved.ok ? problems : [...problems, ...resolved.errors.map((e) => e.message)];
     console.warn(`[shortwind] SKILL.md not generated — recipe errors:\n  ${all.join("\n  ")}`);
-    return;
+    return null;
   }
   await mkdir(path.dirname(skillPath), { recursive: true });
   await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
+  return resolved.value;
 }

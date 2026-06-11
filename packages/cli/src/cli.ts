@@ -454,6 +454,14 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
   if (result.bundlerConfigAction === "manual" && result.bundlerConfigSnippet) {
     p.log.warn(`Add the plugin to your bundler config:\n\n${result.bundlerConfigSnippet}`);
   }
+  if (result.missingThemeTokens.length > 0) {
+    p.log.warn(
+      `Your existing theme (${result.themePath}) does not define ${result.missingThemeTokens.length} design token${result.missingThemeTokens.length === 1 ? "" : "s"} the installed recipes use:\n\n` +
+        `  ${result.missingThemeTokens.join(", ")}\n\n` +
+        `Recipes referencing them will render colorless until you add the tokens to your @theme.\n` +
+        `The default token block is documented at https://shortwind.dev/docs/install#theme-tokens`,
+    );
+  }
   p.outro(`Next: run \`${result.packageManager} dev\` to start watching.`);
 }
 
