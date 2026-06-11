@@ -164,4 +164,18 @@ describe("expandClassList passthrough (#43)", () => {
   it("still merges conflicts once a recipe actually expands", () => {
     expect(expandClassList("@card p-6", registry, true)).toBe("rounded border p-6");
   });
+
+  it("keeps the newline count stable when a multi-line class value collapses (#48)", () => {
+    const out = expandClassList("@card\n  p-2", registry, true);
+    expect(out).toContain("rounded");
+    // the one newline the collapse removed is preserved, so downstream lines
+    // don't shift
+    expect((out.match(/\n/g) ?? []).length).toBe(1);
+  });
+
+  it("does not shift subsequent source lines after a multi-line expansion (#48)", () => {
+    const src = `<div class="@card\n  p-2"></div>\n<span>next</span>`;
+    const out = expand(src, registry, { mode: "html" });
+    expect((out.match(/\n/g) ?? []).length).toBe((src.match(/\n/g) ?? []).length);
+  });
 });
