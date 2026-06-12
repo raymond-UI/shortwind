@@ -304,10 +304,17 @@ export async function run(argv: string[] = process.argv): Promise<void> {
     .command("lint", "Static analysis over source files and recipes")
     .option("--fix", "Apply auto-fixes where supported")
     .option("--rule <rule>", "Only run the named rule (repeatable)")
+    .option("--content <glob>", "Source glob to scan for recipe usage (repeatable; overrides config)")
     .option("--json", "Emit machine-readable JSON")
     .option("--cwd <dir>", "Working directory")
     .action(
-      async (opts: { fix?: boolean; rule?: string | string[]; json?: boolean; cwd?: string }) => {
+      async (opts: {
+        fix?: boolean;
+        rule?: string | string[];
+        content?: string | string[];
+        json?: boolean;
+        cwd?: string;
+      }) => {
         const requested = opts.rule === undefined ? [] : Array.isArray(opts.rule) ? opts.rule : [opts.rule];
         for (const r of requested) {
           if (!ALL_RULES.includes(r as Rule)) {
@@ -319,6 +326,9 @@ export async function run(argv: string[] = process.argv): Promise<void> {
         const lintOptions: Parameters<typeof lint>[0] = { cwd: opts.cwd ?? process.cwd() };
         if (opts.fix) lintOptions.fix = true;
         if (requested.length > 0) lintOptions.rules = requested as Rule[];
+        if (opts.content !== undefined) {
+          lintOptions.content = Array.isArray(opts.content) ? opts.content : [opts.content];
+        }
         const result = await lint(lintOptions);
         if (opts.json) {
           process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -326,6 +336,12 @@ export async function run(argv: string[] = process.argv): Promise<void> {
           const text = formatFindingsText(result.findings);
           if (text) process.stdout.write(text + "\n");
           for (const f of result.filesFixed) p.log.success(`fixed ${f}`);
+          if (result.scannedFiles === 0) {
+            p.log.warn(
+              `content scan matched no source files — usage rules (recipe/unused) were skipped.\n` +
+                `Point lint at your sources with "content" in shortwind.config.json or --content <glob>.`,
+            );
+          }
           if (result.findings.length === 0) p.log.success("no findings");
         }
         if (!result.ok) process.exit(1);

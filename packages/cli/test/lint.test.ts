@@ -370,6 +370,96 @@ describe("lint", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("scans root-level app/, pages/, components/ and lib/ by default (#83)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    // Default create-next-app App Router layout: no src/, sources at the root.
+    await writeSource(dir, "app/page.tsx", `export default () => <div className="@card" />;\n`);
+    await writeSource(
+      dir,
+      "components/panel.tsx",
+      `export const Panel = () => <div className="@card-flat" />;\n`,
+    );
+
+    const result = await lint({ cwd: dir, rules: ["recipe/unused"] });
+    const unusedNames = result.findings
+      .filter((f) => f.rule === "recipe/unused")
+      .map((f) => f.message);
+    expect(unusedNames.some((m) => m.includes("@card "))).toBe(false);
+    expect(unusedNames.some((m) => m.includes("@card-flat"))).toBe(false);
+  });
+
+  it("reads content globs from shortwind.config.json (#83)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await writeFile(
+      path.join(dir, "shortwind.config.json"),
+      JSON.stringify(
+        { recipesDir: "recipes", outputPath: "SKILL.md", content: ["web/**/*.tsx"] },
+        null,
+        2,
+      ),
+    );
+    await writeSource(dir, "web/page.tsx", `export default () => <div className="@card" />;\n`);
+    // Outside the configured globs: must not be scanned, so its unknown
+    // recipe must not be reported.
+    await writeSource(dir, "src/other.tsx", `export default () => <div className="@ghost" />;\n`);
+
+    const result = await lint({ cwd: dir });
+    expect(result.findings.some((f) => f.rule === "recipe/unknown")).toBe(false);
+    const unused = result.findings.filter((f) => f.rule === "recipe/unused");
+    expect(unused.some((f) => f.message.includes("@card "))).toBe(false);
+  });
+
+  it("lets options.content override config content (#83)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await writeFile(
+      path.join(dir, "shortwind.config.json"),
+      JSON.stringify(
+        { recipesDir: "recipes", outputPath: "SKILL.md", content: ["web/**/*.tsx"] },
+        null,
+        2,
+      ),
+    );
+    await writeSource(dir, "web/page.tsx", `export default () => <div className="@ghost" />;\n`);
+    await writeSource(dir, "cli/page.tsx", `export default () => <div className="@card" />;\n`);
+
+    const result = await lint({ cwd: dir, content: ["cli/**/*.tsx"] });
+    // Only cli/** was scanned: @card counts as used, web/'s @ghost is unseen.
+    expect(result.findings.some((f) => f.rule === "recipe/unknown")).toBe(false);
+    const unused = result.findings.filter((f) => f.rule === "recipe/unused");
+    expect(unused.some((f) => f.message.includes("@card "))).toBe(false);
+  });
+
+  it("rejects a non-string-array content field in config (#83)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await writeFile(
+      path.join(dir, "shortwind.config.json"),
+      JSON.stringify({ recipesDir: "recipes", outputPath: "SKILL.md", content: "src/**" }),
+    );
+    await expect(lint({ cwd: dir })).rejects.toThrow(/content/);
+  });
+
+  it("skips recipe/unused instead of flagging everything when no files match (#83)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    // No source files at all — the scan matches nothing. Asserting "every
+    // recipe is unused" from an empty scan is the bug this guards against.
+    const result = await lint({ cwd: dir, rules: ["recipe/unused"] });
+    expect(result.scannedFiles).toBe(0);
+    expect(result.findings.filter((f) => f.rule === "recipe/unused")).toHaveLength(0);
+  });
+
+  it("reports how many files the content scan matched (#83)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await writeSource(dir, "src/page.tsx", `export default () => <div className="@card" />;\n`);
+    const result = await lint({ cwd: dir });
+    expect(result.scannedFiles).toBe(1);
+  });
+
   it("formatFindingsText emits eslint-compatible lines", () => {
     const text = formatFindingsText([
       {

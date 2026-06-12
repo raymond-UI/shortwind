@@ -10,6 +10,10 @@ export type ShortwindConfig = {
   registry: string;
   recipesDir: string;
   outputPath: string;
+  // Globs (relative to the project root) that `lint` scans for recipe usage.
+  // Optional: when absent, lint falls back to defaults covering the common
+  // framework layouts (src/, root-level app/, pages/, components/, lib/).
+  content?: string[];
 };
 
 export const DEFAULT_CONFIG: ShortwindConfig = {
@@ -71,7 +75,17 @@ export async function readConfig(cwd: string): Promise<ShortwindConfig> {
     "outputPath",
     configPath,
   );
-  return { registry, recipesDir, outputPath };
+  const config: ShortwindConfig = { registry, recipesDir, outputPath };
+  if (merged.content !== undefined) {
+    if (
+      !Array.isArray(merged.content) ||
+      merged.content.some((g) => typeof g !== "string")
+    ) {
+      throw new Error(`${configPath}: "content" must be an array of glob strings`);
+    }
+    config.content = merged.content;
+  }
+  return config;
 }
 
 export function installedFamilies(recipesDir: string): string[] {

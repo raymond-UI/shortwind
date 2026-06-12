@@ -67,5 +67,21 @@ mismatch. CI-friendly.
 
 ## `shortwind lint`
 
-Diagnostic pass over `recipes/`. Reports cycles, duplicates, unknown
-references. Optional `--naming` checks the family-intent-size convention.
+Diagnostic pass over `recipes/` and your source files. Reports cycles,
+duplicates, unknown references, unused recipes, redundant utilities, and
+dynamic recipe names.
+
+By default lint scans `src/`, plus root-level `app/`, `pages/`, `components/`
+and `lib/` (the common Vite and Next layouts, with or without `src/`). If your
+sources live elsewhere, set `"content"` in `shortwind.config.json`:
+
+```json
+{
+  "content": ["packages/web/**/*.{ts,tsx,astro}"]
+}
+```
+
+or pass `--content <glob>` (repeatable; overrides the config). When the scan
+matches no files, usage rules such as `recipe/unused` are skipped and lint
+warns instead of reporting every recipe as unused. Other flags: `--fix`,
+`--rule <name>` (repeatable), `--json`.
