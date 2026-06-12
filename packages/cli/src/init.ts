@@ -18,6 +18,10 @@ import {
   resolvePresetFamilies,
   type RegistrySource,
 } from "./registry-source.js";
+import {
+  findTailwindEntryCssFiles,
+  syncSourceDirectiveToFile,
+} from "@shortwind/tailwind";
 import { readLockfile, writeLockfile } from "./lockfile.js";
 import { findMissingThemeTokens, scaffoldTheme, type ThemeAction } from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
@@ -54,6 +58,9 @@ export type InitResult = {
   skillPath: string;
   themePath: string | null;
   themeAction: ThemeAction;
+  // Tailwind entry CSS files that received the on-disk @source inline(...)
+  // safelist (#73) — empty for Vite/Astro, which inject it in-memory.
+  safelistCssPaths: string[];
   // Design tokens the installed recipes reference that the project's existing
   // (untouched) theme does not define — empty when the theme was scaffolded.
   missingThemeTokens: string[];
@@ -130,6 +137,20 @@ export async function init(options: InitOptions): Promise<InitResult> {
     missingThemeTokens = findMissingThemeTokens(css, skillRegistry.flattened);
   }
 
+  // Bundlers without an in-build CSS hook (Next; bare Tailwind CLI) need the
+  // recipe-derived `@source inline(...)` safelist ON disk — Tailwind v4 reads
+  // the entry CSS from disk and never sees loader output, so recipe-body-only
+  // utilities would silently never generate (#73). Vite/Astro inject the same
+  // directive in-memory at build time, so their projects are left untouched.
+  // Runs after scaffoldTheme, which may have just created the entry CSS.
+  const safelistCssPaths: string[] = [];
+  if (shape.bundler !== "vite" && shape.bundler !== "astro" && skillRegistry) {
+    for (const file of findTailwindEntryCssFiles(cwd)) {
+      syncSourceDirectiveToFile(file, skillRegistry);
+      safelistCssPaths.push(file);
+    }
+  }
+
   // Wire the plugin into the bundler config (Vite auto-patches; Next/Astro
   // return a snippet for the summary).
   const bundlerConfig = await wireBundler(cwd, shape.bundler);
@@ -151,6 +172,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
     skillPath,
     themePath: theme.themePath,
     themeAction: theme.action,
+    safelistCssPaths,
     missingThemeTokens,
     bundlerConfigPath: bundlerConfig.configPath,
     bundlerConfigAction: bundlerConfig.action,

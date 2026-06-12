@@ -64,6 +64,51 @@ describe("withShortwind", () => {
     expect(wrapped.reactStrictMode).toBe(true);
   });
 
+  it("writes the @source inline(...) safelist into the Tailwind entry CSS (#73)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const globals = path.join(dir, "app", "globals.css");
+    await mkdir(path.dirname(globals), { recursive: true });
+    await writeFile(globals, `@import "tailwindcss";\n`);
+
+    withShortwind({ cwd: dir })({});
+
+    const css = readFileSync(globals, "utf8");
+    expect(css).toContain("@source inline(");
+    // A utility that exists only inside the card recipe body — the exact
+    // candidate Tailwind could never discover by scanning files on disk.
+    expect(css).toContain("bg-card");
+    // Idempotent: wrapping again must not duplicate the block.
+    withShortwind({ cwd: dir })({});
+    expect(readFileSync(globals, "utf8")).toBe(css);
+  });
+
+  it("loader refreshes the on-disk safelist when recipes change mid-session (#73)", async () => {
+    const dir = await makeProject({ "card.css": CARD_CSS });
+    dirs.push(dir);
+    const globals = path.join(dir, "app", "globals.css");
+    await mkdir(path.dirname(globals), { recursive: true });
+    await writeFile(globals, `@import "tailwindcss";\n`);
+    withShortwind({ cwd: dir })({});
+    expect(readFileSync(globals, "utf8")).not.toContain("bg-emerald-100");
+
+    // A custom recipe authored while `next dev` is running.
+    await writeFile(
+      path.join(dir, "recipes", "hero.css"),
+      `@recipe hero {\n  bg-emerald-100 rounded-xl\n}\n`,
+    );
+    clearRegistryCache();
+    const ctx = {
+      getOptions: () => ({
+        recipesDir: path.join(dir, "recipes"),
+        entryCss: [globals],
+      }),
+      resourcePath: path.join(dir, "src", "App.tsx"),
+    };
+    shortwindLoader.call(ctx, `export const El = () => <div className="@hero" />;\n`);
+    expect(readFileSync(globals, "utf8")).toContain("bg-emerald-100");
+  });
+
   it("webpack hook prepends a pre-loader rule for source files", async () => {
     const dir = await makeProject();
     dirs.push(dir);

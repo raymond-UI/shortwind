@@ -38,6 +38,40 @@ describe("build", () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true }).catch(() => {});
   });
 
+  it("refreshes the on-disk @source inline(...) safelist when recipes change (#73)", async () => {
+    const raw = await mkdtemp(path.join(tmpdir(), "shortwind-build-"));
+    const dir = realpathSync(raw);
+    dirs.push(dir);
+    await writeFile(
+      path.join(dir, "package.json"),
+      JSON.stringify(
+        {
+          name: "x",
+          version: "0.0.0",
+          dependencies: { next: "^16.0.0" },
+          devDependencies: { tailwindcss: "^4.0.0" },
+        },
+        null,
+        2,
+      ),
+    );
+    const globals = path.join(dir, "app", "globals.css");
+    await (await import("node:fs/promises")).mkdir(path.dirname(globals), { recursive: true });
+    await writeFile(globals, `@import "tailwindcss";\n`);
+    await init({ cwd: dir, preset: "starter", registry: REGISTRY_PATH, installPackages: async () => {} });
+    expect(readFileSync(globals, "utf8")).not.toContain("bg-emerald-100");
+
+    // A custom recipe authored after init — `shortwind build` must refresh
+    // the safelist so its body-only utility reaches Tailwind.
+    await writeFile(
+      path.join(dir, "recipes", "hero.css"),
+      `@recipe hero {\n  bg-emerald-100 rounded-xl\n}\n`,
+    );
+    const result = await build({ cwd: dir });
+    expect(result.safelistCssPaths).toContain(globals);
+    expect(readFileSync(globals, "utf8")).toContain("bg-emerald-100");
+  });
+
   it("regenerates SKILL.md from ./recipes", async () => {
     const dir = await setupProject("starter");
     dirs.push(dir);

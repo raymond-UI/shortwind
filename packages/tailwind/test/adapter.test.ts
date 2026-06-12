@@ -1,5 +1,5 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { realpathSync } from "node:fs";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,12 +11,14 @@ import {
   computeSafelistTokens,
   detectTailwindMajor,
   findResidualRecipeTokens,
+  findTailwindEntryCssFiles,
   findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
   loadRegistryFromDir,
   shortwindPlugin,
   SHORTWIND_INJECT_MARKER,
+  syncSourceDirectiveToFile,
   TailwindAdapterError,
   transformContent,
 } from "../src/index.js";
@@ -436,6 +438,51 @@ describe("source directive injection", () => {
       input,
     );
   });
+});
+
+describe("on-disk safelist sync (#73)", () => {
+  let dirs: string[] = [];
+  beforeEach(() => {
+    dirs = [];
+  });
+  afterEach(async () => {
+    for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
+  });
+
+  async function makeDir(): Promise<string> {
+    const dir = realpathSync(await mkdtemp(path.join(tmpdir(), "shortwind-sync-")));
+    dirs.push(dir);
+    return dir;
+  }
+
+  it("findTailwindEntryCssFiles finds css files with a tailwindcss import, skipping vendored dirs", async () => {
+    const dir = await makeDir();
+    await mkdir(path.join(dir, "app"), { recursive: true });
+    await mkdir(path.join(dir, "node_modules", "pkg"), { recursive: true });
+    await mkdir(path.join(dir, ".next"), { recursive: true });
+    await writeFile(path.join(dir, "app", "globals.css"), `@import "tailwindcss";\n`);
+    await writeFile(path.join(dir, "app", "other.css"), `:root { --x: 1; }\n`);
+    await writeFile(path.join(dir, "node_modules", "pkg", "a.css"), `@import "tailwindcss";\n`);
+    await writeFile(path.join(dir, ".next", "b.css"), `@import "tailwindcss";\n`);
+    expect(findTailwindEntryCssFiles(dir)).toEqual([path.join(dir, "app", "globals.css")]);
+  });
+
+  it("syncSourceDirectiveToFile upserts the directive and reports change", async () => {
+    const dir = await makeDir();
+    const cssPath = path.join(dir, "globals.css");
+    await writeFile(cssPath, `@import "tailwindcss";\n`);
+    const registry: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    expect(syncSourceDirectiveToFile(cssPath, registry)).toBe(true);
+    const written = readFileSync(cssPath, "utf8");
+    expect(written).toContain("@source inline(");
+    expect(written).toContain("bg-emerald-100");
+    // Unchanged registry → no rewrite; changed registry → refreshed in place.
+    expect(syncSourceDirectiveToFile(cssPath, registry)).toBe(false);
+    const grown: Registry = { families: {}, flattened: { hero: ["bg-emerald-100", "p-4"] } };
+    expect(syncSourceDirectiveToFile(cssPath, grown)).toBe(true);
+    expect(readFileSync(cssPath, "utf8")).toContain("p-4");
+  });
+
 });
 
 describe("shortwindPlugin", () => {

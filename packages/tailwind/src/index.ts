@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync, type Dirent } from "node:fs";
 import path from "node:path";
 import {
   buildRegistry,
@@ -169,6 +169,61 @@ export function injectSourceDirective(css: string, registry: Registry): string {
     `\n${SHORTWIND_INJECT_MARKER}\n${directive}\n${SHORTWIND_INJECT_END_MARKER}\n` +
     css.slice(insertAt)
   );
+}
+
+// Build output and dependency directories that never hold the user's Tailwind
+// entry CSS. Dot-directories (.next, .astro, .git, …) are skipped wholesale.
+const ENTRY_SCAN_IGNORE = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  "recipes",
+]);
+const ENTRY_SCAN_MAX_DEPTH = 6;
+
+// Locate the Tailwind v4 entry stylesheets — every .css under cwd with an
+// `@import "tailwindcss"` — for adapters that have no in-build CSS hook (Next:
+// Tailwind reads the entry from disk via PostCSS/Turbopack, so the safelist
+// must live ON disk; Vite-based adapters inject in-memory instead). Bounded
+// depth keeps the walk cheap on big repos.
+export function findTailwindEntryCssFiles(cwd: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string, depth: number): void => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (depth >= ENTRY_SCAN_MAX_DEPTH) continue;
+        if (entry.name.startsWith(".") || ENTRY_SCAN_IGNORE.has(entry.name)) continue;
+        walk(full, depth + 1);
+      } else if (entry.name.endsWith(".css")) {
+        try {
+          if (hasTailwindImport(readFileSync(full, "utf8"))) found.push(full);
+        } catch {
+          // unreadable — not a usable entry
+        }
+      }
+    }
+  };
+  walk(path.resolve(cwd), 0);
+  return found.sort();
+}
+
+// On-disk variant of injectSourceDirective: upsert the marker-guarded
+// directive block into the stylesheet and report whether the file changed.
+export function syncSourceDirectiveToFile(cssPath: string, registry: Registry): boolean {
+  const css = readFileSync(cssPath, "utf8");
+  const next = injectSourceDirective(css, registry);
+  if (next === css) return false;
+  writeFileSync(cssPath, next);
+  return true;
 }
 
 // Single source of truth for the html-vs-jsx decision, shared by every adapter

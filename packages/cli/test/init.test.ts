@@ -114,6 +114,55 @@ describe("init", () => {
     expect(existsSync(path.join(dir, "recipes", ".shortwind-lock.json"))).toBe(true);
   });
 
+  it("writes the @source inline(...) safelist into a Next project's entry CSS (#73)", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { next: "^16.0.0", react: "^19.0.0" },
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+    const globals = path.join(dir, "app", "globals.css");
+    await mkdir(path.dirname(globals), { recursive: true });
+    await writeFile(globals, `@import "tailwindcss";\n`);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.safelistCssPaths).toContain(globals);
+    const css = readFileSync(globals, "utf8");
+    expect(css).toContain("@source inline(");
+    // A recipe-body-only utility Tailwind can't discover from on-disk sources.
+    expect(css).toContain("bg-card");
+  });
+
+  it("does not write the on-disk safelist for Vite projects (in-memory injection)", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { vite: "^5.0.0", react: "^18.0.0" },
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+    const entry = path.join(dir, "src", "index.css");
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(entry, `@import "tailwindcss";\n`);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.safelistCssPaths).toEqual([]);
+    expect(readFileSync(entry, "utf8")).not.toContain("@source inline(");
+  });
+
   it("writes shortwind.config.json with registry and recipesDir", async () => {
     const dir = await setupProject();
     cleanup.push(dir);
