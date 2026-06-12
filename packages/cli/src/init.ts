@@ -11,7 +11,7 @@ import {
   rewriteHeaderSha,
   verifyFetchedFamily,
 } from "./fingerprint.js";
-import { detectProject, type PackageManager } from "./detect.js";
+import { detectProject, skillAdapterFor, type Bundler, type PackageManager } from "./detect.js";
 import {
   BUNDLED_ORIGIN,
   resolveSource,
@@ -139,7 +139,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const huskyPath = await installHuskyHook(cwd, path.join(cwd, ".husky", "pre-commit"));
 
   const skillPath = path.join(cwd, "skills", "shortwind", "SKILL.md");
-  const skillRegistry = await writeSkillMd(skillPath, recipesDir, families);
+  const skillRegistry = await writeSkillMd(skillPath, recipesDir, families, shape.bundler);
 
   // Recipes reference semantic color tokens; scaffold the default theme so they
   // render with color on first run instead of as colorless markup.
@@ -393,6 +393,7 @@ async function writeSkillMd(
   skillPath: string,
   recipesDir: string,
   families: string[],
+  bundler: Bundler,
 ): Promise<Registry | null> {
   const allRecipes: Recipe[] = [];
   const guidance: Record<string, string> = {};
@@ -418,6 +419,10 @@ async function writeSkillMd(
     return null;
   }
   await mkdir(path.dirname(skillPath), { recursive: true });
-  await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
+  const adapter = skillAdapterFor(bundler);
+  await writeFile(
+    skillPath,
+    renderSkillMarkdown(resolved.value, { order: families, ...(adapter ? { adapter } : {}) }),
+  );
   return resolved.value;
 }

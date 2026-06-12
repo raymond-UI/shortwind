@@ -197,6 +197,50 @@ describe("renderSkillMarkdown", () => {
     expect(md).toContain(`{ recipe: "@badge-success" }`);
   });
 
+  it("offers the rc()/expandClassList escape hatch with adapter-correct wiring (#81)", () => {
+    const registry = buildSampleRegistry();
+    const vite = renderSkillMarkdown(registry, { adapter: "vite" });
+    expect(vite).toContain("### Runtime escape hatch");
+    expect(vite).toContain(`import { expandClassList } from "@shortwind/vite"`);
+    expect(vite).toContain(`import registry from "virtual:shortwind/registry"`);
+
+    const astro = renderSkillMarkdown(registry, { adapter: "astro" });
+    expect(astro).toContain(`import { expandClassList } from "@shortwind/astro"`);
+    expect(astro).toContain("virtual:shortwind/registry");
+
+    const next = renderSkillMarkdown(registry, { adapter: "next" });
+    expect(next).toContain(`import { expandClassList, loadRegistryFromDir } from "@shortwind/next"`);
+    expect(next).not.toContain("virtual:shortwind/registry");
+  });
+
+  it("ships a copy-pasteable strict-mode snippet for the detected adapter (#81)", () => {
+    const registry = buildSampleRegistry();
+    const vite = renderSkillMarkdown(registry, { adapter: "vite" });
+    expect(vite).toContain("### Catch silent leaks");
+    expect(vite).toContain("shortwind({ strict: true })");
+    expect(vite).not.toContain("withShortwind");
+
+    const next = renderSkillMarkdown(registry, { adapter: "next" });
+    expect(next).toContain("withShortwind({ strict: true })(nextConfig)");
+
+    // No adapter detected: name all three wirings rather than guessing.
+    const generic = renderSkillMarkdown(registry);
+    expect(generic).toContain("shortwind({ strict: true })");
+    expect(generic).toContain("withShortwind({ strict: true })");
+    expect(generic).toContain("integrations: [shortwind({ strict: true })]");
+  });
+
+  it("escape-hatch examples also only use installed recipes (#80/#81)", () => {
+    const registry = buildSampleRegistry(); // no badge/tab/nav families
+    const md = renderSkillMarkdown(registry, { adapter: "vite" });
+    const section = md.slice(md.indexOf("### Runtime escape hatch"), md.indexOf("### Catch silent leaks"));
+    for (const m of section.matchAll(/@([A-Za-z0-9][\w-]*)/g)) {
+      const name = m[1]!;
+      if (name === "shortwind") continue; // the package scope, not a recipe
+      expect(Object.keys(registry.flattened), `@${name} is not installed`).toContain(name);
+    }
+  });
+
   it("includes the dynamic-class guidance even for an empty registry", () => {
     const md = renderSkillMarkdown({ families: {}, flattened: {} });
     expect(md).toContain("## Dynamic classes");
@@ -210,6 +254,8 @@ describe("renderSkillMarkdown", () => {
     expect(md).toContain("# Shortwind");
     expect(md).toContain("## Available recipes");
     expect(md).toContain("No families installed yet");
-    expect(md).not.toContain("###");
+    // No per-family sections (the escape-hatch/strict subsections are
+    // intentionally present even before any family is installed).
+    expect(md).not.toMatch(/### \w+ recipes/);
   });
 });

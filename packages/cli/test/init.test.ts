@@ -370,6 +370,32 @@ describe("init", () => {
     }
   });
 
+  it("SKILL.md surfaces strict mode and the escape hatch for the detected adapter (#81)", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { next: "^16.0.0", react: "^19.0.0" },
+    });
+    cleanup.push(dir);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    const md = readFileSync(result.skillPath, "utf8");
+    expect(md).toContain("withShortwind({ strict: true })");
+    expect(md).toContain(`import { expandClassList, loadRegistryFromDir } from "@shortwind/next"`);
+    // Vite-only idioms must not leak into a Next SKILL.
+    expect(md).not.toContain("virtual:shortwind/registry");
+
+    const agents = readFileSync(path.join(dir, "AGENTS.md"), "utf8");
+    expect(agents).toContain("expandClassList");
+    expect(agents).toContain("strict: true");
+  });
+
   it("--preset=none produces a valid install with empty ./recipes/", async () => {
     const dir = await setupProject();
     cleanup.push(dir);

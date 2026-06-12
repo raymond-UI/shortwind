@@ -28,8 +28,9 @@ const VITE_CONFIGS = [
 const VITE_SNIPPET = [
   `import { shortwind } from "@shortwind/vite";`,
   `// add shortwind() to the Vite plugins array — it runs in the pre phase,`,
-  `// before Tailwind's scan:`,
-  `//   plugins: [shortwind(), tailwindcss(), react()]`,
+  `// before Tailwind's scan. strict: true fails the build when a recipe`,
+  `// token leaks unexpanded (recommended; drop it to demote to a warning):`,
+  `//   plugins: [shortwind({ strict: true }), tailwindcss(), react()]`,
 ].join("\n");
 
 export async function wireBundler(cwd: string, bundler: Bundler): Promise<BundlerWireResult> {
@@ -38,7 +39,7 @@ export async function wireBundler(cwd: string, bundler: Bundler): Promise<Bundle
     return {
       configPath: null,
       action: "manual",
-      snippet: `import { withShortwind } from "@shortwind/next";\n// withShortwind is curried — wrap your Next config:\n//   export default withShortwind()(nextConfig);`,
+      snippet: `import { withShortwind } from "@shortwind/next";\n// withShortwind is curried — wrap your Next config. strict: true fails\n// the build when a recipe token leaks unexpanded (recommended):\n//   export default withShortwind({ strict: true })(nextConfig);`,
       reason: "Next config wiring is manual",
     };
   }
@@ -46,7 +47,7 @@ export async function wireBundler(cwd: string, bundler: Bundler): Promise<Bundle
     return {
       configPath: null,
       action: "manual",
-      snippet: `import shortwind from "@shortwind/astro";\n// add to integrations: integrations: [shortwind()]`,
+      snippet: `import shortwind from "@shortwind/astro";\n// add to integrations — strict: true fails the build when a recipe\n// token leaks unexpanded (recommended):\n//   integrations: [shortwind({ strict: true })]`,
       reason: "Astro config wiring is manual",
     };
   }

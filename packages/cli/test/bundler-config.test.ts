@@ -84,7 +84,9 @@ describe("wireBundler (vite)", () => {
     const dir = await project({});
     dirs.push(dir);
     const result = await wireBundler(dir, "next");
-    expect(result.snippet).toContain("withShortwind()(");
-    expect(result.snippet).not.toMatch(/withShortwind\((?!\)\()\w/);
+    // Curried: options object first, Next config second (#61). The snippet
+    // recommends strict: true (#81), so the options arg is non-empty now.
+    expect(result.snippet).toContain("withShortwind({ strict: true })(nextConfig)");
+    expect(result.snippet).not.toMatch(/withShortwind\(nextConfig/);
   });
 });

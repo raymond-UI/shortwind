@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
 import type { Recipe } from "@shortwind/core";
+import { detectProject, skillAdapterFor } from "./detect.js";
 import { BUNDLED_ORIGIN } from "./registry-source.js";
 
 export type ShortwindConfig = {
@@ -130,7 +131,11 @@ export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): P
 
   const { mkdir } = await import("node:fs/promises");
   await mkdir(path.dirname(skillPath), { recursive: true });
-  await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
+  const adapter = skillAdapterFor(detectProject(cwd).bundler);
+  await writeFile(
+    skillPath,
+    renderSkillMarkdown(resolved.value, { order: families, ...(adapter ? { adapter } : {}) }),
+  );
   return skillPath;
 }
 

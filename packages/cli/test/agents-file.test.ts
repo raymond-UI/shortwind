@@ -48,6 +48,30 @@ describe("wireAgentsInstructions", () => {
     expect(existsSync(path.join(dir, "AGENTS.md"))).toBe(false);
   });
 
+  it("surfaces the rc()/expandClassList helper and strict mode (#81)", async () => {
+    const dir = await project();
+    dirs.push(dir);
+    await wireAgentsInstructions(dir, SKILL(dir));
+    const md = await readFile(path.join(dir, "AGENTS.md"), "utf8");
+    expect(md).toContain("expandClassList");
+    expect(md).toContain("strict: true");
+  });
+
+  it("adds the dynamic-classes guidance to a file that predates it (#81)", async () => {
+    // An AGENTS.md written by an older init: pointer line only.
+    const dir = await project({
+      "AGENTS.md":
+        "# AGENTS.md\n\nFor UI, prefer Shortwind `@recipe` class names — full catalog in `skills/shortwind/SKILL.md`.\n",
+    });
+    dirs.push(dir);
+    const result = await wireAgentsInstructions(dir, SKILL(dir));
+    expect(result.action).toBe("appended");
+    const md = await readFile(path.join(dir, "AGENTS.md"), "utf8");
+    expect(md).toContain("expandClassList");
+    // The original pointer was not duplicated.
+    expect(md.match(/full catalog in/g)).toHaveLength(1);
+  });
+
   it("is idempotent — re-running does not duplicate the pointer", async () => {
     const dir = await project();
     dirs.push(dir);

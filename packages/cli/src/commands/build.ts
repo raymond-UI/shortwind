@@ -7,7 +7,7 @@ import {
   findTailwindEntryCssFiles,
   syncSourceDirectiveToFile,
 } from "@shortwind/tailwind";
-import { detectProject } from "../detect.js";
+import { detectProject, skillAdapterFor } from "../detect.js";
 import { installedFamilies, readConfig } from "../project.js";
 
 export type BuildOptions = {
@@ -65,8 +65,13 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   const resolved = buildRegistry(allRecipes, { guidance });
   if (!resolved.ok) throw new BuildError(resolved.errors);
 
+  const { bundler } = detectProject(cwd);
+  const adapter = skillAdapterFor(bundler);
   const skillPath = path.join(cwd, config.outputPath);
-  const next = renderSkillMarkdown(resolved.value, { order: families });
+  const next = renderSkillMarkdown(resolved.value, {
+    order: families,
+    ...(adapter ? { adapter } : {}),
+  });
   const current = existsSync(skillPath) ? readFileSync(skillPath, "utf8") : null;
   let changed = false;
   if (current !== next) {
@@ -79,7 +84,6 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   // CSS from disk (Next, bare Tailwind CLI) — see init (#73). Vite/Astro
   // inject the directive in-memory, so their files are never touched.
   const safelistCssPaths: string[] = [];
-  const { bundler } = detectProject(cwd);
   if (bundler !== "vite" && bundler !== "astro") {
     for (const file of findTailwindEntryCssFiles(cwd)) {
       if (syncSourceDirectiveToFile(file, resolved.value)) changed = true;
