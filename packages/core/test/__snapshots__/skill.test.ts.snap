@@ -35,8 +35,8 @@ The rule: the recipe text must appear as a **literal string the build can see** 
 
 \`\`\`tsx
 <div className="@card-elevated p-6">                    // expands
-<a className={active ? "@tab-active" : "@tab"}>         // expands (JSX only)
-const cfg = { recipe: "@badge-success" };
+<a className={active ? "@btn-primary" : "@btn"}>        // expands (JSX only)
+const cfg = { recipe: "@card-elevated" };
 <span className={cfg.recipe}>                           // does NOT expand — silent
 \`\`\`
 

@@ -106,7 +106,10 @@ describe("renderSkillMarkdown", () => {
     };
     const md = renderSkillMarkdown(registry, { wrapAt: 60 });
     const lines = md.split("\n");
-    const headerIdx = lines.findIndex((l) => l.includes("@card-fancy"));
+    // The dynamic-classes examples may also mention @card-fancy (they're
+    // derived from the installed registry, #80) — anchor on the recipe
+    // listing's two-space indent instead.
+    const headerIdx = lines.findIndex((l) => l.startsWith("  @card-fancy"));
     expect(headerIdx).toBeGreaterThan(-1);
     // collect the recipe block: header + subsequent indented continuation lines
     const block: string[] = [lines[headerIdx] ?? ""];
@@ -162,6 +165,36 @@ describe("renderSkillMarkdown", () => {
     // points at the supported build-time expansion path, not a guess
     expect(md).toContain("expandClassList");
     expect(md).toContain("https://shortwind.dev/docs/dynamic-classes");
+  });
+
+  it("dynamic-classes examples only reference recipes the registry ships (#80)", () => {
+    // The sample registry has no badge or tab family — the old hardcoded
+    // @badge-success/@tab examples pointed readers at recipes the install
+    // didn't provide.
+    const registry = buildSampleRegistry();
+    const md = renderSkillMarkdown(registry);
+    const fenceStart = md.indexOf("```tsx");
+    const fence = md.slice(fenceStart, md.indexOf("```", fenceStart + 6));
+    const referenced = [...fence.matchAll(/@([A-Za-z0-9][\w-]*)/g)].map((m) => m[1]);
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const name of referenced) {
+      expect(Object.keys(registry.flattened), `@${name} is not installed`).toContain(name);
+    }
+  });
+
+  it("prefers the familiar tab/badge example names when those recipes are installed", () => {
+    const tab = recipe("tab", ["px-2"], "Tab.", "navigation.css");
+    const tabActive = recipe("tab-active", ["px-2", "font-bold"], "Active tab.", "navigation.css");
+    const badgeSuccess = recipe("badge-success", ["bg-green-100"], "Success badge.", "badge.css");
+    const registry = buildSampleRegistry();
+    registry.families["navigation"] = [tab, tabActive];
+    registry.families["badge"] = [badgeSuccess];
+    registry.flattened["tab"] = tab.tokens;
+    registry.flattened["tab-active"] = tabActive.tokens;
+    registry.flattened["badge-success"] = badgeSuccess.tokens;
+    const md = renderSkillMarkdown(registry);
+    expect(md).toContain(`active ? "@tab-active" : "@tab"`);
+    expect(md).toContain(`{ recipe: "@badge-success" }`);
   });
 
   it("includes the dynamic-class guidance even for an empty registry", () => {

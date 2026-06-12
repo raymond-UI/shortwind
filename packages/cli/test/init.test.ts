@@ -344,6 +344,32 @@ describe("init", () => {
     }
   });
 
+  it("SKILL.md examples only reference recipes the preset installed (#80)", async () => {
+    const dir = await setupProject();
+    cleanup.push(dir);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter", // no badge or navigation family
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    const md = readFileSync(result.skillPath, "utf8");
+    // Recipes the install actually provides, straight from the listing.
+    const installed = new Set(
+      [...md.matchAll(/^  @([A-Za-z0-9][\w-]*)/gm)].map((m) => m[1]),
+    );
+    expect(installed.size).toBeGreaterThan(0);
+    // Every @recipe mentioned inside example code fences must be installed.
+    for (const fence of md.matchAll(/```tsx([\s\S]*?)```/g)) {
+      for (const m of (fence[1] ?? "").matchAll(/@([A-Za-z0-9][\w-]*)/g)) {
+        expect(installed.has(m[1]!), `@${m[1]} is not in the starter preset`).toBe(true);
+      }
+    }
+  });
+
   it("--preset=none produces a valid install with empty ./recipes/", async () => {
     const dir = await setupProject();
     cleanup.push(dir);
