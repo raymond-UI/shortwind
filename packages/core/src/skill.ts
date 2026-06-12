@@ -201,6 +201,10 @@ function renderStrictMode(adapter: SkillAdapter | undefined): string[] {
     out.push("```");
   }
   out.push("");
+  out.push(
+    "`strict` lives inside the adapter — if the adapter was never wired, it cannot fire and the build ships raw `@tokens` silently. After any production build, run `npx shortwind doctor`: it scans the emitted output (`.next/`, `dist/`, …) for raw recipe tokens and tells you whether no transform ran at all (wiring problem) or the transform ran and specific tokens leaked.",
+  );
+  out.push("");
   return out;
 }
 

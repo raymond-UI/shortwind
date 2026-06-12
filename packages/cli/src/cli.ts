@@ -1,3 +1,4 @@
+import path from "node:path";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { cac } from "cac";
@@ -14,6 +15,8 @@ import {
   type UpgradeChoice,
 } from "./commands/upgrade.js";
 import { verify } from "./commands/verify.js";
+import { doctor } from "./commands/doctor.js";
+import { detectProject, type Bundler } from "./detect.js";
 import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.js";
 import { init, cliVersion, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 import { bench, formatBenchTable } from "./commands/bench.js";
@@ -301,6 +304,27 @@ export async function run(argv: string[] = process.argv): Promise<void> {
     });
 
   cli
+    .command("doctor", "Scan build output for unexpanded @recipe tokens")
+    .option("--dir <path>", "Output directory to scan (repeatable; default: .next, dist, out, build)")
+    .option("--json", "Emit machine-readable JSON")
+    .option("--cwd <dir>", "Working directory")
+    .action(async (opts: { dir?: string | string[]; json?: boolean; cwd?: string }) => {
+      const cwd = opts.cwd ?? process.cwd();
+      const doctorOptions: Parameters<typeof doctor>[0] = { cwd };
+      if (opts.dir !== undefined) {
+        doctorOptions.dirs = Array.isArray(opts.dir) ? opts.dir : [opts.dir];
+      }
+      const result = await doctor(doctorOptions);
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      } else {
+        printDoctorReport(result, cwd);
+      }
+      if (result.verdict === "no-output") process.exit(2);
+      if (!result.ok) process.exit(1);
+    });
+
+  cli
     .command("lint", "Static analysis over source files and recipes")
     .option("--fix", "Apply auto-fixes where supported")
     .option("--rule <rule>", "Only run the named rule (repeatable)")
@@ -408,6 +432,59 @@ function printUpgradeSummary(outcomes: Awaited<ReturnType<typeof upgrade>>["outc
     } else if (o.action === "skipped") {
       process.stdout.write(pc.dim(`  ${o.family} skipped (${o.reason})\n`));
     }
+  }
+}
+
+// The whole point of doctor (#84) is telling "you forgot to wire the adapter"
+// apart from "the adapter ran and something leaked" — both otherwise present
+// as a green build that ships raw @recipe text.
+function printDoctorReport(result: Awaited<ReturnType<typeof doctor>>, cwd: string): void {
+  if (result.verdict === "no-output") {
+    p.log.error(
+      `no build output found (looked for .next/, dist/, out/, build/).\n` +
+        `Run your framework's build first, or point doctor at it with --dir <path>.`,
+    );
+    return;
+  }
+  if (result.verdict === "clean") {
+    p.log.success(
+      `no unexpanded recipe tokens in ${result.outputDirs.join(", ")} (${result.scannedFiles} files scanned)`,
+    );
+    return;
+  }
+  for (const f of result.findings) {
+    process.stderr.write(`${path.relative(cwd, f.file)}: ${f.tokens.join(", ")}\n`);
+  }
+  const tokenCount = new Set(result.findings.flatMap((f) => f.tokens)).size;
+  if (result.verdict === "not-wired") {
+    p.log.error(
+      `found ${tokenCount} raw @recipe token${tokenCount === 1 ? "" : "s"} in build output and ` +
+        `every recipe your source references is among them — it looks like no Shortwind ` +
+        `transform ran during the build.\n` +
+        `Is the adapter wired? ${adapterHint(detectProject(cwd).bundler)}\n` +
+        `Setup guides: https://shortwind.dev/docs/install`,
+    );
+  } else {
+    p.log.error(
+      `found ${tokenCount} raw @recipe token${tokenCount === 1 ? "" : "s"} in build output. ` +
+        `The Shortwind transform ran (other recipes expanded), so these specific tokens ` +
+        `escaped it — typically a className built from a variable/prop/template, or markup ` +
+        `in a region the expander treats as opaque.\n` +
+        `See https://shortwind.dev/docs/dynamic-classes`,
+    );
+  }
+}
+
+function adapterHint(bundler: Bundler): string {
+  switch (bundler) {
+    case "next":
+      return "Next needs `export default withShortwind()(nextConfig)` in next.config — note the call is curried.";
+    case "vite":
+      return "Vite needs `shortwind()` in the vite.config plugins array: `plugins: [shortwind(), tailwindcss(), ...]`.";
+    case "astro":
+      return "Astro needs `shortwind()` in astro.config `integrations`.";
+    default:
+      return "Add the Shortwind plugin for your bundler (see the setup guide).";
   }
 }
 

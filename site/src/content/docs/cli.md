@@ -65,6 +65,24 @@ dry run, `--force` to overwrite touched files.
 Read-only audit of the lockfile against installed files. Exits non-zero on
 mismatch. CI-friendly.
 
+## `shortwind doctor`
+
+Run after your framework's production build. Scans the build output (`.next/`,
+`dist/`, `out/`, `build/` — or `--dir <path>`) for raw `@recipe` tokens that
+survived to the emitted HTML/JS, and tells the two failure modes apart:
+
+- **No transform ran** — every recipe your source references is still raw.
+  The adapter isn't wired (e.g. `withShortwind()(config)` missing from
+  `next.config`). `strict` mode can't catch this case: it lives inside the
+  adapter, so it never fires if the adapter never runs.
+- **Transform ran but tokens leaked** — only some tokens are raw, typically a
+  `className` built from a variable/prop/template. See
+  [dynamic classes](/docs/dynamic-classes).
+
+Exits non-zero on findings (`2` when there is no build output to scan), so it
+slots into CI right after the build step. `--json` for machine-readable
+output. The documented `rc()` runtime escape hatch is exempt.
+
 ## `shortwind lint`
 
 Diagnostic pass over `recipes/` and your source files. Reports cycles,

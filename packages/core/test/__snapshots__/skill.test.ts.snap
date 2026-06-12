@@ -79,6 +79,8 @@ import shortwind from "@shortwind/astro";
 export default defineConfig({ integrations: [shortwind({ strict: true })] });
 \`\`\`
 
+\`strict\` lives inside the adapter — if the adapter was never wired, it cannot fire and the build ships raw \`@tokens\` silently. After any production build, run \`npx shortwind doctor\`: it scans the emitted output (\`.next/\`, \`dist/\`, …) for raw recipe tokens and tells you whether no transform ran at all (wiring problem) or the transform ran and specific tokens leaked.
+
 ## Available recipes
 
 ### Card recipes
