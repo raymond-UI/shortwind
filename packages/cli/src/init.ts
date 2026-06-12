@@ -23,7 +23,12 @@ import {
   syncSourceDirectiveToFile,
 } from "@shortwind/tailwind";
 import { readLockfile, writeLockfile } from "./lockfile.js";
-import { findMissingThemeTokens, scaffoldTheme, type ThemeAction } from "./theme.js";
+import {
+  buildThemeSupplement,
+  findMissingThemeTokens,
+  scaffoldTheme,
+  type ThemeAction,
+} from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
 import { wireAgentsInstructions, type AgentsFileAction } from "./agents-file.js";
 
@@ -66,8 +71,12 @@ export type InitResult = {
   // safelist (#73) — empty for Vite/Astro, which inject it in-memory.
   safelistCssPaths: string[];
   // Design tokens the installed recipes reference that the project's existing
-  // (untouched) theme does not define — empty when the theme was scaffolded.
+  // (untouched) theme does not define AND the supplement could not provide —
+  // empty when the theme was scaffolded or supplemented.
   missingThemeTokens: string[];
+  // Tokens appended to an existing theme as a marked, additive supplement
+  // block with the default placeholder values (themeAction "supplemented").
+  supplementedThemeTokens: string[];
   bundlerConfigPath: string | null;
   bundlerConfigAction: BundlerWireAction;
   bundlerConfigSnippet?: string;
@@ -151,12 +160,25 @@ export async function init(options: InitOptions): Promise<InitResult> {
   // When an existing theme was left untouched, it may define none of the
   // tokens the installed recipes reference (create-next-app's @theme has only
   // background/foreground) — every @card/@badge would render colorless with no
-  // signal (#62). Diff what the recipes use against what the theme defines so
-  // the CLI can warn loudly with the exact missing names.
+  // signal (#62). Diff what the recipes use against what the theme defines,
+  // then APPEND a marked block providing just the missing tokens: a terminal
+  // warning alone doesn't persist anywhere, and dogfooding showed it gets
+  // answered by invented color values. The append is purely additive (only
+  // absent tokens), so the user's theme is never overridden; the warn-only
+  // path remains for anything the supplement can't cover.
+  let themeAction: ThemeAction = theme.action;
   let missingThemeTokens: string[] = [];
+  let supplementedThemeTokens: string[] = [];
   if (theme.action === "skipped" && theme.themePath && skillRegistry) {
     const css = await readFile(theme.themePath, "utf8");
     missingThemeTokens = findMissingThemeTokens(css, skillRegistry.flattened);
+    const supplement = buildThemeSupplement(css, missingThemeTokens);
+    if (supplement) {
+      await writeFile(theme.themePath, `${css.replace(/\s*$/, "")}\n\n${supplement}\n`);
+      supplementedThemeTokens = missingThemeTokens;
+      missingThemeTokens = [];
+      themeAction = "supplemented";
+    }
   }
 
   // Bundlers without an in-build CSS hook (Next; bare Tailwind CLI) need the
@@ -194,7 +216,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
     huskyPath,
     skillPath,
     themePath: theme.themePath,
-    themeAction: theme.action,
+    themeAction,
+    supplementedThemeTokens,
     safelistCssPaths,
     missingThemeTokens,
     bundlerConfigPath: bundlerConfig.configPath,

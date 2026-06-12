@@ -96,7 +96,10 @@ const THEME_BLOCK = `${THEME_MARKER} — default tokens for the recipe catalog. 
 
 const TAILWIND_IMPORT_RE = /@import\s+["']tailwindcss["'][^;\n]*;?/;
 
-export type ThemeAction = "injected" | "created" | "skipped";
+// "supplemented" is produced by init (not scaffoldTheme): an existing theme
+// was left intact and a marked block defining only the missing tokens was
+// appended (see buildThemeSupplement).
+export type ThemeAction = "injected" | "created" | "skipped" | "supplemented";
 export type ThemeResult = {
   themePath: string | null;
   action: ThemeAction;
@@ -154,6 +157,65 @@ export async function scaffoldTheme(cwd: string): Promise<ThemeResult> {
 const THEME_COLOR_TOKENS: ReadonlySet<string> = new Set(
   [...THEME_BLOCK.matchAll(/--color-([\w-]+)\s*:/g)].map((m) => m[1] ?? ""),
 );
+
+export const THEME_SUPPLEMENT_MARKER = "/* shortwind:theme-supplement";
+
+// Light/dark values per token, parsed out of THEME_BLOCK itself (same
+// no-drift trick as THEME_COLOR_TOKENS): the supplement hands out exactly the
+// values full scaffolding would have written.
+function blockSectionValues(selector: string): ReadonlyMap<string, string> {
+  const m = THEME_BLOCK.match(new RegExp(`${selector.replace(".", "\\.")}\\s*\\{([^}]*)\\}`));
+  const out = new Map<string, string>();
+  for (const decl of (m?.[1] ?? "").matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)) {
+    out.set(decl[1]!, decl[2]!.trim());
+  }
+  return out;
+}
+const THEME_LIGHT_VALUES = blockSectionValues(":root");
+const THEME_DARK_VALUES = blockSectionValues(".dark");
+
+// The existing-theme skip is all-or-nothing, which leaves every missing token
+// to a terminal warning nobody persists — on a stock create-next-app theme
+// (background/foreground only) recipes then render colorless. Build an
+// append-only supplement defining JUST the missing tokens: purely additive,
+// so nothing the user wrote is ever overridden, and re-running init finds
+// nothing missing, so it's naturally idempotent. Dark values follow the
+// project's own strategy — `.dark` class (incl. @custom-variant) or the
+// prefers-color-scheme media query — and are omitted when there isn't one
+// (the :root values then apply everywhere).
+export function buildThemeSupplement(css: string, missing: string[]): string | null {
+  const tokens = missing.filter((t) => THEME_LIGHT_VALUES.has(t));
+  if (tokens.length === 0) return null;
+
+  const light = tokens.map((t) => `  --${t}: ${THEME_LIGHT_VALUES.get(t)};`);
+  const dark = tokens
+    .filter((t) => THEME_DARK_VALUES.has(t))
+    .map((t) => `  --${t}: ${THEME_DARK_VALUES.get(t)};`);
+  const mapping = tokens.map((t) => `  --color-${t}: var(--${t});`);
+
+  const lines: string[] = [
+    `${THEME_SUPPLEMENT_MARKER} — placeholder values for tokens your theme didn't define. Tune them to your palette. */`,
+    ":root {",
+    ...light,
+    "}",
+  ];
+  if (dark.length > 0) {
+    if (/@custom-variant\s+dark|\.dark\s*\{/.test(css)) {
+      lines.push(".dark {", ...dark, "}");
+    } else if (/@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)/.test(css)) {
+      lines.push(
+        "@media (prefers-color-scheme: dark) {",
+        "  :root {",
+        ...dark.map((l) => `  ${l}`),
+        "  }",
+        "}",
+      );
+    }
+    // No dark strategy detected: emit light-only; the :root values apply.
+  }
+  lines.push("@theme inline {", ...mapping, "}", "/* end shortwind theme-supplement */");
+  return lines.join("\n");
+}
 
 // Utility prefixes that consume a theme color token (`bg-card`,
 // `text-muted-foreground`, `border-border`, …).

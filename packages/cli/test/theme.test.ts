@@ -3,7 +3,13 @@ import { existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { findMissingThemeTokens, scaffoldTheme, THEME_MARKER } from "../src/theme.js";
+import {
+  buildThemeSupplement,
+  findMissingThemeTokens,
+  scaffoldTheme,
+  THEME_MARKER,
+  THEME_SUPPLEMENT_MARKER,
+} from "../src/theme.js";
 
 async function project(opts: {
   tailwind?: string;
@@ -133,5 +139,71 @@ describe("findMissingThemeTokens (#62)", () => {
   it("ignores utilities that are not theme color tokens", () => {
     const css = `@theme inline { --color-background: #fff; }`;
     expect(findMissingThemeTokens(css, { text: ["text-4xl", "font-bold", "tracking-tight"] })).toEqual([]);
+  });
+});
+
+describe("buildThemeSupplement", () => {
+  // Stock create-next-app: background/foreground only, media-query dark mode.
+  const nextAppCss = `@import "tailwindcss";
+:root { --background: #ffffff; --foreground: #171717; }
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --background: #0a0a0a; --foreground: #ededed; }
+}
+`;
+
+  it("emits only the missing tokens, shadcn-style, with real default values", () => {
+    const block = buildThemeSupplement(nextAppCss, ["border", "card", "muted-foreground"]);
+    expect(block).not.toBeNull();
+    expect(block).toContain(THEME_SUPPLEMENT_MARKER);
+    // Light values come from the default theme block, not invented.
+    expect(block).toContain("--card: oklch(1 0 0);");
+    expect(block).toContain("--border: oklch(0.922 0 0);");
+    expect(block).toContain("--muted-foreground: oklch(0.556 0 0);");
+    // @theme inline mapping so Tailwind actually generates the utilities.
+    expect(block).toContain("--color-card: var(--card);");
+    expect(block).toContain("--color-border: var(--border);");
+    // Never redefines what the project already owns.
+    expect(block).not.toContain("--background:");
+    expect(block).not.toContain("--color-foreground:");
+  });
+
+  it("follows a media-query dark strategy when the project uses one", () => {
+    const block = buildThemeSupplement(nextAppCss, ["card"])!;
+    expect(block).toContain("@media (prefers-color-scheme: dark)");
+    expect(block).not.toMatch(/^\.dark/m);
+    // The dark value from the default block, inside the media wrapper.
+    expect(block).toContain("--card: oklch(0.205 0 0);");
+  });
+
+  it("follows a .dark class strategy when the project uses one", () => {
+    const css = `@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+:root { --background: #fff; }
+.dark { --background: #000; }
+@theme inline { --color-background: var(--background); }
+`;
+    const block = buildThemeSupplement(css, ["card"])!;
+    expect(block).toContain(".dark {");
+    expect(block).not.toContain("prefers-color-scheme");
+    expect(block).toContain("--card: oklch(0.205 0 0);");
+  });
+
+  it("emits light values only when the project has no dark strategy", () => {
+    const css = `@import "tailwindcss";
+:root { --background: #fff; }
+@theme inline { --color-background: var(--background); }
+`;
+    const block = buildThemeSupplement(css, ["card"])!;
+    expect(block).toContain("--card: oklch(1 0 0);");
+    expect(block).not.toContain("prefers-color-scheme");
+    expect(block).not.toContain(".dark");
+  });
+
+  it("returns null when nothing is missing", () => {
+    expect(buildThemeSupplement(nextAppCss, [])).toBeNull();
   });
 });
