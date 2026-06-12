@@ -14,7 +14,7 @@ import {
   type TouchedContext,
   type UpgradeChoice,
 } from "./commands/upgrade.js";
-import { verify } from "./commands/verify.js";
+import { verify, type VerifyIssue } from "./commands/verify.js";
 import { doctor } from "./commands/doctor.js";
 import { detectProject, type Bundler } from "./detect.js";
 import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.js";
@@ -488,7 +488,7 @@ function adapterHint(bundler: Bundler): string {
   }
 }
 
-function describeVerifyIssue(issue: import("./commands/verify.js").VerifyIssue): string {
+function describeVerifyIssue(issue: VerifyIssue): string {
   switch (issue.kind) {
     case "missing-header":
       return "no fingerprint header — recipe was hand-stripped";
