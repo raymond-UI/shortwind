@@ -13,7 +13,7 @@ import {
   type TouchedContext,
   type UpgradeChoice,
 } from "./commands/upgrade.js";
-import { verify } from "./commands/verify.js";
+import { verify, type VerifyIssue } from "./commands/verify.js";
 import { lint, formatFindingsText, ALL_RULES, type Rule } from "./commands/lint.js";
 import { init, cliVersion, type InitOptions, DEFAULT_REGISTRY } from "./init.js";
 import { bench, formatBenchTable } from "./commands/bench.js";
@@ -411,7 +411,7 @@ function printUpgradeSummary(outcomes: Awaited<ReturnType<typeof upgrade>>["outc
   }
 }
 
-function describeVerifyIssue(issue: import("./commands/verify.js").VerifyIssue): string {
+function describeVerifyIssue(issue: VerifyIssue): string {
   switch (issue.kind) {
     case "missing-header":
       return "no fingerprint header — recipe was hand-stripped";
