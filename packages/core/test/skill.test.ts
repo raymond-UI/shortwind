@@ -230,6 +230,17 @@ describe("renderSkillMarkdown", () => {
     expect(generic).toContain("integrations: [shortwind({ strict: true })]");
   });
 
+  it("tells agents to verify builds with shortwind doctor (#84)", () => {
+    const registry = buildSampleRegistry();
+    for (const opts of [{ adapter: "next" as const }, {}]) {
+      const md = renderSkillMarkdown(registry, opts);
+      expect(md).toContain("shortwind doctor");
+      // The point of doctor: strict lives inside the adapter and can't fire
+      // when the adapter was never wired.
+      expect(md).toContain("never wired");
+    }
+  });
+
   it("escape-hatch examples also only use installed recipes (#80/#81)", () => {
     const registry = buildSampleRegistry(); // no badge/tab/nav families
     const md = renderSkillMarkdown(registry, { adapter: "vite" });
