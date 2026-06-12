@@ -138,6 +138,8 @@ describe("init", () => {
     expect(css).toContain("@source inline(");
     // A recipe-body-only utility Tailwind can't discover from on-disk sources.
     expect(css).toContain("bg-card");
+    // The summary prints the per-framework setup guide URL from this (#85).
+    expect(result.bundler).toBe("next");
   });
 
   it("does not write the on-disk safelist for Vite projects (in-memory injection)", async () => {

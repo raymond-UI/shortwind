@@ -46,6 +46,9 @@ export type InstallPackages = (
 
 export type InitResult = {
   packageManager: PackageManager;
+  // Detected bundler — the CLI summary uses it to print the matching
+  // per-framework setup-guide URL (#85).
+  bundler: ReturnType<typeof detectProject>["bundler"];
   preset: string;
   registry: string;
   families: string[];
@@ -179,6 +182,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
 
   return {
     packageManager: shape.packageManager,
+    bundler: shape.bundler,
     preset: options.preset,
     registry,
     families,
