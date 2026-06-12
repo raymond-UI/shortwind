@@ -205,7 +205,31 @@ describe("init", () => {
     expect(() => parseJsonc(body)).not.toThrow();
   });
 
-  it("installs the pre-commit hook with shortwind build", async () => {
+  it("installs a pre-commit hook that invokes the real @shortwind/cli package (#76)", async () => {
+    const dir = await setupProject();
+    cleanup.push(dir);
+    await mkdir(path.join(dir, ".git"), { recursive: true });
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "none",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.huskyPath).not.toBeNull();
+    const hook = readFileSync(result.huskyPath!, "utf8");
+    // `npx shortwind build` resolves a nonexistent npm package (the CLI has
+    // no `shortwind` bin and isn't a devDependency) — first commit 404s.
+    expect(hook).toContain("npx @shortwind/cli build");
+    expect(hook).not.toMatch(/npx shortwind build/);
+    // Husky v9: no shebang, no sourcing of _/husky.sh
+    expect(hook).not.toContain("#!/usr/bin/env sh");
+    expect(hook).not.toContain("husky.sh");
+  });
+
+  it("skips the pre-commit hook when the target isn't a git repository (#76)", async () => {
     const dir = await setupProject();
     cleanup.push(dir);
 
@@ -217,11 +241,8 @@ describe("init", () => {
       installPackages: installer.fn,
     });
 
-    const hook = readFileSync(result.huskyPath, "utf8");
-    expect(hook).toContain("npx shortwind build");
-    // Husky v9: no shebang, no sourcing of _/husky.sh
-    expect(hook).not.toContain("#!/usr/bin/env sh");
-    expect(hook).not.toContain("husky.sh");
+    expect(result.huskyPath).toBeNull();
+    expect(existsSync(path.join(dir, ".husky", "pre-commit"))).toBe(false);
   });
 
   it("re-init with a new --registry overwrites the prior value in shortwind.config.json", async () => {

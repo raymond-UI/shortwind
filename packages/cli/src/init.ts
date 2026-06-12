@@ -54,7 +54,8 @@ export type InitResult = {
   skippedFamilies: string[];
   configPath: string;
   vscodePath: string;
-  huskyPath: string;
+  // null when the target isn't a git repository (hook not installed).
+  huskyPath: string | null;
   skillPath: string;
   themePath: string | null;
   themeAction: ThemeAction;
@@ -116,8 +117,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const vscodePath = path.join(cwd, ".vscode", "settings.json");
   await wireVscodeClassRegex(vscodePath);
 
-  const huskyPath = path.join(cwd, ".husky", "pre-commit");
-  await installHuskyHook(huskyPath);
+  const huskyPath = await installHuskyHook(cwd, path.join(cwd, ".husky", "pre-commit"));
 
   const skillPath = path.join(cwd, "skills", "shortwind", "SKILL.md");
   const skillRegistry = await writeSkillMd(skillPath, recipesDir, families);
@@ -344,18 +344,27 @@ async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
   await writeFile(vscodePath, next.endsWith("\n") ? next : next + "\n");
 }
 
-const HUSKY_LINE = "npx shortwind build";
+// The CLI ships as @shortwind/cli with no `shortwind` bin alias and is not
+// added as a devDependency, so a bare `npx shortwind build` resolves a
+// different (nonexistent) npm package and 404s the user's first commit (#76).
+// Invoke it the same way init itself is invoked.
+const HUSKY_LINE = "npx @shortwind/cli build";
 
-async function installHuskyHook(huskyPath: string): Promise<void> {
+// Returns the hook path, or null when the target isn't a git repository —
+// installing a pre-commit hook into a non-repo is presumptuous and husky
+// itself has nothing to wire it into (#76).
+async function installHuskyHook(cwd: string, huskyPath: string): Promise<string | null> {
+  if (!existsSync(path.join(cwd, ".git"))) return null;
   await mkdir(path.dirname(huskyPath), { recursive: true });
   if (!existsSync(huskyPath)) {
     await writeFile(huskyPath, `${HUSKY_LINE}\n`, { mode: 0o755 });
-    return;
+    return huskyPath;
   }
   const current = await readFile(huskyPath, "utf8");
-  if (current.includes(HUSKY_LINE)) return;
+  if (current.includes(HUSKY_LINE)) return huskyPath;
   const next = current.endsWith("\n") ? current + HUSKY_LINE + "\n" : current + "\n" + HUSKY_LINE + "\n";
   await writeFile(huskyPath, next, { mode: 0o755 });
+  return huskyPath;
 }
 
 // Writes SKILL.md and returns the resolved registry (null when recipes were
