@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   findResidualRecipeTokens,
@@ -71,6 +72,10 @@ type MinimalVitePlugin = {
 };
 
 const DEFAULT_INCLUDE = /\.(?:tsx?|jsx?|vue|svelte|astro|html?|md|mdx)$/;
+
+// Request flavors that want the literal file, not a processed stylesheet —
+// mirrors @tailwindcss/vite's own id exclusions.
+const CSS_SKIP_QUERY_RE = /[?&](?:worker|sharedworker|raw|url)\b/;
 
 // The html-vs-jsx decision lives in @shortwind/tailwind (modeForFile) so every
 // adapter shares one implementation instead of re-deriving it.
@@ -206,10 +211,44 @@ export function shortwind(options: ShortwindViteOptions = {}): MinimalVitePlugin
   // v4's scanner never reads — it walks files on disk. We inject the
   // registry-derived candidate set into the user's main CSS via
   // `@source inline(...)` so Tailwind's JIT picks them up like any other
-  // candidate. Runs before `@tailwindcss/vite` because of `enforce: "pre"`.
+  // candidate.
+  //
+  // The injection happens in the LOAD hook, not (only) transform (#74):
+  // @tailwindcss/vite compiles whatever code the transform CHAIN hands it, and
+  // its generate plugins are `enforce: "pre"` too — so a directive injected by
+  // our transform only arrives when this plugin sorts before Tailwind's. It
+  // doesn't in Astro (integration plugins are appended after the user's
+  // `vite.plugins`, where `tailwindcss()` lives) or in any Vite config that
+  // lists `tailwindcss()` before `shortwind()` — and then every recipe-body-only
+  // utility silently never generates. Load hooks run before every plugin's
+  // transform regardless of plugin order, so injecting here always reaches
+  // Tailwind. The transform stays as a fallback for CSS served by another
+  // plugin's load hook (e.g. SFC <style lang="css"> blocks), where chain order
+  // still applies.
   const cssPlugin: MinimalVitePlugin = {
     name: "shortwind:css-source",
     enforce: "pre",
+    load(id) {
+      // Leave asset-flavored requests alone — same exclusions as Tailwind's
+      // own plugin (`?url`/`?raw`/worker requests want the literal file).
+      if (CSS_SKIP_QUERY_RE.test(id)) return null;
+      const file = id.split("?")[0] ?? id;
+      const cleanId = toPosix(file);
+      if (!cleanId.endsWith(".css")) return null;
+      if (registryFiles.has(cleanId)) return null;
+      if (Object.keys(registry.flattened).length === 0) return null;
+      if (!existsSync(file)) return null;
+      let code: string;
+      try {
+        code = readFileSync(file, "utf8");
+      } catch {
+        return null;
+      }
+      if (!hasTailwindImport(code)) return null;
+      const out = injectSourceDirective(code, registry);
+      if (out === code) return null;
+      return out;
+    },
     transform(code, id) {
       const cleanId = toPosix(id.split("?")[0] ?? id);
       if (!cleanId.endsWith(".css")) return null;

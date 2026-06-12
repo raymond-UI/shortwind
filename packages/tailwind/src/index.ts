@@ -125,7 +125,14 @@ export function buildSourceDirective(registry: Registry): string {
   return `@source inline("${tokens.join(" ")}");`;
 }
 
-export const SHORTWIND_INJECT_MARKER = "/* shortwind:source-inject */";
+export const SHORTWIND_INJECT_MARKER = "/* shortwind:source-inject:start */";
+export const SHORTWIND_INJECT_END_MARKER = "/* shortwind:source-inject:end */";
+// beta.11 wrote a single-line marker with no end delimiter, so an injected
+// block could never be refreshed — a stale on-disk safelist would silently pin
+// the candidate set forever (#74). Recognize the old marker (some dogfooding
+// projects wrote it to disk via hand-rolled injectSourceDirective scripts) and
+// leave such files alone rather than double-injecting.
+const LEGACY_INJECT_MARKER = "/* shortwind:source-inject */";
 
 const TAILWIND_IMPORT_RE = /@import\s+["']tailwindcss["'][^;\n]*;?/;
 
@@ -133,16 +140,33 @@ export function hasTailwindImport(css: string): boolean {
   return TAILWIND_IMPORT_RE.test(css);
 }
 
+// Upsert, not insert-once: when the CSS already carries an injected block the
+// directive is REPLACED if the registry changed, so callers can re-run this on
+// every build (in-memory or on-disk) and the safelist always tracks recipes/.
 export function injectSourceDirective(css: string, registry: Registry): string {
-  if (css.includes(SHORTWIND_INJECT_MARKER)) return css;
   const directive = buildSourceDirective(registry);
+  const start = css.indexOf(SHORTWIND_INJECT_MARKER);
+  if (start !== -1) {
+    const end = css.indexOf(SHORTWIND_INJECT_END_MARKER, start);
+    if (end === -1) return css; // half a block — refuse to guess its boundary
+    const blockEnd = end + SHORTWIND_INJECT_END_MARKER.length;
+    if (!directive) {
+      // Registry emptied out — drop the block (and the surrounding newlines
+      // the original insertion added) instead of leaving a stale safelist.
+      return css.slice(0, start).replace(/\n$/, "") + css.slice(blockEnd).replace(/^\n/, "");
+    }
+    const next = `${SHORTWIND_INJECT_MARKER}\n${directive}\n${SHORTWIND_INJECT_END_MARKER}`;
+    if (css.slice(start, blockEnd) === next) return css;
+    return css.slice(0, start) + next + css.slice(blockEnd);
+  }
+  if (css.includes(LEGACY_INJECT_MARKER)) return css;
   if (!directive) return css;
   const m = css.match(TAILWIND_IMPORT_RE);
   if (!m) return css;
   const insertAt = (m.index ?? 0) + m[0].length;
   return (
     css.slice(0, insertAt) +
-    `\n${SHORTWIND_INJECT_MARKER}\n${directive}\n` +
+    `\n${SHORTWIND_INJECT_MARKER}\n${directive}\n${SHORTWIND_INJECT_END_MARKER}\n` +
     css.slice(insertAt)
   );
 }

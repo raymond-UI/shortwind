@@ -182,7 +182,7 @@ describe("vite plugin", () => {
     const code = typeof result === "string" ? result : result?.code;
     expect(code).not.toBeNull();
     expect(code).toContain("@source inline(");
-    expect(code).toContain("/* shortwind:source-inject */");
+    expect(code).toContain("/* shortwind:source-inject:start */");
   });
 
   it("leaves CSS without @import \"tailwindcss\" untouched", async () => {

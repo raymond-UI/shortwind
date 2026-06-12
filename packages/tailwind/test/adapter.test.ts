@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "@babel/parser";
-import { buildRegistry, type Recipe } from "@shortwind/core";
+import { buildRegistry, type Recipe, type Registry } from "@shortwind/core";
 import {
   buildSourceDirective,
   computeSafelistTokens,
@@ -395,6 +395,34 @@ describe("source directive injection", () => {
     const once = injectSourceDirective(`@import "tailwindcss";`, registry);
     const twice = injectSourceDirective(once, registry);
     expect(twice).toBe(once);
+  });
+
+  it("refreshes a stale injected block when the registry changes (#74)", () => {
+    const small: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    const grown: Registry = {
+      families: {},
+      flattened: { hero: ["bg-emerald-100"], aside: ["bg-amber-50"] },
+    };
+    const base = `@import "tailwindcss";\n\n:root { --x: 1; }\n`;
+    const first = injectSourceDirective(base, small);
+    const refreshed = injectSourceDirective(first, grown);
+    expect(refreshed).toContain("bg-amber-50");
+    // One block, not two — the stale block was replaced in place.
+    expect(refreshed.split(SHORTWIND_INJECT_MARKER)).toHaveLength(2);
+    // Refreshing again with the same registry is a no-op.
+    expect(injectSourceDirective(refreshed, grown)).toBe(refreshed);
+  });
+
+  it("removes the injected block when the registry empties out", () => {
+    const small: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    const base = `@import "tailwindcss";\n\n:root { --x: 1; }\n`;
+    const injected = injectSourceDirective(base, small);
+    expect(injectSourceDirective(injected, { families: {}, flattened: {} })).toBe(base);
+  });
+
+  it("leaves a legacy beta.11 single-marker block alone", () => {
+    const legacy = `@import "tailwindcss";\n/* shortwind:source-inject */\n@source inline("old-token");\n`;
+    expect(injectSourceDirective(legacy, registry)).toBe(legacy);
   });
 
   it("returns the input unchanged when there is no tailwindcss import", () => {
