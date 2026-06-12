@@ -457,12 +457,13 @@ function printDoctorReport(result: Awaited<ReturnType<typeof doctor>>, cwd: stri
   }
   const tokenCount = new Set(result.findings.flatMap((f) => f.tokens)).size;
   if (result.verdict === "not-wired") {
+    const bundler = detectProject(cwd).bundler;
     p.log.error(
       `found ${tokenCount} raw @recipe token${tokenCount === 1 ? "" : "s"} in build output and ` +
         `every recipe your source references is among them — it looks like no Shortwind ` +
         `transform ran during the build.\n` +
-        `Is the adapter wired? ${adapterHint(detectProject(cwd).bundler)}\n` +
-        `Setup guides: https://shortwind.dev/docs/install`,
+        `Is the adapter wired? ${adapterHint(bundler)}\n` +
+        `Setup guide: ${setupGuideUrl(bundler)}`,
     );
   } else {
     p.log.error(
@@ -473,6 +474,13 @@ function printDoctorReport(result: Awaited<ReturnType<typeof doctor>>, cwd: stri
         `See https://shortwind.dev/docs/dynamic-classes`,
     );
   }
+}
+
+// Slugs match site/src/content/docs/setup-<bundler>.md (#85).
+function setupGuideUrl(bundler: Bundler): string {
+  return bundler === "unknown"
+    ? "https://shortwind.dev/docs/install"
+    : `https://shortwind.dev/docs/setup-${bundler}`;
 }
 
 function adapterHint(bundler: Bundler): string {
@@ -561,6 +569,7 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
   if (result.bundlerConfigAction === "manual" && result.bundlerConfigSnippet) {
     p.log.warn(`Add the plugin to your bundler config:\n\n${result.bundlerConfigSnippet}`);
   }
+  p.log.info(`Setup guide for your stack: ${setupGuideUrl(result.bundler)}`);
   if (result.missingThemeTokens.length > 0) {
     p.log.warn(
       `Your existing theme (${result.themePath}) does not define ${result.missingThemeTokens.length} design token${result.missingThemeTokens.length === 1 ? "" : "s"} the installed recipes use:\n\n` +
