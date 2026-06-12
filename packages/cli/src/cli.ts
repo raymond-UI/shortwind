@@ -570,6 +570,14 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
     p.log.warn(`Add the plugin to your bundler config:\n\n${result.bundlerConfigSnippet}`);
   }
   p.log.info(`Setup guide for your stack: ${setupGuideUrl(result.bundler)}`);
+  if (result.themeAction === "supplemented") {
+    p.log.info(
+      `Your theme (${result.themePath}) didn't define ${result.supplementedThemeTokens.length} design token${result.supplementedThemeTokens.length === 1 ? "" : "s"} the installed recipes use:\n\n` +
+        `  ${result.supplementedThemeTokens.join(", ")}\n\n` +
+        `Appended them with neutral placeholder values (marked block at the end of the file) so recipes render on first run — tune them to your palette.\n` +
+        `Reference values: https://shortwind.dev/docs/install#theme-tokens`,
+    );
+  }
   if (result.missingThemeTokens.length > 0) {
     p.log.warn(
       `Your existing theme (${result.themePath}) does not define ${result.missingThemeTokens.length} design token${result.missingThemeTokens.length === 1 ? "" : "s"} the installed recipes use:\n\n` +
@@ -611,6 +619,8 @@ function describeTheme(result: Awaited<ReturnType<typeof init>>): string {
       return `tokens added to ${result.themePath}`;
     case "created":
       return `wrote ${result.themePath}`;
+    case "supplemented":
+      return `kept your theme; appended ${result.supplementedThemeTokens.length} missing tokens to ${result.themePath}`;
     case "skipped":
       return result.themePath
         ? `left existing theme in ${result.themePath} untouched`

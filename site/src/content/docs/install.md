@@ -40,22 +40,31 @@ mapped through `@theme inline`) to your Tailwind CSS entry so every recipe
 renders with color on first run.
 
 If your CSS **already contains an `@theme` block or `--background` token**
-(create-next-app ships one), `init` leaves your theme untouched — and then
-checks whether the tokens the installed recipes reference are actually defined.
-Any missing names are listed in a warning like:
+(create-next-app ships one), `init` keeps your theme intact — and then checks
+whether the tokens the installed recipes reference are actually defined.
+Recipes referencing an undefined token render colorless, so `init` appends a
+marked supplement block at the end of the file defining *only the missing
+ones* with neutral placeholder values:
 
+```css
+/* shortwind:theme-supplement — placeholder values for tokens your theme didn't define. Tune them to your palette. */
+:root {
+  --card: oklch(1 0 0);
+  --border: oklch(0.922 0 0);
+  /* …only the tokens you were missing */
+}
+@theme inline {
+  --color-card: var(--card);
+  --color-border: var(--border);
+}
 ```
-Your existing theme (app/globals.css) does not define 12 design tokens the
-installed recipes use:
 
-  accent, border, card, card-foreground, destructive, input, muted,
-  muted-foreground, primary, primary-foreground, ring, secondary
-```
-
-Recipes referencing a missing token render colorless. Fix it by defining each
-listed token in your theme — either as a Tailwind v4 theme key
-(`--color-card: …` inside `@theme`) or shadcn-style (`--card: …` in `:root`
-plus `--color-card: var(--card)` in `@theme inline`).
+The supplement is purely additive — nothing you defined is ever overridden —
+and the dark values follow your project's own strategy (a `.dark` class or
+the `prefers-color-scheme` media query; with neither, the `:root` values
+apply everywhere). Re-running `init` finds nothing missing and changes
+nothing. Tune the placeholder values to your palette, or move them into your
+own theme blocks; the values come from the default block below.
 
 This is the full default block `init` writes (also the reference for the
 values to merge into an existing theme):

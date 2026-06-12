@@ -165,6 +165,71 @@ describe("init", () => {
     expect(readFileSync(entry, "utf8")).not.toContain("@source inline(");
   });
 
+  it("appends the missing theme tokens to an existing create-next-app theme instead of warn-only", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { next: "^16.0.0", react: "^19.0.0" },
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+    const globals = path.join(dir, "app", "globals.css");
+    await mkdir(path.dirname(globals), { recursive: true });
+    // Stock create-next-app globals.css: background/foreground only,
+    // media-query dark mode.
+    await writeFile(
+      globals,
+      `@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+`,
+    );
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.themeAction).toBe("supplemented");
+    expect(result.supplementedThemeTokens).toContain("card");
+    expect(result.supplementedThemeTokens).toContain("border");
+    expect(result.missingThemeTokens).toEqual([]);
+
+    const css = readFileSync(globals, "utf8");
+    expect(css).toContain("shortwind:theme-supplement");
+    expect(css).toContain("--color-card: var(--card);");
+    // The project's own tokens are untouched and not redefined.
+    expect(css.match(/--background\s*:/g)).toHaveLength(2); // :root + media, as before
+    expect(css.match(/--color-background\s*:/g)).toHaveLength(1);
+
+    // Re-running finds nothing missing — no second supplement block.
+    const again = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+    expect(again.themeAction).toBe("skipped");
+    expect(readFileSync(globals, "utf8").match(/shortwind:theme-supplement/g)).toHaveLength(1);
+  });
+
   it("a mid-copy abort fails with a resumable message, and re-running completes (#78)", async () => {
     const { vi } = await import("vitest");
     const dir = await setupProject();
@@ -449,10 +514,11 @@ describe("init", () => {
     expect(readFileSync(cardPath, "utf8")).toBe("/* user modified */\n");
   });
 
-  it("reports recipe-referenced tokens missing from a pre-existing @theme (#62)", async () => {
+  it("supplements recipe-referenced tokens missing from a pre-existing @theme (#62)", async () => {
     // create-next-app ships a globals.css whose @theme defines only
-    // background/foreground; the theme scaffold skips it, so init must surface
-    // which tokens the installed recipes reference that the theme lacks.
+    // background/foreground; the theme scaffold leaves it intact, and init
+    // appends the tokens the installed recipes reference that the theme
+    // lacks (warn-only proved insufficient — see the supplement test above).
     const dir = await setupProject({
       name: "demo",
       dependencies: { next: "^15.0.0" },
@@ -473,12 +539,13 @@ describe("init", () => {
       installPackages: installer.fn,
     });
 
-    expect(result.themeAction).toBe("skipped");
+    expect(result.themeAction).toBe("supplemented");
     // the starter families lean on the semantic token set — card/border/etc.
-    // must be flagged as missing from the untouched theme
-    expect(result.missingThemeTokens).toContain("card");
-    expect(result.missingThemeTokens).toContain("border");
-    expect(result.missingThemeTokens).not.toContain("background");
+    // must be provided by the appended supplement; the project's own tokens
+    // are not duplicated into it
+    expect(result.supplementedThemeTokens).toContain("card");
+    expect(result.supplementedThemeTokens).toContain("border");
+    expect(result.supplementedThemeTokens).not.toContain("background");
   });
 
   it("reports no missing tokens when init scaffolds the theme itself", async () => {

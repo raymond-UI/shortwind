@@ -70,19 +70,15 @@ warnings). The `rc()` pattern in step 6 stays exempt.
 
 The recipe catalog is authored against semantic color tokens (`bg-card`,
 `text-muted-foreground`, `border-border`, …). `create-next-app`'s
-`globals.css` already contains an `@theme` block, so `init` **leaves your
-theme untouched** and instead warns which tokens the installed recipes need
-that your theme doesn't define — typically:
-
-```
-accent, border, card, card-foreground, destructive, input, muted,
-muted-foreground, primary, primary-foreground, ring, secondary
-```
-
-Merge the missing ones from the default block below (the same shadcn-style
-convention `create-next-app` uses: a `--card: …` variable in `:root`/`.dark`
-plus a `--color-card: var(--card)` mapping in `@theme inline`). On a project
-with no theme at all, `init` writes this whole block for you:
+`globals.css` already contains an `@theme` block, so `init` **keeps your
+theme intact** and appends a marked `shortwind:theme-supplement` block at the
+end of the file defining *only* the tokens your theme doesn't — typically
+`border`, `card`, `muted-foreground`, `primary`, and friends. The supplement
+is purely additive (nothing you defined is overridden), follows your
+dark-mode strategy (a `.dark` class or the `prefers-color-scheme` media
+query), and uses the neutral placeholder values below — **tune them to your
+palette**. On a project with no theme at all, `init` writes this whole block
+instead:
 
 ```css
 /* shortwind:theme — default tokens for the recipe catalog. Edit freely. */
