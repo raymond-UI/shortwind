@@ -202,7 +202,7 @@ describe("upgrade", () => {
         // button → newer, but touched → skipped by default resolver
         button: { version: "0.0.2", body: "/* btn. */\n@recipe btn { px-4 }\n" },
         // form → same version (unchanged)
-        form: { version: "0.0.1", body: "/* form. */\n@recipe form { gap-2 }\n" },
+        form: { version: "0.0.2", body: "/* form. */\n@recipe form { gap-2 }\n" },
       },
     });
 

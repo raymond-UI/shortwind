@@ -5,7 +5,7 @@ This is a practical follow-up plan from the repo review on 2026-06-08. The goal 
 ## Keep
 
 - Keep the flat `@recipe` vocabulary. It is the right tradeoff for LLM output: small surface, no new parameter grammar, readable source.
-- Keep recipes as repo-owned `.css` files. The shadcn-style distribution model is a good fit for teams that want to customize visual language.
+- Keep recipes as repo-owned `.css` files. The copy-in distribution model is a good fit for teams that want to customize visual language.
 - Keep `SKILL.md` generation as a first-class output. The generated teaching surface is one of the most interesting parts of the product.
 - Keep build-time and runtime expansion sharing `@shortwind/core`; that is the right place for semantic consistency.
 

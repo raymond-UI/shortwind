@@ -16,7 +16,7 @@ toggle. The tab bar (`@tab` / `@tab-active`), the empty state (`@empty`,
 `@empty-icon`, `@empty-title`, `@empty-description`), the mono branch chips
 (`@code-inline`), avatars (`@avatar-sm`), and the focus-ring conventions on
 buttons were all consistent without me hand-tuning spacing or states. The theme
-the CLI dropped into `global.css` (shadcn-style `--background`/`--card`/
+the CLI dropped into `global.css` (semantic `--background`/`--card`/
 `--primary` tokens in oklch) meant everything was visually consistent from the
 first render rather than after an afternoon of fiddling.
 

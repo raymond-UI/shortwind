@@ -20,7 +20,7 @@ themselves — it's the best part of the product.
 ## Where I got stuck or confused
 
 **The theme is bring-your-own, and nothing tells you.** Every recipe references
-shadcn-style tokens — `bg-card`, `text-muted-foreground`, `border-border`,
+semantic tokens — `bg-card`, `text-muted-foreground`, `border-border`,
 `bg-primary`, `bg-destructive`, `text-popover-foreground`. A fresh
 `create-next-app` defines none of those. `shortwind init` claims it can scaffold
 a default theme, but it silently skipped that step because the generated
@@ -29,7 +29,7 @@ pointing at colors that don't exist. There was no warning at init time and no
 warning at build time; I would have shipped a page where every `@card` and
 `@badge` rendered colorless. I ended up reverse-engineering the expected token
 set from Shortwind's *own benchmark corpus* inside `node_modules` and writing the
-full shadcn neutral palette (light + dark, oklch) by hand. This is the biggest
+full semantic neutral palette (light + dark, oklch) by hand. This is the biggest
 gap: the recipes have a hard contract with a design-token layer that the tool
 neither ships nor verifies is present.
 

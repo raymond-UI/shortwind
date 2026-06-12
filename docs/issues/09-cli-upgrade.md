@@ -2,7 +2,7 @@
 
 ## Scope
 
-The flow that pulls registry updates into `./recipes/` without clobbering user edits. Improves on shadcn's existing `diff` UX by adding touched-detection.
+The flow that pulls registry updates into `./recipes/` without clobbering user edits. Improves on the `diff` UX of existing copy-in registries by adding touched-detection.
 
 ## Fingerprint header
 

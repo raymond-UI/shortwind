@@ -297,7 +297,7 @@ describe("init", () => {
     });
 
     expect(result.themeAction).toBe("skipped");
-    // the starter families lean on the shadcn token set — card/border/etc.
+    // the starter families lean on the semantic token set — card/border/etc.
     // must be flagged as missing from the untouched theme
     expect(result.missingThemeTokens).toContain("card");
     expect(result.missingThemeTokens).toContain("border");

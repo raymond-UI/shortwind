@@ -8,7 +8,7 @@ Existing approaches don't fix this:
 
 - **Raw Tailwind** is the status quo — clean for humans, expensive for LLMs.
 - **`@apply` / component CSS** moves the cost into a stylesheet the LLM doesn't see and can't author per-document.
-- **Component libraries (shadcn, MUI)** require runtime + JSX — they don't help when the LLM emits standalone HTML for a one-off artifact.
+- **Component libraries (MUI and friends)** require runtime + JSX — they don't help when the LLM emits standalone HTML for a one-off artifact.
 - **Emmet / Pug / MJML** are real DSLs with grammar — the LLM has to *learn parsing*, then frequently gets it wrong.
 
 The user wants:
@@ -17,7 +17,7 @@ The user wants:
 - The result to render correctly in a browser today — no special runtime in production, no exotic build step.
 - The teaching surface to be auto-discovered by every major agent harness (Claude Code, Cursor, Copilot, Aider, Continue), with zero per-harness fan-out.
 - Customization without a new grammar — preferably "edit the file."
-- A distribution model where the recipes live in *your* repo (shadcn-style ownership), but updates don't go stale forever.
+- A distribution model where the recipes live in *your* repo (copy-in ownership), but updates don't go stale forever.
 
 ## Solution
 
@@ -28,7 +28,7 @@ Two expansion paths share a single source of truth (`@shortwind/core`):
 - **Build-time** — a bundler plugin (Vite/Next/Astro) transforms source files before Tailwind's content scan. Production output ships zero `@` tokens.
 - **Runtime CDN** — a ~6KB browser script (`shortwind.dev/expand.js`) walks the DOM before first paint. For LLM artifacts emitted straight into a `.html` file with no build step.
 
-Recipes live as `.css` files in `./recipes/<family>.css` in the user's repo (shadcn-style ownership). The CLI auto-generates a [skills.sh](https://skills.sh)-conformant `skills/shortwind/SKILL.md` whenever the recipes change, giving every major agent harness native discovery without per-tool symlinks.
+Recipes live as `.css` files in `./recipes/<family>.css` in the user's repo (copy-in ownership). The CLI auto-generates a [skills.sh](https://skills.sh)-conformant `skills/shortwind/SKILL.md` whenever the recipes change, giving every major agent harness native discovery without per-tool symlinks.
 
 The teaching surface is **vocabulary, not grammar**: ~100 flat recipe names following the rigid pattern `@<family>[-<intent>][-<size>]`. No parameters. No new syntax. The LLM memorizes a small table on turn one.
 
@@ -50,7 +50,7 @@ The teaching surface is **vocabulary, not grammar**: ~100 flat recipe names foll
 9. As a developer, I want to add a family with `npx shortwind add table`, so that I extend my vocabulary on demand.
 10. As a developer, I want recipes to live in my repo (not in `node_modules`), so that I can read, grep, edit, and version-control them.
 11. As a developer, I want raw Tailwind utilities to compose freely with recipes (`@card p-8 bg-amber-50`), so that overrides don't require a new mechanism.
-12. As a developer, I want conflicts resolved last-position-wins (via `tailwind-merge`), so that the mental model matches what shadcn's `cn()` already taught me.
+12. As a developer, I want conflicts resolved last-position-wins (via `tailwind-merge`), so that the mental model matches what the `cn()` helper already taught me.
 
 ### Customization
 
@@ -111,7 +111,7 @@ The teaching surface is **vocabulary, not grammar**: ~100 flat recipe names foll
 
 ### Distribution
 
-- Recipes are copied source code in the user's `./recipes/` directory (shadcn-style ownership). Not a runtime dependency.
+- Recipes are copied source code in the user's `./recipes/` directory (copy-in ownership). Not a runtime dependency.
 - Each recipe file carries a fingerprint header: `/* shortwind: <family>@<version> sha:<6-char> — DO NOT EDIT THIS LINE */`.
 - Lockfile at `recipes/.shortwind-lock.json`.
 - `shortwind upgrade` diffs file sha against the lockfile, applies clean updates non-interactively, prompts on touched files with a 3-way diff.
@@ -143,7 +143,7 @@ The teaching surface is **vocabulary, not grammar**: ~100 flat recipe names foll
 ### CLI dependency stack (fast modern)
 
 - Arg parsing: `cac` (matches Vite ecosystem)
-- Interactive prompts: `@clack/prompts` (matches Astro, shadcn)
+- Interactive prompts: `@clack/prompts` (matches Astro and other modern CLIs)
 - Colors: `picocolors`
 - Globbing: `tinyglobby`
 - File watching: `chokidar`
@@ -212,7 +212,7 @@ A good test for this codebase verifies **external behavior of a deep module** �
 - Resolver + cycle detection: standard topological sort with visited/visiting sets. Reference patterns from `postcss` and `lightningcss` codebases.
 - Snapshot tests for the parser/expander: use Vitest's inline snapshots; same pattern Vite and Tailwind use for their own internals.
 - 3-way diff display: borrow from `diff` library's structured output; format like `git diff --merge`.
-- Mocked registry for `add`/`upgrade` tests: spin up a static-file server on localhost in `beforeAll`. Same pattern shadcn's CLI tests use.
+- Mocked registry for `add`/`upgrade` tests: spin up a static-file server on localhost in `beforeAll`. The standard pattern for registry-backed CLI tests.
 
 ## Out of Scope
 

@@ -125,7 +125,7 @@ describe("findMissingThemeTokens (#62)", () => {
     expect(findMissingThemeTokens(css, flattened)).toEqual([]);
   });
 
-  it("accepts shadcn-style --<name> custom properties as defining a token", () => {
+  it("accepts bare --<name> custom properties as defining a token", () => {
     const css = `:root { --card: #fff; --card-foreground: #000; --border: #eee; --muted-foreground: #888; --primary: #000; }`;
     expect(findMissingThemeTokens(css, flattened)).toEqual([]);
   });

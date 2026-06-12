@@ -2,7 +2,7 @@
 
 **[shortwind.dev](https://shortwind.dev)** · **CLI:** [`@shortwind/cli`](https://www.npmjs.com/package/@shortwind/cli) (`npx @shortwind/cli@beta init`) · **Repo:** [github.com/raymond-UI/shortwind](https://github.com/raymond-UI/shortwind)
 
-A token-efficient class layer for LLM-generated HTML. Flat vocabulary, no new grammar, distributed shadcn-style.
+A token-efficient class layer for LLM-generated HTML. Flat vocabulary, no new grammar, distributed as copy-in source you own.
 
 LLMs spend 35–50% of HTML output tokens on Tailwind class strings. Shortwind collapses common class clusters into 1–3-token recipes the model can memorise on turn one.
 
@@ -132,7 +132,7 @@ Recipes bake in their canonical hover/focus/active/dark states. The LLM picks `@
 
 ## Grouping — one file per family
 
-**File = family. File name = family root.** A family is a set of related recipes added or removed together. This mirrors shadcn's pattern where `card.tsx` ships all card primitives in one file.
+**File = family. File name = family root.** A family is a set of related recipes added or removed together. This mirrors the component-registry pattern where one `card` file ships all card primitives together.
 
 ```
 recipes/
@@ -335,7 +335,7 @@ The earlier symlink design is dropped.
 
 ## Updating recipes
 
-Recipes live in your repo (shadcn-style), but `shortwind upgrade` closes the staleness gap shadcn users have long complained about ([discussion #790](https://github.com/shadcn-ui/ui/discussions/790), [discussion #7170](https://github.com/shadcn-ui/ui/discussions/7170)).
+Recipes live in your repo (copy-in ownership), but `shortwind upgrade` closes the staleness gap copy-in component registries have long been criticized for: once files are copied into a project, there's no reliable path to pull in upstream fixes.
 
 Each recipe file carries a 1-line fingerprint header:
 
@@ -351,7 +351,7 @@ Each recipe file carries a 1-line fingerprint header:
 
 Per-family changelogs live at `shortwind.dev/registry/<family>/CHANGELOG.md`. `upgrade` prints them inline before each prompt.
 
-This is an incremental refinement of shadcn's existing `diff` flow, not a reinvention — fingerprints + lockfile + structured per-family changelog close the residual "applied manually, hope I got it right" gap.
+This is an incremental refinement of the `diff` flow copy-in registries already use, not a reinvention — fingerprints + lockfile + structured per-family changelog close the residual "applied manually, hope I got it right" gap.
 
 ---
 
@@ -365,7 +365,7 @@ Three escalating answers, in order of preference.
 <article class="@card-elevated p-4 shadow-md">
 ```
 
-`tailwind-merge` resolves conflicting utilities to last-position-wins. Same library shadcn's `cn()` uses internally. No new syntax, no config edit.
+`tailwind-merge` resolves conflicting utilities to last-position-wins. Same library the ubiquitous `cn()` helper uses internally. No new syntax, no config edit.
 
 ### 2. Edit the recipe file
 
@@ -385,7 +385,7 @@ No parameter syntax. `@card-elevated(p=4)` would reintroduce grammar — parsing
 
 ## Composition with raw Tailwind
 
-Recipes and raw utilities mix freely. `tailwind-merge` resolves conflicts predictably — same library shadcn's `cn()` uses internally; same last-position-wins semantics the Tailwind community already expects.
+Recipes and raw utilities mix freely. `tailwind-merge` resolves conflicts predictably — same library the ubiquitous `cn()` helper uses internally; same last-position-wins semantics the Tailwind community already expects.
 
 ```html
 <!-- All valid -->
@@ -417,7 +417,7 @@ Unknown recipes (`@nope`) pass through to the output unchanged so the failure is
 
 ## Distribution & installation
 
-Shadcn-style: **recipes are source code in your repo, not a dependency.** The CLI copies files into `./recipes/` and you own them from that moment.
+**Recipes are source code in your repo, not a dependency.** The CLI copies files into `./recipes/` and you own them from that moment.
 
 ### Package layout
 
@@ -474,7 +474,7 @@ A pre-build step in `apps/web` reads `packages/registry/` and writes the registr
 
 **Why one Worker, not split to R2:** atomic deploys (no "site says v0.5 exists, registry 404s" window), zero ops, free edge cache, static-asset requests don't bill as Worker invocations. R2 is a graduation path if recipe-publish cadence ever decouples from site releases.
 
-**Registry origin is overridable.** `shortwind.config.json` accepts `registry: "https://corp-internal.example.com"` — same shape as shadcn's. Enterprise mirrors and forks work without code changes.
+**Registry origin is overridable.** `shortwind.config.json` accepts `registry: "https://corp-internal.example.com"`. Enterprise mirrors and forks work without code changes.
 
 ### Monorepo layout
 
@@ -504,7 +504,7 @@ shortwind/
 
 | Property | Consequence |
 |---|---|
-| Flat name → value table | Memorised on turn one (same shape as shadcn component names) |
+| Flat name → value table | Memorised on turn one (the names read like component names LLMs already know) |
 | No grammar, no operators, no precedence | No parsing errors |
 | Local error mode | Unknown `@name` stays in the attribute, rest of doc is unaffected |
 | Trivial verification | A ~10-line linter validates every recipe usage |

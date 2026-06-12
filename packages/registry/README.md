@@ -6,7 +6,7 @@ The Shortwind recipe catalog — the built, versioned recipe files that the CLI 
 
 ## You don't install this directly
 
-This package is a **source of recipes**, not a runtime dependency. The CLI fetches the latest catalog from npm (falling back to a bundled copy offline) and **copies** the recipe files into your project's `./recipes/`, shadcn-style — so you own and can edit them. It won't appear in your `dependencies` or `devDependencies`.
+This package is a **source of recipes**, not a runtime dependency. The CLI fetches the latest catalog from npm (falling back to a bundled copy offline) and **copies** the recipe files into your project's `./recipes/` — so you own and can edit them. It won't appear in your `dependencies` or `devDependencies`.
 
 ```bash
 npx @shortwind/cli@beta init      # pulls recipes from this catalog into ./recipes/

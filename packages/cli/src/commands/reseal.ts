@@ -17,7 +17,7 @@ export type ResealResult = {
   noHeader: string[];
 };
 
-// You own the recipes (shadcn-style), but `verify` fingerprints them — so an
+// You own the recipes (copy-in source), but `verify` fingerprints them — so an
 // intentional edit trips the header sha + lockfile. `reseal` recomputes each
 // family's body sha and rewrites the header and lockfile to match, making
 // `verify` pass again. The clean way to bless an edit instead of hand-patching

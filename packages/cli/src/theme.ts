@@ -183,7 +183,7 @@ function referencedThemeTokens(flattened: Record<string, string[]>): string[] {
 // theme (e.g. create-next-app's globals.css) defines none of the tokens the
 // installed recipes reference (#62). This diff lets init warn loudly instead.
 // A token counts as defined if the CSS declares `--color-<name>` (Tailwind v4
-// theme key) or `--<name>` (the shadcn custom-property indirection).
+// theme key) or `--<name>` (the bare custom-property indirection many themes use).
 export function findMissingThemeTokens(
   css: string,
   flattened: Record<string, string[]>,

@@ -5,7 +5,7 @@
 Scaffolded Vite + React + TS, added Tailwind v4 via `@tailwindcss/vite`, then
 `npx @shortwind/cli@beta init --preset all`. The CLI was smooth: it detected the
 bundler, installed `@shortwind/tailwind` + `@shortwind/vite`, copied an editable
-`recipes/` folder (19 families), scaffolded a shadcn-style theme into
+`recipes/` folder (19 families), scaffolded a semantic-token theme into
 `src/index.css`, and wrote a `SKILL.md` palette. One manual step (documented
 clearly): add `shortwind()` *before* `tailwindcss()` in the Vite plugins array.
 `npm run build` succeeds, and `grep` confirms the dist JS/CSS contain **zero**
