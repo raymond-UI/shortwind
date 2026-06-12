@@ -377,12 +377,39 @@ describe("source directive injection", () => {
     expect([...tokens]).toEqual([...tokens].sort());
   });
 
-  it("builds a single @source inline(...) directive listing every token", () => {
+  it("builds @source inline(...) directives covering every token", () => {
     const directive = buildSourceDirective(registry);
     expect(directive.startsWith('@source inline("')).toBe(true);
     expect(directive.endsWith('");')).toBe(true);
     const tokens = computeSafelistTokens(registry);
     for (const t of tokens) expect(directive).toContain(t);
+  });
+
+  it("isolates bracket/arbitrary tokens into their own directives (#79)", () => {
+    const reg: Registry = {
+      families: {},
+      flattened: {
+        hero: [
+          "flex",
+          "underline",
+          "tracking-[0.2em]",
+          "before:content-['']",
+          "transition-[color,box-shadow]",
+        ],
+      },
+    };
+    const lines = buildSourceDirective(reg).split("\n");
+    // One combined directive for the plain tokens…
+    expect(lines[0]).toBe('@source inline("flex underline");');
+    // …and one directive per fragile token, so a token an older Tailwind v4
+    // inline-source parser chokes on can only ever lose itself.
+    expect(lines.slice(1).sort()).toEqual([
+      `@source inline("before:content-['']");`,
+      `@source inline("tracking-[0.2em]");`,
+      `@source inline("transition-[color,box-shadow]");`,
+    ]);
+    // Every line is a complete, self-terminated directive.
+    for (const line of lines) expect(line).toMatch(/^@source inline\("[^"]+"\);$/);
   });
 
   it("returns empty string for an empty registry", () => {

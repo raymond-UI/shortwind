@@ -133,10 +133,26 @@ export function computeSafelistTokens(registry: Registry): string[] {
   return [...set].sort();
 }
 
+// Characters that can confuse `@source inline("…")` parsing: arbitrary values
+// (`tracking-[0.2em]`), nested quotes (`before:content-['']`), backslashes.
+// Tailwind 4.3 parses all of these inside one big directive, but the beta.11
+// Astro dogfooding round (older v4 minor) saw a single such token silently
+// kill every token AFTER it in the same directive string — looking like
+// "variants don't work at all" with no error anywhere (#79).
+const FRAGILE_TOKEN_RE = /[[\]'`\\]/;
+
 export function buildSourceDirective(registry: Registry): string {
   const tokens = computeSafelistTokens(registry);
   if (tokens.length === 0) return "";
-  return `@source inline("${tokens.join(" ")}");`;
+  // Plain tokens share one directive; each fragile token gets a directive of
+  // its own, so a token Tailwind's inline-source parser chokes on can only
+  // ever lose itself — never the tokens behind it (#79).
+  const plain = tokens.filter((t) => !FRAGILE_TOKEN_RE.test(t));
+  const fragile = tokens.filter((t) => FRAGILE_TOKEN_RE.test(t));
+  const directives: string[] = [];
+  if (plain.length > 0) directives.push(`@source inline("${plain.join(" ")}");`);
+  for (const t of fragile) directives.push(`@source inline("${t}");`);
+  return directives.join("\n");
 }
 
 export const SHORTWIND_INJECT_MARKER = "/* shortwind:source-inject:start */";
