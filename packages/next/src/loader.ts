@@ -86,6 +86,16 @@ type LoaderContext = {
 };
 
 export default function shortwindLoader(this: LoaderContext, source: string): string {
+  // Never transform or strict-scan vendored code (#75). The webpack rule
+  // excludes node_modules, but Turbopack rule keys are include-globs with no
+  // negation syntax — and Next 16's Turbopack applies custom loader rules to
+  // node_modules, so without this guard strict mode fails the build on files
+  // the user doesn't own (a JSDoc `{@link …}` in next's own dist collided
+  // with the catalog's @link recipe). Guarding here makes the scan scope
+  // bundler-independent, matching @shortwind/vite's transform.
+  if (this.resourcePath.split(path.sep).join("/").includes("/node_modules/")) {
+    return source;
+  }
   const options = this.getOptions();
   if (this.addContextDependency) this.addContextDependency(options.recipesDir);
 

@@ -305,6 +305,20 @@ describe("findResidualRecipeTokens (#67)", () => {
     const out = transformContent(`<div className="@card" />`, registry);
     expect(findResidualRecipeTokens(out, registry)).toEqual([]);
   });
+
+  it("exempts literal args of the rc()/expandClassList runtime escape hatch (#75)", () => {
+    const code = [
+      `const a = rc("@card-elevated");`,
+      `const b = expandClassList("@card p-6", registry, true);`,
+      `const c = rc('@badge-success');`,
+    ].join("\n");
+    expect(findResidualRecipeTokens(code, registry)).toEqual([]);
+  });
+
+  it("still flags a recipe reaching rc() through a variable (#75)", () => {
+    const code = `const name = "@card";\nconst cls = rc(name);`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual(["@card"]);
+  });
 });
 
 describe("findUnexpandedRecipes", () => {

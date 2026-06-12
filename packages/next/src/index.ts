@@ -83,10 +83,10 @@ export function withShortwind(
     const turbo = nextConfig.turbopack ?? {};
     const rules: NonNullable<NextConfig["turbopack"]>["rules"] = { ...(turbo.rules ?? {}) };
     // Asymmetry vs the webpack rule's `exclude: /node_modules/`: Turbopack rule
-    // keys are globs with no negation syntax, so a node_modules exclude can't be
-    // expressed here. Turbopack does not apply custom loader rules to
-    // node_modules by default, so dependency files aren't transformed; the
-    // loader is also a no-op on any file without `@recipe` tokens.
+    // keys are globs with no negation syntax, so a node_modules exclude can't
+    // be expressed here — and Next 16's Turbopack DOES apply custom loader
+    // rules to node_modules. The loader itself skips vendored paths (#75), so
+    // dependency files pass through untransformed and unscanned.
     rules["*.{tsx,ts,jsx,js,mdx,md}"] = {
       loaders: [{ loader: LOADER_PATH, options: loaderOptions }],
     };

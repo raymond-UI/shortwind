@@ -61,6 +61,9 @@ const RECIPE_TOKEN_RE = /@[A-Za-z0-9][\w-]*/g;
 export function findUnexpandedRecipes(code: string, registry: Registry): string[] {
   const known = registry.flattened;
   const found = new Set<string>();
+  // Same rc()/expandClassList exemption as findResidualRecipeTokens (#75):
+  // `class={rc("@nav-link")}` is the documented runtime pattern, not a leak.
+  code = code.replace(RUNTIME_EXPANDER_ARG_RE, "");
   for (const m of code.matchAll(CLASS_VALUE_RE)) {
     const value = m[2] ?? m[3] ?? "";
     for (const token of value.match(RECIPE_TOKEN_RE) ?? []) {
@@ -82,7 +85,12 @@ export function findUnexpandedRecipes(code: string, registry: Registry): string[
 export function findResidualRecipeTokens(code: string, registry: Registry): string[] {
   const known = registry.flattened;
   const found = new Set<string>();
-  for (const m of code.matchAll(RESIDUAL_TOKEN_RE)) {
+  // A recipe handed to the documented runtime escape hatch is expanded at
+  // RUNTIME by design — the literal surviving into build output is the
+  // feature, not a leak. Blank those call arguments so strict mode and
+  // rc()/expandClassList compose (#75).
+  const scannable = code.replace(RUNTIME_EXPANDER_ARG_RE, "");
+  for (const m of scannable.matchAll(RESIDUAL_TOKEN_RE)) {
     const token = m[0];
     if (Object.hasOwn(known, token.slice(1))) found.add(token);
   }
@@ -92,6 +100,12 @@ export function findResidualRecipeTokens(code: string, registry: Registry): stri
 // Like RECIPE_TOKEN_RE, plus a lookbehind so an email-like `user@card.com`
 // never reads as the recipe `@card`.
 const RESIDUAL_TOKEN_RE = /(?<![\w.@-])@[A-Za-z0-9][\w-]*/g;
+
+// String-literal first argument of the documented runtime expanders:
+// `rc("@badge")` / `expandClassList("@badge", registry, true)`. Deliberately
+// literal-only — a recipe reaching the call through a variable is still
+// invisible to the build and stays flagged.
+const RUNTIME_EXPANDER_ARG_RE = /\b(?:rc|expandClassList)\s*\(\s*(["'`])[^"'`\n]*\1/g;
 
 // One message for every adapter, so Vite/Next/Astro report leaks identically.
 export function residualRecipeMessage(id: string, tokens: string[]): string {
