@@ -163,6 +163,59 @@ describe("init", () => {
     expect(readFileSync(entry, "utf8")).not.toContain("@source inline(");
   });
 
+  it("a mid-copy abort fails with a resumable message, and re-running completes (#78)", async () => {
+    const { vi } = await import("vitest");
+    const dir = await setupProject();
+    cleanup.push(dir);
+    const origin = "https://registry.example.com";
+    const timeoutErr = new DOMException(
+      "The operation was aborted due to timeout",
+      "TimeoutError",
+    );
+    const family = (name: string): string =>
+      `/* shortwind: ${name}@0.0.1 sha:000000 */\n@recipe ${name} { p-4 }\n`;
+    let alphaBroken = true;
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith("/presets.json")) {
+        return new Response(JSON.stringify({ starter: ["zed", "alpha"] }), { status: 200 });
+      }
+      if (url.endsWith("/index.json")) {
+        return new Response(JSON.stringify({ families: ["zed", "alpha"] }), { status: 200 });
+      }
+      const m = url.match(/\/recipes\/([a-z]+)\.css$/);
+      if (m) {
+        if (m[1] === "alpha" && alphaBroken) throw timeoutErr;
+        return new Response(family(m[1]!), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const installer = makeInstaller();
+      await expect(
+        init({ cwd: dir, preset: "starter", registry: origin, installPackages: installer.fn }),
+      ).rejects.toThrow(/1\/2 copied: zed[\s\S]*Re-run the same init command to resume/);
+      // Half-done on purpose: the copied family is on disk, the config isn't.
+      expect(existsSync(path.join(dir, "recipes", "zed.css"))).toBe(true);
+      expect(existsSync(path.join(dir, "shortwind.config.json"))).toBe(false);
+
+      // The registry recovered — the same command resumes and completes.
+      alphaBroken = false;
+      const result = await init({
+        cwd: dir,
+        preset: "starter",
+        registry: origin,
+        installPackages: installer.fn,
+      });
+      expect(result.skippedFamilies).toContain("zed");
+      expect(result.installedFamilies).toContain("alpha");
+      expect(existsSync(path.join(dir, "shortwind.config.json"))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("writes shortwind.config.json with registry and recipesDir", async () => {
     const dir = await setupProject();
     cleanup.push(dir);

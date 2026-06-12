@@ -108,7 +108,26 @@ export async function init(options: InitOptions): Promise<InitResult> {
   }
 
   const recipesDir = path.join(cwd, "recipes");
-  const { installed, skipped } = await copyRecipes(source, families, recipesDir);
+  let copied: { installed: string[]; skipped: string[] };
+  try {
+    copied = await copyRecipes(source, families, recipesDir);
+  } catch (err) {
+    // A mid-copy abort (e.g. a registry fetch that timed out even after
+    // retries) used to surface as a bare TimeoutError, leaving a silently
+    // half-initialized project — recipes but no config/SKILL.md/theme (#78).
+    // Report exactly what landed and that re-running resumes: copyRecipes
+    // skips families already on disk, and everything after this point is
+    // idempotent.
+    const done = families.filter((f) => existsSync(path.join(recipesDir, `${f}.css`)));
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `init aborted while copying recipe families (${done.length}/${families.length} copied` +
+        `${done.length > 0 ? `: ${done.join(", ")}` : ""}) — ${reason}\n` +
+        `The project is incomplete (no config/SKILL.md/theme yet). ` +
+        `Re-run the same init command to resume; already-copied families are skipped.`,
+    );
+  }
+  const { installed, skipped } = copied;
   await updateLockfile(recipesDir, registry, installed);
 
   const configPath = path.join(cwd, "shortwind.config.json");
