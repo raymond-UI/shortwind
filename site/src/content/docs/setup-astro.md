@@ -178,8 +178,10 @@ block:
 ```
 
 If your CSS already defines an `@theme` block or a `--background` token,
-`init` leaves it untouched and warns about any tokens the installed recipes
-need that you don't define — merge just the missing ones from the block above.
+`init` keeps it intact and appends a marked `shortwind:theme-supplement`
+block defining *only* the tokens your theme lacks, using the placeholder
+values above — purely additive, nothing you defined is overridden. Tune the
+placeholders to your palette.
 
 ## 6. How recipes reach Tailwind
 

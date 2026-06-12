@@ -586,7 +586,15 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
         `The default token block is documented at https://shortwind.dev/docs/install#theme-tokens`,
     );
   }
-  p.outro(`Next: run \`${result.packageManager} dev\` to start watching.`);
+  p.outro(
+    `Next: run \`${devCmd(result.packageManager)}\` and check a recipe renders. After a production build, \`npx shortwind doctor\` verifies nothing shipped unexpanded.`,
+  );
+}
+
+// `npm dev` is not a thing — npm needs the `run` form; pnpm/yarn/bun accept
+// the bare script name.
+function devCmd(pm: Awaited<ReturnType<typeof init>>["packageManager"]): string {
+  return pm === "npm" ? "npm run dev" : `${pm} dev`;
 }
 
 function describeAgentsFile(result: Awaited<ReturnType<typeof init>>): string {
