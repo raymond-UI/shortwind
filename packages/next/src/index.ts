@@ -1,5 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  detectTailwindMajor,
+  findTailwindEntryCssFiles,
+  loadRegistryFromDir,
+  syncSourceDirectiveToFile,
+  TailwindAdapterError,
+} from "@shortwind/tailwind";
 import { clearRegistryCache } from "./loader.js";
 // Type-only import (next is a peer dependency): the accepted/returned config
 // is Next's OWN NextConfig, resolved against the consumer's installed next, so
@@ -35,9 +42,18 @@ export function withShortwind(
 ): (nextConfig?: NextConfig) => NextConfig {
   const cwd = options.cwd ?? process.cwd();
   const recipesDir = options.recipesDir ?? path.join(cwd, "recipes");
+  // Recipe expansions exist only in loader output, which Tailwind never sees:
+  // in Next, Tailwind v4 reads the entry CSS FROM DISK (PostCSS/Turbopack) and
+  // scans on-disk sources — there is no CSS pipeline hook equivalent to Vite's
+  // load phase. So the registry-derived `@source inline(...)` safelist must
+  // live on disk too (#73). next.config is evaluated at the start of every
+  // `next dev`/`next build`, which makes this the reliable sync point for both
+  // bundlers; the loader refreshes the same files when recipes change
+  // mid-session (see loader.ts).
+  const entryCss = syncSafelist(cwd, recipesDir);
 
   return (nextConfig: NextConfig = {}) => {
-    const loaderOptions = { recipesDir, strict: options.strict ?? false };
+    const loaderOptions = { recipesDir, strict: options.strict ?? false, entryCss };
     const previousWebpack = nextConfig.webpack;
 
     const wrapped: NextConfig = {
@@ -67,10 +83,10 @@ export function withShortwind(
     const turbo = nextConfig.turbopack ?? {};
     const rules: NonNullable<NextConfig["turbopack"]>["rules"] = { ...(turbo.rules ?? {}) };
     // Asymmetry vs the webpack rule's `exclude: /node_modules/`: Turbopack rule
-    // keys are globs with no negation syntax, so a node_modules exclude can't be
-    // expressed here. Turbopack does not apply custom loader rules to
-    // node_modules by default, so dependency files aren't transformed; the
-    // loader is also a no-op on any file without `@recipe` tokens.
+    // keys are globs with no negation syntax, so a node_modules exclude can't
+    // be expressed here — and Next 16's Turbopack DOES apply custom loader
+    // rules to node_modules. The loader itself skips vendored paths (#75), so
+    // dependency files pass through untransformed and unscanned.
     rules["*.{tsx,ts,jsx,js,mdx,md}"] = {
       loaders: [{ loader: LOADER_PATH, options: loaderOptions }],
     };
@@ -78,6 +94,45 @@ export function withShortwind(
 
     return wrapped;
   };
+}
+
+// Upsert the safelist into every Tailwind v4 entry stylesheet. Failures are
+// reported, never thrown — a broken recipe or a read-only filesystem must not
+// take down config evaluation (the loader will surface recipe errors with
+// proper module attribution).
+function syncSafelist(cwd: string, recipesDir: string): string[] {
+  try {
+    const registry = loadRegistryFromDir(recipesDir);
+    const files = findTailwindEntryCssFiles(cwd);
+    if (Object.keys(registry.flattened).length > 0 && files.length === 0 && isTailwind4(cwd)) {
+      console.warn(
+        `[shortwind] no Tailwind entry CSS found under ${cwd} (a .css with @import "tailwindcss") — ` +
+          `recipe-only utilities won't reach Tailwind's generator and will render unstyled`,
+      );
+    }
+    for (const file of files) {
+      try {
+        syncSourceDirectiveToFile(file, registry);
+      } catch (err) {
+        console.warn(`[shortwind] could not write safelist to ${file}: ${String(err)}`);
+      }
+    }
+    return files;
+  } catch (err) {
+    if (err instanceof TailwindAdapterError) {
+      console.error(`[shortwind] ${err.message}`);
+      return [];
+    }
+    throw err;
+  }
+}
+
+function isTailwind4(cwd: string): boolean {
+  try {
+    return detectTailwindMajor(cwd) === 4;
+  } catch {
+    return false;
+  }
 }
 
 export { default as shortwindLoader } from "./loader.js";

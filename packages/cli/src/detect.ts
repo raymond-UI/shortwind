@@ -1,8 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { SkillAdapter } from "@shortwind/core";
+
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 export type Bundler = "vite" | "next" | "astro" | "unknown";
+
+// The detected bundler doubles as the adapter flavor for the generated
+// SKILL.md's escape-hatch/strict snippets (#81); "unknown" means generic.
+export function skillAdapterFor(bundler: Bundler): SkillAdapter | undefined {
+  return bundler === "unknown" ? undefined : bundler;
+}
 export type Framework = "react" | "vue" | "svelte" | "astro" | "plain";
 
 export type ProjectShape = {

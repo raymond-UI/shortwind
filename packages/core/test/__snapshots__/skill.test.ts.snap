@@ -35,12 +35,49 @@ The rule: the recipe text must appear as a **literal string the build can see** 
 
 \`\`\`tsx
 <div className="@card-elevated p-6">                    // expands
-<a className={active ? "@tab-active" : "@tab"}>         // expands (JSX only)
-const cfg = { recipe: "@badge-success" };
+<a className={active ? "@btn-primary" : "@btn"}>        // expands (JSX only)
+const cfg = { recipe: "@card-elevated" };
 <span className={cfg.recipe}>                           // does NOT expand — silent
 \`\`\`
 
-Write static class lists literally. For a runtime choice between recipes, expand them with \`expandClassList\` from your Shortwind adapter (\`@shortwind/vite\`, \`@shortwind/next\`, or \`@shortwind/astro\`) and bind the resulting Tailwind — full helper at https://shortwind.dev/docs/dynamic-classes.
+Write static class lists literally. For a genuine runtime choice between recipes, use the escape hatch below — don't route around it with raw Tailwind.
+
+### Runtime escape hatch: \`rc()\` / \`expandClassList\`
+
+Expand the recipe at RUNTIME and bind the resulting plain-Tailwind string:
+
+\`\`\`ts
+// src/lib/rc.ts
+import { expandClassList } from "@shortwind/vite";
+import registry from "virtual:shortwind/registry";
+export const rc = (classList: string): string => expandClassList(classList, registry, true);
+\`\`\`
+
+\`\`\`tsx
+<span className={ok ? rc("@btn-primary") : rc("@btn")}>
+\`\`\`
+
+Full guide: https://shortwind.dev/docs/dynamic-classes
+
+### Catch silent leaks: turn on \`strict\`
+
+A leaked \`@token\` ships as raw text behind a green build. \`strict: true\` fails the build on any residual recipe token instead (the \`rc()\` pattern above stays exempt):
+
+\`\`\`ts
+// vite.config.ts
+import { shortwind } from "@shortwind/vite";
+export default defineConfig({ plugins: [shortwind({ strict: true }), tailwindcss()] });
+\`\`\`
+\`\`\`ts
+// next.config.ts
+import { withShortwind } from "@shortwind/next";
+export default withShortwind({ strict: true })(nextConfig);
+\`\`\`
+\`\`\`ts
+// astro.config.mjs
+import shortwind from "@shortwind/astro";
+export default defineConfig({ integrations: [shortwind({ strict: true })] });
+\`\`\`
 
 ## Available recipes
 

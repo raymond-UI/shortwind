@@ -447,7 +447,7 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
       ``,
       `config:            ${result.configPath}`,
       `vscode settings:   ${result.vscodePath}`,
-      `pre-commit:        ${result.huskyPath}`,
+      `pre-commit:        ${result.huskyPath ?? "skipped (not a git repository)"}`,
       `SKILL.md:          ${result.skillPath}`,
       `theme:             ${describeTheme(result)}`,
       `bundler config:    ${describeBundlerConfig(result)}`,

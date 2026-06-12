@@ -3,6 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
 import type { Diagnostic, Recipe } from "@shortwind/core";
+import {
+  findTailwindEntryCssFiles,
+  syncSourceDirectiveToFile,
+} from "@shortwind/tailwind";
+import { detectProject, skillAdapterFor } from "../detect.js";
 import { installedFamilies, readConfig } from "../project.js";
 
 export type BuildOptions = {
@@ -13,6 +18,10 @@ export type BuildResult = {
   changed: boolean;
   families: string[];
   skillPath: string;
+  // Tailwind entry CSS files whose on-disk @source inline(...) safelist was
+  // refreshed by this build (#73) — empty for Vite/Astro projects, which
+  // inject the directive in-memory at build time.
+  safelistCssPaths: string[];
 };
 
 export class BuildError extends Error {
@@ -56,8 +65,13 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   const resolved = buildRegistry(allRecipes, { guidance });
   if (!resolved.ok) throw new BuildError(resolved.errors);
 
+  const { bundler } = detectProject(cwd);
+  const adapter = skillAdapterFor(bundler);
   const skillPath = path.join(cwd, config.outputPath);
-  const next = renderSkillMarkdown(resolved.value, { order: families });
+  const next = renderSkillMarkdown(resolved.value, {
+    order: families,
+    ...(adapter ? { adapter } : {}),
+  });
   const current = existsSync(skillPath) ? readFileSync(skillPath, "utf8") : null;
   let changed = false;
   if (current !== next) {
@@ -66,5 +80,16 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
     changed = true;
   }
 
-  return { changed, families, skillPath };
+  // Refresh the on-disk safelist for projects where Tailwind reads the entry
+  // CSS from disk (Next, bare Tailwind CLI) — see init (#73). Vite/Astro
+  // inject the directive in-memory, so their files are never touched.
+  const safelistCssPaths: string[] = [];
+  if (bundler !== "vite" && bundler !== "astro") {
+    for (const file of findTailwindEntryCssFiles(cwd)) {
+      if (syncSourceDirectiveToFile(file, resolved.value)) changed = true;
+      safelistCssPaths.push(file);
+    }
+  }
+
+  return { changed, families, skillPath, safelistCssPaths };
 }

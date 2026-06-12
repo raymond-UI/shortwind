@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync, type Dirent } from "node:fs";
 import path from "node:path";
 import {
   buildRegistry,
@@ -61,6 +61,9 @@ const RECIPE_TOKEN_RE = /@[A-Za-z0-9][\w-]*/g;
 export function findUnexpandedRecipes(code: string, registry: Registry): string[] {
   const known = registry.flattened;
   const found = new Set<string>();
+  // Same rc()/expandClassList exemption as findResidualRecipeTokens (#75):
+  // `class={rc("@nav-link")}` is the documented runtime pattern, not a leak.
+  code = code.replace(RUNTIME_EXPANDER_ARG_RE, "");
   for (const m of code.matchAll(CLASS_VALUE_RE)) {
     const value = m[2] ?? m[3] ?? "";
     for (const token of value.match(RECIPE_TOKEN_RE) ?? []) {
@@ -82,7 +85,12 @@ export function findUnexpandedRecipes(code: string, registry: Registry): string[
 export function findResidualRecipeTokens(code: string, registry: Registry): string[] {
   const known = registry.flattened;
   const found = new Set<string>();
-  for (const m of code.matchAll(RESIDUAL_TOKEN_RE)) {
+  // A recipe handed to the documented runtime escape hatch is expanded at
+  // RUNTIME by design — the literal surviving into build output is the
+  // feature, not a leak. Blank those call arguments so strict mode and
+  // rc()/expandClassList compose (#75).
+  const scannable = code.replace(RUNTIME_EXPANDER_ARG_RE, "");
+  for (const m of scannable.matchAll(RESIDUAL_TOKEN_RE)) {
     const token = m[0];
     if (Object.hasOwn(known, token.slice(1))) found.add(token);
   }
@@ -92,6 +100,12 @@ export function findResidualRecipeTokens(code: string, registry: Registry): stri
 // Like RECIPE_TOKEN_RE, plus a lookbehind so an email-like `user@card.com`
 // never reads as the recipe `@card`.
 const RESIDUAL_TOKEN_RE = /(?<![\w.@-])@[A-Za-z0-9][\w-]*/g;
+
+// String-literal first argument of the documented runtime expanders:
+// `rc("@badge")` / `expandClassList("@badge", registry, true)`. Deliberately
+// literal-only — a recipe reaching the call through a variable is still
+// invisible to the build and stays flagged.
+const RUNTIME_EXPANDER_ARG_RE = /\b(?:rc|expandClassList)\s*\(\s*(["'`])[^"'`\n]*\1/g;
 
 // One message for every adapter, so Vite/Next/Astro report leaks identically.
 export function residualRecipeMessage(id: string, tokens: string[]): string {
@@ -119,13 +133,36 @@ export function computeSafelistTokens(registry: Registry): string[] {
   return [...set].sort();
 }
 
+// Characters that can confuse `@source inline("…")` parsing: arbitrary values
+// (`tracking-[0.2em]`), nested quotes (`before:content-['']`), backslashes.
+// Tailwind 4.3 parses all of these inside one big directive, but the beta.11
+// Astro dogfooding round (older v4 minor) saw a single such token silently
+// kill every token AFTER it in the same directive string — looking like
+// "variants don't work at all" with no error anywhere (#79).
+const FRAGILE_TOKEN_RE = /[[\]'`\\]/;
+
 export function buildSourceDirective(registry: Registry): string {
   const tokens = computeSafelistTokens(registry);
   if (tokens.length === 0) return "";
-  return `@source inline("${tokens.join(" ")}");`;
+  // Plain tokens share one directive; each fragile token gets a directive of
+  // its own, so a token Tailwind's inline-source parser chokes on can only
+  // ever lose itself — never the tokens behind it (#79).
+  const plain = tokens.filter((t) => !FRAGILE_TOKEN_RE.test(t));
+  const fragile = tokens.filter((t) => FRAGILE_TOKEN_RE.test(t));
+  const directives: string[] = [];
+  if (plain.length > 0) directives.push(`@source inline("${plain.join(" ")}");`);
+  for (const t of fragile) directives.push(`@source inline("${t}");`);
+  return directives.join("\n");
 }
 
-export const SHORTWIND_INJECT_MARKER = "/* shortwind:source-inject */";
+export const SHORTWIND_INJECT_MARKER = "/* shortwind:source-inject:start */";
+export const SHORTWIND_INJECT_END_MARKER = "/* shortwind:source-inject:end */";
+// beta.11 wrote a single-line marker with no end delimiter, so an injected
+// block could never be refreshed — a stale on-disk safelist would silently pin
+// the candidate set forever (#74). Recognize the old marker (some dogfooding
+// projects wrote it to disk via hand-rolled injectSourceDirective scripts) and
+// leave such files alone rather than double-injecting.
+const LEGACY_INJECT_MARKER = "/* shortwind:source-inject */";
 
 const TAILWIND_IMPORT_RE = /@import\s+["']tailwindcss["'][^;\n]*;?/;
 
@@ -133,18 +170,90 @@ export function hasTailwindImport(css: string): boolean {
   return TAILWIND_IMPORT_RE.test(css);
 }
 
+// Upsert, not insert-once: when the CSS already carries an injected block the
+// directive is REPLACED if the registry changed, so callers can re-run this on
+// every build (in-memory or on-disk) and the safelist always tracks recipes/.
 export function injectSourceDirective(css: string, registry: Registry): string {
-  if (css.includes(SHORTWIND_INJECT_MARKER)) return css;
   const directive = buildSourceDirective(registry);
+  const start = css.indexOf(SHORTWIND_INJECT_MARKER);
+  if (start !== -1) {
+    const end = css.indexOf(SHORTWIND_INJECT_END_MARKER, start);
+    if (end === -1) return css; // half a block — refuse to guess its boundary
+    const blockEnd = end + SHORTWIND_INJECT_END_MARKER.length;
+    if (!directive) {
+      // Registry emptied out — drop the block (and the surrounding newlines
+      // the original insertion added) instead of leaving a stale safelist.
+      return css.slice(0, start).replace(/\n$/, "") + css.slice(blockEnd).replace(/^\n/, "");
+    }
+    const next = `${SHORTWIND_INJECT_MARKER}\n${directive}\n${SHORTWIND_INJECT_END_MARKER}`;
+    if (css.slice(start, blockEnd) === next) return css;
+    return css.slice(0, start) + next + css.slice(blockEnd);
+  }
+  if (css.includes(LEGACY_INJECT_MARKER)) return css;
   if (!directive) return css;
   const m = css.match(TAILWIND_IMPORT_RE);
   if (!m) return css;
   const insertAt = (m.index ?? 0) + m[0].length;
   return (
     css.slice(0, insertAt) +
-    `\n${SHORTWIND_INJECT_MARKER}\n${directive}\n` +
+    `\n${SHORTWIND_INJECT_MARKER}\n${directive}\n${SHORTWIND_INJECT_END_MARKER}\n` +
     css.slice(insertAt)
   );
+}
+
+// Build output and dependency directories that never hold the user's Tailwind
+// entry CSS. Dot-directories (.next, .astro, .git, …) are skipped wholesale.
+const ENTRY_SCAN_IGNORE = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  "recipes",
+]);
+const ENTRY_SCAN_MAX_DEPTH = 6;
+
+// Locate the Tailwind v4 entry stylesheets — every .css under cwd with an
+// `@import "tailwindcss"` — for adapters that have no in-build CSS hook (Next:
+// Tailwind reads the entry from disk via PostCSS/Turbopack, so the safelist
+// must live ON disk; Vite-based adapters inject in-memory instead). Bounded
+// depth keeps the walk cheap on big repos.
+export function findTailwindEntryCssFiles(cwd: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string, depth: number): void => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (depth >= ENTRY_SCAN_MAX_DEPTH) continue;
+        if (entry.name.startsWith(".") || ENTRY_SCAN_IGNORE.has(entry.name)) continue;
+        walk(full, depth + 1);
+      } else if (entry.name.endsWith(".css")) {
+        try {
+          if (hasTailwindImport(readFileSync(full, "utf8"))) found.push(full);
+        } catch {
+          // unreadable — not a usable entry
+        }
+      }
+    }
+  };
+  walk(path.resolve(cwd), 0);
+  return found.sort();
+}
+
+// On-disk variant of injectSourceDirective: upsert the marker-guarded
+// directive block into the stylesheet and report whether the file changed.
+export function syncSourceDirectiveToFile(cssPath: string, registry: Registry): boolean {
+  const css = readFileSync(cssPath, "utf8");
+  const next = injectSourceDirective(css, registry);
+  if (next === css) return false;
+  writeFileSync(cssPath, next);
+  return true;
 }
 
 // Single source of truth for the html-vs-jsx decision, shared by every adapter

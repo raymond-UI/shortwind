@@ -11,13 +11,17 @@ import {
   rewriteHeaderSha,
   verifyFetchedFamily,
 } from "./fingerprint.js";
-import { detectProject, type PackageManager } from "./detect.js";
+import { detectProject, skillAdapterFor, type Bundler, type PackageManager } from "./detect.js";
 import {
   BUNDLED_ORIGIN,
   resolveSource,
   resolvePresetFamilies,
   type RegistrySource,
 } from "./registry-source.js";
+import {
+  findTailwindEntryCssFiles,
+  syncSourceDirectiveToFile,
+} from "@shortwind/tailwind";
 import { readLockfile, writeLockfile } from "./lockfile.js";
 import { findMissingThemeTokens, scaffoldTheme, type ThemeAction } from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
@@ -50,10 +54,14 @@ export type InitResult = {
   skippedFamilies: string[];
   configPath: string;
   vscodePath: string;
-  huskyPath: string;
+  // null when the target isn't a git repository (hook not installed).
+  huskyPath: string | null;
   skillPath: string;
   themePath: string | null;
   themeAction: ThemeAction;
+  // Tailwind entry CSS files that received the on-disk @source inline(...)
+  // safelist (#73) — empty for Vite/Astro, which inject it in-memory.
+  safelistCssPaths: string[];
   // Design tokens the installed recipes reference that the project's existing
   // (untouched) theme does not define — empty when the theme was scaffolded.
   missingThemeTokens: string[];
@@ -100,7 +108,26 @@ export async function init(options: InitOptions): Promise<InitResult> {
   }
 
   const recipesDir = path.join(cwd, "recipes");
-  const { installed, skipped } = await copyRecipes(source, families, recipesDir);
+  let copied: { installed: string[]; skipped: string[] };
+  try {
+    copied = await copyRecipes(source, families, recipesDir);
+  } catch (err) {
+    // A mid-copy abort (e.g. a registry fetch that timed out even after
+    // retries) used to surface as a bare TimeoutError, leaving a silently
+    // half-initialized project — recipes but no config/SKILL.md/theme (#78).
+    // Report exactly what landed and that re-running resumes: copyRecipes
+    // skips families already on disk, and everything after this point is
+    // idempotent.
+    const done = families.filter((f) => existsSync(path.join(recipesDir, `${f}.css`)));
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `init aborted while copying recipe families (${done.length}/${families.length} copied` +
+        `${done.length > 0 ? `: ${done.join(", ")}` : ""}) — ${reason}\n` +
+        `The project is incomplete (no config/SKILL.md/theme yet). ` +
+        `Re-run the same init command to resume; already-copied families are skipped.`,
+    );
+  }
+  const { installed, skipped } = copied;
   await updateLockfile(recipesDir, registry, installed);
 
   const configPath = path.join(cwd, "shortwind.config.json");
@@ -109,11 +136,10 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const vscodePath = path.join(cwd, ".vscode", "settings.json");
   await wireVscodeClassRegex(vscodePath);
 
-  const huskyPath = path.join(cwd, ".husky", "pre-commit");
-  await installHuskyHook(huskyPath);
+  const huskyPath = await installHuskyHook(cwd, path.join(cwd, ".husky", "pre-commit"));
 
   const skillPath = path.join(cwd, "skills", "shortwind", "SKILL.md");
-  const skillRegistry = await writeSkillMd(skillPath, recipesDir, families);
+  const skillRegistry = await writeSkillMd(skillPath, recipesDir, families, shape.bundler);
 
   // Recipes reference semantic color tokens; scaffold the default theme so they
   // render with color on first run instead of as colorless markup.
@@ -128,6 +154,20 @@ export async function init(options: InitOptions): Promise<InitResult> {
   if (theme.action === "skipped" && theme.themePath && skillRegistry) {
     const css = await readFile(theme.themePath, "utf8");
     missingThemeTokens = findMissingThemeTokens(css, skillRegistry.flattened);
+  }
+
+  // Bundlers without an in-build CSS hook (Next; bare Tailwind CLI) need the
+  // recipe-derived `@source inline(...)` safelist ON disk — Tailwind v4 reads
+  // the entry CSS from disk and never sees loader output, so recipe-body-only
+  // utilities would silently never generate (#73). Vite/Astro inject the same
+  // directive in-memory at build time, so their projects are left untouched.
+  // Runs after scaffoldTheme, which may have just created the entry CSS.
+  const safelistCssPaths: string[] = [];
+  if (shape.bundler !== "vite" && shape.bundler !== "astro" && skillRegistry) {
+    for (const file of findTailwindEntryCssFiles(cwd)) {
+      syncSourceDirectiveToFile(file, skillRegistry);
+      safelistCssPaths.push(file);
+    }
   }
 
   // Wire the plugin into the bundler config (Vite auto-patches; Next/Astro
@@ -151,6 +191,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
     skillPath,
     themePath: theme.themePath,
     themeAction: theme.action,
+    safelistCssPaths,
     missingThemeTokens,
     bundlerConfigPath: bundlerConfig.configPath,
     bundlerConfigAction: bundlerConfig.action,
@@ -322,18 +363,27 @@ async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
   await writeFile(vscodePath, next.endsWith("\n") ? next : next + "\n");
 }
 
-const HUSKY_LINE = "npx shortwind build";
+// The CLI ships as @shortwind/cli with no `shortwind` bin alias and is not
+// added as a devDependency, so a bare `npx shortwind build` resolves a
+// different (nonexistent) npm package and 404s the user's first commit (#76).
+// Invoke it the same way init itself is invoked.
+const HUSKY_LINE = "npx @shortwind/cli build";
 
-async function installHuskyHook(huskyPath: string): Promise<void> {
+// Returns the hook path, or null when the target isn't a git repository —
+// installing a pre-commit hook into a non-repo is presumptuous and husky
+// itself has nothing to wire it into (#76).
+async function installHuskyHook(cwd: string, huskyPath: string): Promise<string | null> {
+  if (!existsSync(path.join(cwd, ".git"))) return null;
   await mkdir(path.dirname(huskyPath), { recursive: true });
   if (!existsSync(huskyPath)) {
     await writeFile(huskyPath, `${HUSKY_LINE}\n`, { mode: 0o755 });
-    return;
+    return huskyPath;
   }
   const current = await readFile(huskyPath, "utf8");
-  if (current.includes(HUSKY_LINE)) return;
+  if (current.includes(HUSKY_LINE)) return huskyPath;
   const next = current.endsWith("\n") ? current + HUSKY_LINE + "\n" : current + "\n" + HUSKY_LINE + "\n";
   await writeFile(huskyPath, next, { mode: 0o755 });
+  return huskyPath;
 }
 
 // Writes SKILL.md and returns the resolved registry (null when recipes were
@@ -343,6 +393,7 @@ async function writeSkillMd(
   skillPath: string,
   recipesDir: string,
   families: string[],
+  bundler: Bundler,
 ): Promise<Registry | null> {
   const allRecipes: Recipe[] = [];
   const guidance: Record<string, string> = {};
@@ -368,6 +419,10 @@ async function writeSkillMd(
     return null;
   }
   await mkdir(path.dirname(skillPath), { recursive: true });
-  await writeFile(skillPath, renderSkillMarkdown(resolved.value, { order: families }));
+  const adapter = skillAdapterFor(bundler);
+  await writeFile(
+    skillPath,
+    renderSkillMarkdown(resolved.value, { order: families, ...(adapter ? { adapter } : {}) }),
+  );
   return resolved.value;
 }

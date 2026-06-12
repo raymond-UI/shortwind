@@ -76,3 +76,51 @@ describe("default config registry (#52)", () => {
     expect(DEFAULT_CONFIG.registry).toBe(BUNDLED_ORIGIN);
   });
 });
+
+describe("transient fetch retry (#78)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("retries a timed-out family fetch instead of aborting init", async () => {
+    let familyHits = 0;
+    const timeoutErr = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith("/recipes/card.css")) {
+        familyHits++;
+        if (familyHits === 1) throw timeoutErr; // first attempt: slow CDN
+        return new Response("/* shortwind: card@0.0.1 sha:000000 */\n@recipe card { p-4 }\n", {
+          status: 200,
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const src = await resolveSource("https://registry.example.com");
+    const body = await src.loadFamily("card");
+    expect(body).toContain("@recipe card");
+    expect(familyHits).toBe(2);
+  });
+
+  it("gives up after exhausting retries and surfaces the timeout", async () => {
+    const timeoutErr = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    const fetchMock = vi.fn(async () => {
+      throw timeoutErr;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const src = await resolveSource("https://registry.example.com");
+    await expect(src.loadFamily("card")).rejects.toThrow(/timeout/i);
+    // initial attempt + 2 retries
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry an HTTP error status — the server answered", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const src = await resolveSource("https://registry.example.com");
+    await expect(src.loadFamily("card")).rejects.toThrow(/404/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

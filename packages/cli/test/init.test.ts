@@ -114,6 +114,108 @@ describe("init", () => {
     expect(existsSync(path.join(dir, "recipes", ".shortwind-lock.json"))).toBe(true);
   });
 
+  it("writes the @source inline(...) safelist into a Next project's entry CSS (#73)", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { next: "^16.0.0", react: "^19.0.0" },
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+    const globals = path.join(dir, "app", "globals.css");
+    await mkdir(path.dirname(globals), { recursive: true });
+    await writeFile(globals, `@import "tailwindcss";\n`);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.safelistCssPaths).toContain(globals);
+    const css = readFileSync(globals, "utf8");
+    expect(css).toContain("@source inline(");
+    // A recipe-body-only utility Tailwind can't discover from on-disk sources.
+    expect(css).toContain("bg-card");
+  });
+
+  it("does not write the on-disk safelist for Vite projects (in-memory injection)", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { vite: "^5.0.0", react: "^18.0.0" },
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+    const entry = path.join(dir, "src", "index.css");
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(entry, `@import "tailwindcss";\n`);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.safelistCssPaths).toEqual([]);
+    expect(readFileSync(entry, "utf8")).not.toContain("@source inline(");
+  });
+
+  it("a mid-copy abort fails with a resumable message, and re-running completes (#78)", async () => {
+    const { vi } = await import("vitest");
+    const dir = await setupProject();
+    cleanup.push(dir);
+    const origin = "https://registry.example.com";
+    const timeoutErr = new DOMException(
+      "The operation was aborted due to timeout",
+      "TimeoutError",
+    );
+    const family = (name: string): string =>
+      `/* shortwind: ${name}@0.0.1 sha:000000 */\n@recipe ${name} { p-4 }\n`;
+    let alphaBroken = true;
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith("/presets.json")) {
+        return new Response(JSON.stringify({ starter: ["zed", "alpha"] }), { status: 200 });
+      }
+      if (url.endsWith("/index.json")) {
+        return new Response(JSON.stringify({ families: ["zed", "alpha"] }), { status: 200 });
+      }
+      const m = url.match(/\/recipes\/([a-z]+)\.css$/);
+      if (m) {
+        if (m[1] === "alpha" && alphaBroken) throw timeoutErr;
+        return new Response(family(m[1]!), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const installer = makeInstaller();
+      await expect(
+        init({ cwd: dir, preset: "starter", registry: origin, installPackages: installer.fn }),
+      ).rejects.toThrow(/1\/2 copied: zed[\s\S]*Re-run the same init command to resume/);
+      // Half-done on purpose: the copied family is on disk, the config isn't.
+      expect(existsSync(path.join(dir, "recipes", "zed.css"))).toBe(true);
+      expect(existsSync(path.join(dir, "shortwind.config.json"))).toBe(false);
+
+      // The registry recovered — the same command resumes and completes.
+      alphaBroken = false;
+      const result = await init({
+        cwd: dir,
+        preset: "starter",
+        registry: origin,
+        installPackages: installer.fn,
+      });
+      expect(result.skippedFamilies).toContain("zed");
+      expect(result.installedFamilies).toContain("alpha");
+      expect(existsSync(path.join(dir, "shortwind.config.json"))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("writes shortwind.config.json with registry and recipesDir", async () => {
     const dir = await setupProject();
     cleanup.push(dir);
@@ -156,7 +258,31 @@ describe("init", () => {
     expect(() => parseJsonc(body)).not.toThrow();
   });
 
-  it("installs the pre-commit hook with shortwind build", async () => {
+  it("installs a pre-commit hook that invokes the real @shortwind/cli package (#76)", async () => {
+    const dir = await setupProject();
+    cleanup.push(dir);
+    await mkdir(path.join(dir, ".git"), { recursive: true });
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "none",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.huskyPath).not.toBeNull();
+    const hook = readFileSync(result.huskyPath!, "utf8");
+    // `npx shortwind build` resolves a nonexistent npm package (the CLI has
+    // no `shortwind` bin and isn't a devDependency) — first commit 404s.
+    expect(hook).toContain("npx @shortwind/cli build");
+    expect(hook).not.toMatch(/npx shortwind build/);
+    // Husky v9: no shebang, no sourcing of _/husky.sh
+    expect(hook).not.toContain("#!/usr/bin/env sh");
+    expect(hook).not.toContain("husky.sh");
+  });
+
+  it("skips the pre-commit hook when the target isn't a git repository (#76)", async () => {
     const dir = await setupProject();
     cleanup.push(dir);
 
@@ -168,11 +294,8 @@ describe("init", () => {
       installPackages: installer.fn,
     });
 
-    const hook = readFileSync(result.huskyPath, "utf8");
-    expect(hook).toContain("npx shortwind build");
-    // Husky v9: no shebang, no sourcing of _/husky.sh
-    expect(hook).not.toContain("#!/usr/bin/env sh");
-    expect(hook).not.toContain("husky.sh");
+    expect(result.huskyPath).toBeNull();
+    expect(existsSync(path.join(dir, ".husky", "pre-commit"))).toBe(false);
   });
 
   it("re-init with a new --registry overwrites the prior value in shortwind.config.json", async () => {
@@ -219,6 +342,58 @@ describe("init", () => {
       const cap = family[0]!.toUpperCase() + family.slice(1);
       expect(md).toContain(`### ${cap} recipes`);
     }
+  });
+
+  it("SKILL.md examples only reference recipes the preset installed (#80)", async () => {
+    const dir = await setupProject();
+    cleanup.push(dir);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter", // no badge or navigation family
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    const md = readFileSync(result.skillPath, "utf8");
+    // Recipes the install actually provides, straight from the listing.
+    const installed = new Set(
+      [...md.matchAll(/^  @([A-Za-z0-9][\w-]*)/gm)].map((m) => m[1]),
+    );
+    expect(installed.size).toBeGreaterThan(0);
+    // Every @recipe mentioned inside example code fences must be installed.
+    for (const fence of md.matchAll(/```tsx([\s\S]*?)```/g)) {
+      for (const m of (fence[1] ?? "").matchAll(/@([A-Za-z0-9][\w-]*)/g)) {
+        expect(installed.has(m[1]!), `@${m[1]} is not in the starter preset`).toBe(true);
+      }
+    }
+  });
+
+  it("SKILL.md surfaces strict mode and the escape hatch for the detected adapter (#81)", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { next: "^16.0.0", react: "^19.0.0" },
+    });
+    cleanup.push(dir);
+
+    const installer = makeInstaller();
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    const md = readFileSync(result.skillPath, "utf8");
+    expect(md).toContain("withShortwind({ strict: true })");
+    expect(md).toContain(`import { expandClassList, loadRegistryFromDir } from "@shortwind/next"`);
+    // Vite-only idioms must not leak into a Next SKILL.
+    expect(md).not.toContain("virtual:shortwind/registry");
+
+    const agents = readFileSync(path.join(dir, "AGENTS.md"), "utf8");
+    expect(agents).toContain("expandClassList");
+    expect(agents).toContain("strict: true");
   });
 
   it("--preset=none produces a valid install with empty ./recipes/", async () => {

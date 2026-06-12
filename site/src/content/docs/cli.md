@@ -38,8 +38,8 @@ Delete one or more families. Updates `SKILL.md` and the lockfile.
 
 ## `shortwind preset <name>`
 
-Apply a curated set of families. Built-in presets include `minimal`,
-`marketing`, and `dashboard`.
+Apply a curated set of families. Built-in presets are `starter`, `app`,
+`content`, and `all`.
 
 ## `shortwind ls [--family <name>]`
 

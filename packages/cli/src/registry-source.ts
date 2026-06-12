@@ -142,13 +142,40 @@ function fileSource(origin: string): RegistrySource {
   };
 }
 
+// A timed-out fetch (AbortSignal.timeout → DOMException "TimeoutError") or a
+// network-level failure (undici throws TypeError "fetch failed") is worth
+// retrying; an HTTP error status is not — the server answered.
+const FETCH_RETRIES = 2;
+const RETRY_BASE_DELAY_MS = 500;
+
+function isTransientFetchError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "TimeoutError") || err instanceof TypeError
+  );
+}
+
 function httpSource(origin: string): RegistrySource {
   const base = origin.replace(/\/+$/, "");
   // Every content fetch is bounded: without a signal a stalled connection hangs
   // `init`/`add` forever, defeating the offline-fallback (the bundled catalog
-  // only triggers when the probe rejects, not when it hangs).
-  const get = (url: string): Promise<Response> =>
-    fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  // only triggers when the probe rejects, not when it hangs). A single slow
+  // response must not abort a 20-family init either (#78) — transient
+  // timeouts/network errors are retried with backoff before giving up.
+  const get = async (url: string): Promise<Response> => {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= FETCH_RETRIES; attempt++) {
+      if (attempt > 0) {
+        await new Promise((r) => setTimeout(r, RETRY_BASE_DELAY_MS * attempt));
+      }
+      try {
+        return await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      } catch (err) {
+        if (!isTransientFetchError(err)) throw err;
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  };
   // The reachability probe (defaultCatalogSource) fetches presets.json, then
   // `init` immediately fetches it again — cache the first result so the second
   // call is free.

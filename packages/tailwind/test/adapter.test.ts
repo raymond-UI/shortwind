@@ -1,22 +1,24 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { realpathSync } from "node:fs";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "@babel/parser";
-import { buildRegistry, type Recipe } from "@shortwind/core";
+import { buildRegistry, type Recipe, type Registry } from "@shortwind/core";
 import {
   buildSourceDirective,
   computeSafelistTokens,
   detectTailwindMajor,
   findResidualRecipeTokens,
+  findTailwindEntryCssFiles,
   findUnexpandedRecipes,
   hasTailwindImport,
   injectSourceDirective,
   loadRegistryFromDir,
   shortwindPlugin,
   SHORTWIND_INJECT_MARKER,
+  syncSourceDirectiveToFile,
   TailwindAdapterError,
   transformContent,
 } from "../src/index.js";
@@ -303,6 +305,20 @@ describe("findResidualRecipeTokens (#67)", () => {
     const out = transformContent(`<div className="@card" />`, registry);
     expect(findResidualRecipeTokens(out, registry)).toEqual([]);
   });
+
+  it("exempts literal args of the rc()/expandClassList runtime escape hatch (#75)", () => {
+    const code = [
+      `const a = rc("@card-elevated");`,
+      `const b = expandClassList("@card p-6", registry, true);`,
+      `const c = rc('@badge-success');`,
+    ].join("\n");
+    expect(findResidualRecipeTokens(code, registry)).toEqual([]);
+  });
+
+  it("still flags a recipe reaching rc() through a variable (#75)", () => {
+    const code = `const name = "@card";\nconst cls = rc(name);`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual(["@card"]);
+  });
 });
 
 describe("findUnexpandedRecipes", () => {
@@ -361,12 +377,39 @@ describe("source directive injection", () => {
     expect([...tokens]).toEqual([...tokens].sort());
   });
 
-  it("builds a single @source inline(...) directive listing every token", () => {
+  it("builds @source inline(...) directives covering every token", () => {
     const directive = buildSourceDirective(registry);
     expect(directive.startsWith('@source inline("')).toBe(true);
     expect(directive.endsWith('");')).toBe(true);
     const tokens = computeSafelistTokens(registry);
     for (const t of tokens) expect(directive).toContain(t);
+  });
+
+  it("isolates bracket/arbitrary tokens into their own directives (#79)", () => {
+    const reg: Registry = {
+      families: {},
+      flattened: {
+        hero: [
+          "flex",
+          "underline",
+          "tracking-[0.2em]",
+          "before:content-['']",
+          "transition-[color,box-shadow]",
+        ],
+      },
+    };
+    const lines = buildSourceDirective(reg).split("\n");
+    // One combined directive for the plain tokens…
+    expect(lines[0]).toBe('@source inline("flex underline");');
+    // …and one directive per fragile token, so a token an older Tailwind v4
+    // inline-source parser chokes on can only ever lose itself.
+    expect(lines.slice(1).sort()).toEqual([
+      `@source inline("before:content-['']");`,
+      `@source inline("tracking-[0.2em]");`,
+      `@source inline("transition-[color,box-shadow]");`,
+    ]);
+    // Every line is a complete, self-terminated directive.
+    for (const line of lines) expect(line).toMatch(/^@source inline\("[^"]+"\);$/);
   });
 
   it("returns empty string for an empty registry", () => {
@@ -397,6 +440,34 @@ describe("source directive injection", () => {
     expect(twice).toBe(once);
   });
 
+  it("refreshes a stale injected block when the registry changes (#74)", () => {
+    const small: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    const grown: Registry = {
+      families: {},
+      flattened: { hero: ["bg-emerald-100"], aside: ["bg-amber-50"] },
+    };
+    const base = `@import "tailwindcss";\n\n:root { --x: 1; }\n`;
+    const first = injectSourceDirective(base, small);
+    const refreshed = injectSourceDirective(first, grown);
+    expect(refreshed).toContain("bg-amber-50");
+    // One block, not two — the stale block was replaced in place.
+    expect(refreshed.split(SHORTWIND_INJECT_MARKER)).toHaveLength(2);
+    // Refreshing again with the same registry is a no-op.
+    expect(injectSourceDirective(refreshed, grown)).toBe(refreshed);
+  });
+
+  it("removes the injected block when the registry empties out", () => {
+    const small: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    const base = `@import "tailwindcss";\n\n:root { --x: 1; }\n`;
+    const injected = injectSourceDirective(base, small);
+    expect(injectSourceDirective(injected, { families: {}, flattened: {} })).toBe(base);
+  });
+
+  it("leaves a legacy beta.11 single-marker block alone", () => {
+    const legacy = `@import "tailwindcss";\n/* shortwind:source-inject */\n@source inline("old-token");\n`;
+    expect(injectSourceDirective(legacy, registry)).toBe(legacy);
+  });
+
   it("returns the input unchanged when there is no tailwindcss import", () => {
     const input = `:root { --x: 1; }`;
     expect(injectSourceDirective(input, registry)).toBe(input);
@@ -408,6 +479,51 @@ describe("source directive injection", () => {
       input,
     );
   });
+});
+
+describe("on-disk safelist sync (#73)", () => {
+  let dirs: string[] = [];
+  beforeEach(() => {
+    dirs = [];
+  });
+  afterEach(async () => {
+    for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
+  });
+
+  async function makeDir(): Promise<string> {
+    const dir = realpathSync(await mkdtemp(path.join(tmpdir(), "shortwind-sync-")));
+    dirs.push(dir);
+    return dir;
+  }
+
+  it("findTailwindEntryCssFiles finds css files with a tailwindcss import, skipping vendored dirs", async () => {
+    const dir = await makeDir();
+    await mkdir(path.join(dir, "app"), { recursive: true });
+    await mkdir(path.join(dir, "node_modules", "pkg"), { recursive: true });
+    await mkdir(path.join(dir, ".next"), { recursive: true });
+    await writeFile(path.join(dir, "app", "globals.css"), `@import "tailwindcss";\n`);
+    await writeFile(path.join(dir, "app", "other.css"), `:root { --x: 1; }\n`);
+    await writeFile(path.join(dir, "node_modules", "pkg", "a.css"), `@import "tailwindcss";\n`);
+    await writeFile(path.join(dir, ".next", "b.css"), `@import "tailwindcss";\n`);
+    expect(findTailwindEntryCssFiles(dir)).toEqual([path.join(dir, "app", "globals.css")]);
+  });
+
+  it("syncSourceDirectiveToFile upserts the directive and reports change", async () => {
+    const dir = await makeDir();
+    const cssPath = path.join(dir, "globals.css");
+    await writeFile(cssPath, `@import "tailwindcss";\n`);
+    const registry: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    expect(syncSourceDirectiveToFile(cssPath, registry)).toBe(true);
+    const written = readFileSync(cssPath, "utf8");
+    expect(written).toContain("@source inline(");
+    expect(written).toContain("bg-emerald-100");
+    // Unchanged registry → no rewrite; changed registry → refreshed in place.
+    expect(syncSourceDirectiveToFile(cssPath, registry)).toBe(false);
+    const grown: Registry = { families: {}, flattened: { hero: ["bg-emerald-100", "p-4"] } };
+    expect(syncSourceDirectiveToFile(cssPath, grown)).toBe(true);
+    expect(readFileSync(cssPath, "utf8")).toContain("p-4");
+  });
+
 });
 
 describe("shortwindPlugin", () => {

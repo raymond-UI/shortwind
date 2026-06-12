@@ -6,6 +6,7 @@ import {
   loadRegistryFromDir,
   modeForFile,
   residualRecipeMessage,
+  syncSourceDirectiveToFile,
   transformContent,
   type TransformOptions,
 } from "@shortwind/tailwind";
@@ -18,6 +19,11 @@ export type ShortwindLoaderOptions = {
   // transformed output anywhere — including the silent variable-indirection
   // case (#67). Off by default; see @shortwind/vite's option of the same name.
   strict?: boolean;
+  // Tailwind entry stylesheets discovered by withShortwind at config-eval
+  // time. When the registry is rebuilt (a recipe changed mid-session), the
+  // on-disk `@source inline(...)` safelist in these files is refreshed so
+  // Tailwind regenerates with the new candidate set (#73).
+  entryCss?: readonly string[];
 };
 
 type CacheEntry = {
@@ -42,7 +48,7 @@ function recipesSignature(recipesDir: string): { signature: string; files: strin
   return { signature: parts.join("|"), files };
 }
 
-function getRegistry(recipesDir: string): CacheEntry {
+function getRegistry(recipesDir: string, entryCss: readonly string[] = []): CacheEntry {
   const { signature, files } = recipesSignature(recipesDir);
   const cached = registryCache.get(recipesDir);
   if (cached && cached.signature === signature) return cached;
@@ -52,6 +58,17 @@ function getRegistry(recipesDir: string): CacheEntry {
     signature,
   };
   registryCache.set(recipesDir, entry);
+  // Recipes changed since withShortwind's config-eval sync — refresh the
+  // on-disk safelist so a recipe authored mid-`next dev` renders styled (#73).
+  // The write is content-guarded (no-op when nothing changed) and best-effort:
+  // a read-only filesystem must not fail the module.
+  for (const cssPath of entryCss) {
+    try {
+      syncSourceDirectiveToFile(cssPath, entry.registry);
+    } catch {
+      // covered again at the next config evaluation
+    }
+  }
   return entry;
 }
 
@@ -69,12 +86,22 @@ type LoaderContext = {
 };
 
 export default function shortwindLoader(this: LoaderContext, source: string): string {
+  // Never transform or strict-scan vendored code (#75). The webpack rule
+  // excludes node_modules, but Turbopack rule keys are include-globs with no
+  // negation syntax — and Next 16's Turbopack applies custom loader rules to
+  // node_modules, so without this guard strict mode fails the build on files
+  // the user doesn't own (a JSDoc `{@link …}` in next's own dist collided
+  // with the catalog's @link recipe). Guarding here makes the scan scope
+  // bundler-independent, matching @shortwind/vite's transform.
+  if (this.resourcePath.split(path.sep).join("/").includes("/node_modules/")) {
+    return source;
+  }
   const options = this.getOptions();
   if (this.addContextDependency) this.addContextDependency(options.recipesDir);
 
   let entry: CacheEntry;
   try {
-    entry = getRegistry(options.recipesDir);
+    entry = getRegistry(options.recipesDir, options.entryCss ?? []);
   } catch (err) {
     const wrapped =
       err instanceof Error ? err : new Error(`shortwind: failed to load registry: ${String(err)}`);

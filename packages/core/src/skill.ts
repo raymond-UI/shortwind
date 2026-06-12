@@ -6,7 +6,13 @@ export type SkillRenderOptions = {
   order?: string[];
   verbose?: boolean;
   wrapAt?: number;
+  // Which Shortwind adapter the project uses — selects the right package and
+  // registry-loading idiom in the dynamic-classes escape-hatch and strict-mode
+  // snippets (#81). Omitted: generic snippets naming all three.
+  adapter?: SkillAdapter;
 };
+
+export type SkillAdapter = "vite" | "next" | "astro";
 
 const DEFAULT_NAME = "shortwind";
 const DEFAULT_DESCRIPTION =
@@ -65,17 +71,28 @@ export function renderSkillMarkdown(registry: Registry, options: SkillRenderOpti
     "- **All modes — the silent failure:** a recipe that reaches the attribute *indirectly* — assigned to a variable first, passed as a component prop, looked up from an object, or built by string concatenation — is never expanded, and the build cannot warn about it.",
   );
   parts.push("");
+  // Examples are built from recipes that exist in THIS registry — a SKILL.md
+  // generated for the starter preset must never demonstrate with a recipe the
+  // install doesn't ship (#80: the old hardcoded @badge-success/@tab examples
+  // referenced families absent from starter).
+  const ex = exampleRecipes(registry);
+  const commented = (code: string, comment: string): string =>
+    code + " ".repeat(Math.max(1, 56 - code.length)) + comment;
   parts.push("```tsx");
-  parts.push("<div className=\"@card-elevated p-6\">                    // expands");
-  parts.push("<a className={active ? \"@tab-active\" : \"@tab\"}>         // expands (JSX only)");
-  parts.push("const cfg = { recipe: \"@badge-success\" };");
-  parts.push("<span className={cfg.recipe}>                           // does NOT expand — silent");
+  parts.push(commented(`<div className="@${ex.single} p-6">`, "// expands"));
+  parts.push(
+    commented(`<a className={active ? "@${ex.pairOn}" : "@${ex.pairOff}"}>`, "// expands (JSX only)"),
+  );
+  parts.push(`const cfg = { recipe: "@${ex.dynamic}" };`);
+  parts.push(commented(`<span className={cfg.recipe}>`, "// does NOT expand — silent"));
   parts.push("```");
   parts.push("");
   parts.push(
-    "Write static class lists literally. For a runtime choice between recipes, expand them with `expandClassList` from your Shortwind adapter (`@shortwind/vite`, `@shortwind/next`, or `@shortwind/astro`) and bind the resulting Tailwind — full helper at https://shortwind.dev/docs/dynamic-classes.",
+    "Write static class lists literally. For a genuine runtime choice between recipes, use the escape hatch below — don't route around it with raw Tailwind.",
   );
   parts.push("");
+  parts.push(...renderEscapeHatch(options.adapter, ex));
+  parts.push(...renderStrictMode(options.adapter));
 
   if (families.length === 0) {
     parts.push("## Available recipes");
@@ -110,6 +127,111 @@ export function renderSkillMarkdown(registry: Registry, options: SkillRenderOpti
   }
 
   return parts.join("\n");
+}
+
+// The worked rc()/expandClassList example, offered at the point of pain (#81
+// — every beta.11 agent wished for exactly this and never found it). The
+// registry import differs per adapter: Vite-based adapters serve the
+// bundle-clean `virtual:shortwind/registry` module; in Next the registry
+// loads server-side from recipes/ on disk.
+function renderEscapeHatch(adapter: SkillAdapter | undefined, ex: ExampleRecipes): string[] {
+  const out: string[] = [];
+  out.push("### Runtime escape hatch: `rc()` / `expandClassList`");
+  out.push("");
+  out.push(
+    "Expand the recipe at RUNTIME and bind the resulting plain-Tailwind string:",
+  );
+  out.push("");
+  if (adapter === "next") {
+    out.push("```ts");
+    out.push("// lib/rc.ts — server-side (the registry reads recipes/ from disk)");
+    out.push(`import { expandClassList, loadRegistryFromDir } from "@shortwind/next";`);
+    out.push(`const registry = loadRegistryFromDir("recipes");`);
+    out.push("export const rc = (classList: string): string => expandClassList(classList, registry, true);");
+    out.push("```");
+  } else {
+    const pkg = adapter === "astro" ? "@shortwind/astro" : "@shortwind/vite";
+    out.push("```ts");
+    out.push("// src/lib/rc.ts");
+    out.push(`import { expandClassList } from "${pkg}";`);
+    out.push(`import registry from "virtual:shortwind/registry";`);
+    out.push("export const rc = (classList: string): string => expandClassList(classList, registry, true);");
+    out.push("```");
+  }
+  out.push("");
+  out.push("```tsx");
+  out.push(`<span className={ok ? rc("@${ex.pairOn}") : rc("@${ex.pairOff}")}>`);
+  out.push("```");
+  out.push("");
+  out.push("Full guide: https://shortwind.dev/docs/dynamic-classes");
+  out.push("");
+  return out;
+}
+
+// Copy-pasteable strict wiring per adapter (#81): opt-in build gate that
+// fails on any leaked @recipe token instead of shipping unstyled UI.
+function renderStrictMode(adapter: SkillAdapter | undefined): string[] {
+  const snippets: Record<SkillAdapter, string[]> = {
+    vite: [
+      "// vite.config.ts",
+      `import { shortwind } from "@shortwind/vite";`,
+      "export default defineConfig({ plugins: [shortwind({ strict: true }), tailwindcss()] });",
+    ],
+    next: [
+      "// next.config.ts",
+      `import { withShortwind } from "@shortwind/next";`,
+      "export default withShortwind({ strict: true })(nextConfig);",
+    ],
+    astro: [
+      "// astro.config.mjs",
+      `import shortwind from "@shortwind/astro";`,
+      "export default defineConfig({ integrations: [shortwind({ strict: true })] });",
+    ],
+  };
+  const out: string[] = [];
+  out.push("### Catch silent leaks: turn on `strict`");
+  out.push("");
+  out.push(
+    "A leaked `@token` ships as raw text behind a green build. `strict: true` fails the build on any residual recipe token instead (the `rc()` pattern above stays exempt):",
+  );
+  out.push("");
+  for (const a of adapter ? [adapter] : (["vite", "next", "astro"] as const)) {
+    out.push("```ts");
+    out.push(...snippets[a]);
+    out.push("```");
+  }
+  out.push("");
+  return out;
+}
+
+type ExampleRecipes = { single: string; pairOff: string; pairOn: string; dynamic: string };
+
+// Pick recipes from the registry for the dynamic-classes examples, preferring
+// the familiar catalog names when they happen to be installed. An empty
+// registry keeps generic placeholders (the recipes section below says nothing
+// is installed yet, so nothing can be copy-pasted either way).
+function exampleRecipes(registry: Registry): ExampleRecipes {
+  const names = Object.keys(registry.flattened).sort();
+  if (names.length === 0) {
+    return { single: "card-elevated", pairOff: "tab", pairOn: "tab-active", dynamic: "badge-success" };
+  }
+  const has = (n: string): boolean => Object.hasOwn(registry.flattened, n);
+  const firstDashed = names.find((n) => n.includes("-")) ?? names[0]!;
+  const single = has("card-elevated") ? "card-elevated" : firstDashed;
+  // A base/variant pair reads best in the ternary (`tab` vs `tab-active`);
+  // fall back to any two distinct recipes.
+  let pairOff = names[0]!;
+  let pairOn = names[1] ?? names[0]!;
+  if (has("tab") && has("tab-active")) {
+    [pairOff, pairOn] = ["tab", "tab-active"];
+  } else {
+    const base = names.find((n) => names.includes(`${n}-active`));
+    if (base) [pairOff, pairOn] = [base, `${base}-active`];
+  }
+  const dynamic = has("badge-success")
+    ? "badge-success"
+    : ([...names].reverse().find((n) => n.includes("-")) ?? single);
+  return { single, pairOff, pairOn, dynamic };
 }
 
 function orderFamilies(registry: Registry, override: string[] | undefined): string[] {
