@@ -1,6 +1,6 @@
 {
   "name": "@shortwind/catalog",
-  "version": "0.1.0-beta.12",
+  "version": "0.1.0-beta.13",
   "description": "The Shortwind recipe catalog — built, versioned recipe files the CLI installs from.",
   "type": "module",
   "files": [
