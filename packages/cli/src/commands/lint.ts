@@ -43,10 +43,20 @@ export type LintResult = {
   ok: boolean;
   findings: Finding[];
   filesFixed: string[];
+  // How many files the content scan actually matched. Zero means usage-based
+  // rules (recipe/unused in particular) had no evidence to work from — the
+  // CLI surfaces that instead of letting an empty scan masquerade as "no
+  // recipe is referenced anywhere".
+  scannedFiles: number;
 };
 
-const DEFAULT_CONTENT = [
-  "src/**/*.{html,js,jsx,ts,tsx,vue,svelte,astro,md,mdx}",
+// Cover the common framework layouts, not just `src/**`: a default
+// create-next-app App Router project keeps sources in root-level `app/`
+// (plus `components/`, `lib/`), and Pages Router uses root `pages/` (#83).
+// Project-specific layouts go in `shortwind.config.json` ("content") or
+// `--content`.
+export const DEFAULT_CONTENT = [
+  "{src,app,pages,components,lib}/**/*.{html,js,jsx,ts,tsx,vue,svelte,astro,md,mdx}",
 ];
 
 export async function lint(options: LintOptions): Promise<LintResult> {
@@ -61,7 +71,7 @@ export async function lint(options: LintOptions): Promise<LintResult> {
   findings.push(...checkRecipeNames(registry, recipesDir, enabledRules));
   findings.push(...checkReservedNames(registry, recipesDir, enabledRules));
 
-  const contentGlobs = options.content ?? DEFAULT_CONTENT;
+  const contentGlobs = options.content ?? config.content ?? DEFAULT_CONTENT;
   // tinyglobby evaluates ignore patterns relative to `cwd`; an absolute
   // recipesDir path passed verbatim would either fail to match or match by
   // accident on case-folded filesystems. Use the project-relative form.
@@ -125,7 +135,10 @@ export async function lint(options: LintOptions): Promise<LintResult> {
     }
   }
 
-  if (enabledRules.has("recipe/unused")) {
+  // An empty scan carries no usage evidence; reporting every recipe as
+  // unused from it would always be wrong (#83). The caller sees
+  // scannedFiles === 0 and can tell the user to fix the content globs.
+  if (enabledRules.has("recipe/unused") && files.length > 0) {
     const recipesByName = new Map<string, Recipe>();
     for (const recs of Object.values(registry.families)) {
       for (const r of recs) recipesByName.set(r.name, r);
@@ -152,7 +165,7 @@ export async function lint(options: LintOptions): Promise<LintResult> {
   });
 
   const ok = !findings.some((f) => f.severity === "error");
-  return { ok, findings, filesFixed };
+  return { ok, findings, filesFixed, scannedFiles: files.length };
 }
 
 function loadRegistry(
