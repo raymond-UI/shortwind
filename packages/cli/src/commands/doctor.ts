@@ -51,7 +51,10 @@ const DEFAULT_OUTPUT_DIRS = [".next", "dist", "out", "build"];
 const OUTPUT_GLOB = "**/*.{html,htm,js,mjs,cjs,rsc}";
 
 // Bundler caches (.next/cache, .vite cache dirs) store pre-transform source.
-const OUTPUT_IGNORE = ["**/node_modules/**", "**/cache/**"];
+// .next/dev is the dev-server's output, not a production artifact — and its
+// chunks inline framework internals (e.g. Next's own `{@link …}` JSDoc, which
+// collides with the @link recipe), so scanning it produces phantom leaks (#91).
+const OUTPUT_IGNORE = ["**/node_modules/**", "**/cache/**", "**/dev/**"];
 
 export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
   const cwd = path.resolve(options.cwd);
@@ -75,7 +78,10 @@ export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
 
   const files = await glob(
     outputDirs.map((d) => path.posix.join(d.split(path.sep).join("/"), OUTPUT_GLOB)),
-    { cwd, absolute: true, onlyFiles: true, ignore: OUTPUT_IGNORE },
+    // dot: true so the ignore globs cross dot-segments — without it `**/dev/**`
+    // and `**/cache/**` never match `.next/dev` / `.next/cache` (the leading
+    // `**` won't span a dot dir), and those caches get scanned anyway (#91).
+    { cwd, absolute: true, onlyFiles: true, dot: true, ignore: OUTPUT_IGNORE },
   );
 
   const findings: DoctorFinding[] = [];

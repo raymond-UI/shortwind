@@ -215,11 +215,16 @@ describe("init", () => {
     const css = readFileSync(globals, "utf8");
     expect(css).toContain("shortwind:theme-supplement");
     expect(css).toContain("--color-card: var(--card);");
-    // The project's own tokens are untouched and not redefined.
-    expect(css.match(/--background\s*:/g)).toHaveLength(2); // :root + media, as before
+    // Dark mode is made toggle-ready (#93): the class variant is added, and the
+    // media-query base tokens are mirrored into .dark so a toggle drives them.
+    expect(css).toContain("@custom-variant dark (&:is(.dark *));");
+    expect(css).toContain("shortwind:dark-promote");
+    // --background now appears 3×: :root (light) + @media (system) + .dark (toggle).
+    expect(css.match(/--background\s*:/g)).toHaveLength(3);
     expect(css.match(/--color-background\s*:/g)).toHaveLength(1);
 
-    // Re-running finds nothing missing — no second supplement block.
+    // Re-running finds nothing missing and is fully idempotent — no second
+    // supplement, tone, dark-promote, or @custom-variant block.
     const again = await init({
       cwd: dir,
       preset: "starter",
@@ -227,7 +232,11 @@ describe("init", () => {
       installPackages: installer.fn,
     });
     expect(again.themeAction).toBe("skipped");
-    expect(readFileSync(globals, "utf8").match(/shortwind:theme-supplement/g)).toHaveLength(1);
+    const css2 = readFileSync(globals, "utf8");
+    expect(css2.match(/shortwind:theme-supplement/g)).toHaveLength(1);
+    expect(css2.match(/shortwind:dark-promote/g)).toHaveLength(1);
+    expect(css2.match(/@custom-variant dark/g)).toHaveLength(1);
+    expect(css2.match(/shortwind:tones/g)).toHaveLength(1);
   });
 
   it("scaffolds the default tone table into the entry CSS and is idempotent", async () => {

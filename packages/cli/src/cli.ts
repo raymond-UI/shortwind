@@ -587,6 +587,13 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
         `The default token block is documented at https://shortwind.dev/docs/install#theme-tokens`,
     );
   }
+  if (result.preset === "starter") {
+    p.log.info(
+      `Installed the \`starter\` preset (${result.installedFamilies.length} families). Building a dashboard or internal tool?\n` +
+        `  Add the components it'll need:  shortwind add badge table stat switch segmented menu sheet\n` +
+        `  …or scaffold the lot up front:  shortwind init --preset app`,
+    );
+  }
   p.outro(
     `Next: run \`${devCmd(result.packageManager)}\` and check a recipe renders. After a production build, \`npx shortwind doctor\` verifies nothing shipped unexpanded.`,
   );
