@@ -66,6 +66,9 @@ export type InitResult = {
   skippedFamilies: string[];
   configPath: string;
   vscodePath: string;
+  // tsconfig the TS language-service plugin was added to; null for a non-TS
+  // project (no tsconfig.json to wire).
+  tsconfigPluginPath: string | null;
   // null when the target isn't a git repository (hook not installed).
   huskyPath: string | null;
   skillPath: string;
@@ -156,6 +159,11 @@ export async function init(options: InitOptions): Promise<InitResult> {
 
   const vscodePath = path.join(cwd, ".vscode", "settings.json");
   await wireVscodeClassRegex(vscodePath);
+
+  // Enable recipe-token IntelliSense (completion/hover/go-to-def) by adding the
+  // TS language-service plugin to tsconfig — no extension, since init installs
+  // @shortwind/cli which provides it as `./ts-plugin`.
+  const tsconfigPluginPath = await wireTsconfigPlugin(cwd);
 
   const huskyPath = await installHuskyHook(cwd, path.join(cwd, ".husky", "pre-commit"));
 
@@ -254,6 +262,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
     skippedFamilies: skipped,
     configPath,
     vscodePath,
+    tsconfigPluginPath,
     huskyPath,
     skillPath,
     themePath: theme.themePath,
@@ -420,21 +429,48 @@ const CLASS_REGEX_VALUE = [
   ["className\\s*=\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
 ];
 
+const FMT = { formattingOptions: { tabSize: 2, insertSpaces: true } } as const;
+
 async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
   await mkdir(path.dirname(vscodePath), { recursive: true });
-  let body: string;
-  if (existsSync(vscodePath)) {
-    body = await readFile(vscodePath, "utf8");
-  } else {
-    body = "{}\n";
+  let body = existsSync(vscodePath) ? await readFile(vscodePath, "utf8") : "{}\n";
+  // (1) Tailwind IntelliSense reads recipe bodies via this classRegex (recipe
+  // authoring). (2) The Shortwind TS plugin completes recipe TOKENS inside
+  // className strings, but VS Code won't auto-trigger completion in a string
+  // unless quickSuggestions.strings is on (TS plugins can't add trigger chars).
+  body = applyEdits(body, modify(body, CLASS_REGEX_KEY, CLASS_REGEX_VALUE, FMT));
+  body = applyEdits(body, modify(body, ["editor.quickSuggestions", "strings"], true, FMT));
+  parseJsonc(body); // sanity — must stay parseable
+  await writeFile(vscodePath, body.endsWith("\n") ? body : body + "\n");
+}
+
+const TS_PLUGIN_NAME = "@shortwind/cli/ts-plugin";
+
+// Turn on the language-service plugin by adding it to the project's tsconfig
+// `compilerOptions.plugins`. Recipe completion/hover/go-to-def then ride the
+// editor's built-in TypeScript — no marketplace extension. Skips non-TS
+// projects; idempotent. Returns the tsconfig path when wired.
+async function wireTsconfigPlugin(cwd: string): Promise<string | null> {
+  const tsconfigPath = path.join(cwd, "tsconfig.json");
+  if (!existsSync(tsconfigPath)) return null;
+  const body = await readFile(tsconfigPath, "utf8");
+  const parsed = parseJsonc(body) as { compilerOptions?: { plugins?: unknown } } | undefined;
+  const plugins = parsed?.compilerOptions?.plugins;
+  if (Array.isArray(plugins) && plugins.some((p) => (p as { name?: string })?.name === TS_PLUGIN_NAME)) {
+    return tsconfigPath; // already wired
   }
-  const edits = modify(body, CLASS_REGEX_KEY, CLASS_REGEX_VALUE, {
-    formattingOptions: { tabSize: 2, insertSpaces: true },
-  });
-  const next = applyEdits(body, edits);
-  // sanity — make sure it's parseable
+  const next = Array.isArray(plugins)
+    ? applyEdits(
+        body,
+        modify(body, ["compilerOptions", "plugins", plugins.length], { name: TS_PLUGIN_NAME }, {
+          ...FMT,
+          isArrayInsertion: true,
+        }),
+      )
+    : applyEdits(body, modify(body, ["compilerOptions", "plugins"], [{ name: TS_PLUGIN_NAME }], FMT));
   parseJsonc(next);
-  await writeFile(vscodePath, next.endsWith("\n") ? next : next + "\n");
+  await writeFile(tsconfigPath, next.endsWith("\n") ? next : next + "\n");
+  return tsconfigPath;
 }
 
 // init installs @shortwind/cli (which provides the `shortwind` bin), so the

@@ -18,6 +18,9 @@ const LAYERS: Record<string, number> = {
   "@shortwind/vite": 2,
   "@shortwind/next": 2,
   "@shortwind/runtime": 2,
+  // Source for the TS language-service plugin; private, bundled into cli's
+  // ./ts-plugin subpath. Depends only on core; cli (layer 3) bundles it.
+  "@shortwind/ts-plugin": 2,
   "@shortwind/astro": 3,
   "@shortwind/cli": 3,
   web: 4,

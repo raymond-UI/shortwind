@@ -1,0 +1,27 @@
+{
+  "name": "@shortwind/ts-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shortwind recipe IntelliSense — source for the TS language-service plugin. Never published; @shortwind/cli bundles it into its `./ts-plugin` subpath.",
+  "type": "module",
+  "exports": {
+    ".": "./src/plugin.ts"
+  },
+  "main": "./src/plugin.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@shortwind/core": "workspace:*",
+    "@shortwind/tailwind": "workspace:*"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.6"
+  }
+}
