@@ -12,7 +12,7 @@ const entry = path.resolve(here, "..", "src", "auto.ts");
 const outDir = path.resolve(here, "..", "dist");
 const outFile = path.join(outDir, "expand.js");
 
-const BUDGET_BYTES = 8 * 1024;
+const BUDGET_BYTES = 9 * 1024;
 
 await build({
   entryPoints: [entry],

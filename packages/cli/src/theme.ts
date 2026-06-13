@@ -217,6 +217,62 @@ export function buildThemeSupplement(css: string, missing: string[]): string | n
   return lines.join("\n");
 }
 
+export const TONE_MARKER = "/* shortwind:tones";
+
+// Default semantic tones consumed by tone-aware recipes — @badge reads
+// `--tone-bg`/`--tone-fg` and the element's `data-tone` selects which values
+// apply (`<span class="@badge" data-tone="success">`). Values mirror the
+// static @badge-<tone> recipes so the data-driven and static forms match.
+// Plain CSS the user owns; extend with project tones
+// (`[data-tone="sev1"] { --tone-bg: …; --tone-fg: … }`). neutral/danger/info
+// resolve through theme tokens (they already flip in dark); success/warning
+// carry explicit dark values.
+type Tone = { name: string; bg: string; fg: string; darkBg?: string; darkFg?: string };
+const TONES: readonly Tone[] = [
+  { name: "neutral", bg: "var(--muted)", fg: "var(--muted-foreground)" },
+  {
+    name: "success",
+    bg: "oklch(0.962 0.044 156.743)",
+    fg: "oklch(0.448 0.119 151.328)",
+    darkBg: "oklch(0.393 0.095 152.535)",
+    darkFg: "oklch(0.925 0.084 155.995)",
+  },
+  {
+    name: "warning",
+    bg: "oklch(0.962 0.059 95.617)",
+    fg: "oklch(0.473 0.137 46.201)",
+    darkBg: "oklch(0.414 0.112 45.904)",
+    darkFg: "oklch(0.924 0.12 95.746)",
+  },
+  { name: "danger", bg: "color-mix(in oklab, var(--destructive) 15%, transparent)", fg: "var(--destructive)" },
+  { name: "info", bg: "color-mix(in oklab, var(--primary) 15%, transparent)", fg: "var(--primary)" },
+];
+
+// Build the append-only tone block. Dark overrides (success/warning only)
+// follow the project's own dark strategy — `.dark` class (incl.
+// @custom-variant) or the prefers-color-scheme media query — matching the
+// theme supplement; when neither is present the light tones apply in both modes.
+export function buildToneBlock(css: string): string {
+  const rule = (name: string, bg: string, fg: string) =>
+    `[data-tone="${name}"] { --tone-bg: ${bg}; --tone-fg: ${fg}; }`;
+  const lines: string[] = [
+    `${TONE_MARKER} — semantic tones for tone-aware recipes (@badge, …). Set on an element:`,
+    `   <span class="@badge" data-tone="success">. Add your own: [data-tone="sev1"] { --tone-bg: …; --tone-fg: … } */`,
+    ...TONES.map((t) => rule(t.name, t.bg, t.fg)),
+  ];
+  const darkTones = TONES.filter((t) => t.darkBg && t.darkFg);
+  if (darkTones.length > 0) {
+    const darkRules = darkTones.map((t) => "  " + rule(t.name, t.darkBg!, t.darkFg!));
+    if (/@custom-variant\s+dark|\.dark\s*\{/.test(css)) {
+      lines.push(".dark {", ...darkRules, "}");
+    } else if (/@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)/.test(css)) {
+      lines.push("@media (prefers-color-scheme: dark) {", ...darkRules, "}");
+    }
+  }
+  lines.push("/* end shortwind tones */");
+  return lines.join("\n");
+}
+
 // Utility prefixes that consume a theme color token (`bg-card`,
 // `text-muted-foreground`, `border-border`, …).
 const COLOR_UTILITY_RE =

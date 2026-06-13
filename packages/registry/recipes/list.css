@@ -1,9 +1,11 @@
-/* shortwind: list@0.0.1 sha:000000 */
+/* shortwind: list@0.0.2 sha:000000 */
 
 /* @guide
    @list wraps a stack of @list-item rows; use @list-bordered for divided rows.
-   Definition lists are separate: @dl with @dt (term) and @dd (description).
-   For site navigation reach for the navigation family (@nav), not @list.
+   Definition lists are separate: @description-list with @description-term and
+   @description-detail. The short @dl / @dt / @dd forms are aliases that expand
+   identically; the spelled-out names are canonical — prefer them. For site
+   navigation reach for the navigation family (@navigation), not @list.
 */
 
 /* Vertical list with default gap. */
@@ -35,3 +37,14 @@
 @recipe dd {
   text-sm text-foreground sm:col-span-2
 }
+
+/* Spelled-out canonical aliases — expand identically to @dl/@dt/@dd. */
+
+/* Definition list container (alias of @dl). */
+@recipe description-list { @dl }
+
+/* Definition term (alias of @dt). */
+@recipe description-term { @dt }
+
+/* Definition description (alias of @dd). */
+@recipe description-detail { @dd }

@@ -25,8 +25,10 @@ import {
 import { readLockfile, writeLockfile } from "./lockfile.js";
 import {
   buildThemeSupplement,
+  buildToneBlock,
   findMissingThemeTokens,
   scaffoldTheme,
+  TONE_MARKER,
   type ThemeAction,
 } from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
@@ -67,6 +69,11 @@ export type InitResult = {
   skillPath: string;
   themePath: string | null;
   themeAction: ThemeAction;
+  // Entry CSS that received the default `[data-tone=…]` table consumed by
+  // tone-aware recipes, and whether init wrote it ("skipped" = already present
+  // or no entry CSS). null when there was no entry CSS to attach to.
+  tonesPath: string | null;
+  tonesAction: "written" | "skipped";
   // Tailwind entry CSS files that received the on-disk @source inline(...)
   // safelist (#73) — empty for Vite/Astro, which inject it in-memory.
   safelistCssPaths: string[];
@@ -181,6 +188,24 @@ export async function init(options: InitOptions): Promise<InitResult> {
     }
   }
 
+  // Tone-aware recipes (@badge, …) read --tone-bg/--tone-fg, selected by a
+  // data-tone attribute — the static-name explosion (@badge-success/danger/…)
+  // collapses to one recipe + a data attribute, and data-driven coloring works
+  // without dynamic class names. Append a default tone table (neutral/success/
+  // warning/danger/info) the user extends; marker-guarded and append-only like
+  // the theme supplement, so re-running init is a no-op. Reads the entry CSS
+  // after the supplement write so dark-strategy detection sees the final file.
+  let tonesPath: string | null = null;
+  let tonesAction: "written" | "skipped" = "skipped";
+  if (theme.themePath) {
+    const css = await readFile(theme.themePath, "utf8");
+    tonesPath = theme.themePath;
+    if (!css.includes(TONE_MARKER)) {
+      await writeFile(theme.themePath, `${css.replace(/\s*$/, "")}\n\n${buildToneBlock(css)}\n`);
+      tonesAction = "written";
+    }
+  }
+
   // Bundlers without an in-build CSS hook (Next; bare Tailwind CLI) need the
   // recipe-derived `@source inline(...)` safelist ON disk — Tailwind v4 reads
   // the entry CSS from disk and never sees loader output, so recipe-body-only
@@ -217,6 +242,8 @@ export async function init(options: InitOptions): Promise<InitResult> {
     skillPath,
     themePath: theme.themePath,
     themeAction,
+    tonesPath,
+    tonesAction,
     supplementedThemeTokens,
     safelistCssPaths,
     missingThemeTokens,

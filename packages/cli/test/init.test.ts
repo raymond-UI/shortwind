@@ -230,6 +230,48 @@ describe("init", () => {
     expect(readFileSync(globals, "utf8").match(/shortwind:theme-supplement/g)).toHaveLength(1);
   });
 
+  it("scaffolds the default tone table into the entry CSS and is idempotent", async () => {
+    const dir = await setupProject({
+      name: "demo",
+      dependencies: { next: "^16.0.0", react: "^19.0.0" },
+      devDependencies: { tailwindcss: "^4.0.0" },
+    });
+    cleanup.push(dir);
+    const globals = path.join(dir, "app", "globals.css");
+    await mkdir(path.dirname(globals), { recursive: true });
+    // create-next-app shape: media-query dark mode → tone dark overrides follow.
+    await writeFile(
+      globals,
+      `@import "tailwindcss";\n\n:root { --background: #fff; }\n\n@media (prefers-color-scheme: dark) {\n  :root { --background: #0a0a0a; }\n}\n`,
+    );
+    const installer = makeInstaller();
+
+    const result = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+
+    expect(result.tonesAction).toBe("written");
+    expect(result.tonesPath).toBe(globals);
+    const css = readFileSync(globals, "utf8");
+    expect(css).toContain("shortwind:tones");
+    expect(css).toContain('[data-tone="success"]');
+    // Tone dark overrides follow the project's prefers-color-scheme strategy.
+    expect(css).toContain("@media (prefers-color-scheme: dark) {");
+
+    // Re-running does not duplicate the tone block.
+    const again = await init({
+      cwd: dir,
+      preset: "starter",
+      registry: REGISTRY_PATH,
+      installPackages: installer.fn,
+    });
+    expect(again.tonesAction).toBe("skipped");
+    expect(readFileSync(globals, "utf8").match(/shortwind:tones/g)).toHaveLength(1);
+  });
+
   it("a mid-copy abort fails with a resumable message, and re-running completes (#78)", async () => {
     const { vi } = await import("vitest");
     const dir = await setupProject();

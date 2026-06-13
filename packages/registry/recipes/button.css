@@ -1,11 +1,13 @@
-/* shortwind: button@0.0.1 sha:000000 */
+/* shortwind: button@0.0.2 sha:000000 */
 
 /* @guide
-   Name order is @btn-<intent>[-<size>]: intent first (primary/secondary/ghost/
-   danger/outline), size second (sm/lg; omit for default). One intent per
-   button — never combine @btn-primary with @btn-danger. @btn-ghost is text-only,
-   @btn-outline is bordered with no fill, @btn-icon is a square icon button.
-   @btn-base is the shared shell; don't use it on its own.
+   Name order is @button-<intent>[-<size>]: intent first (primary/secondary/
+   ghost/danger/outline), size second (sm/lg; omit for default). One intent per
+   button — never combine @button-primary with @button-danger. @button-ghost is
+   text-only, @button-outline is bordered with no fill, @button-icon is a square
+   icon button. @button-base is the shared shell; don't use it on its own.
+   The short @btn-<intent> forms are aliases that expand identically; the
+   full-word @button-* names are canonical — prefer them.
 */
 
 /* Shared button base — sizing, focus ring, disabled state. */
@@ -72,3 +74,44 @@
 @recipe btn-icon {
   inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
 }
+
+/* Full-word canonical aliases — expand identically to the @btn-* short forms. */
+
+/* Shared button shell (alias of @btn-base). */
+@recipe button-base { @btn-base }
+
+/* Primary call-to-action button (alias of @btn-primary). */
+@recipe button-primary { @btn-primary }
+
+/* Small primary button (alias of @btn-primary-sm). */
+@recipe button-primary-sm { @btn-primary-sm }
+
+/* Large primary button (alias of @btn-primary-lg). */
+@recipe button-primary-lg { @btn-primary-lg }
+
+/* Secondary button (alias of @btn-secondary). */
+@recipe button-secondary { @btn-secondary }
+
+/* Small secondary button (alias of @btn-secondary-sm). */
+@recipe button-secondary-sm { @btn-secondary-sm }
+
+/* Large secondary button (alias of @btn-secondary-lg). */
+@recipe button-secondary-lg { @btn-secondary-lg }
+
+/* Ghost button (alias of @btn-ghost). */
+@recipe button-ghost { @btn-ghost }
+
+/* Small ghost button (alias of @btn-ghost-sm). */
+@recipe button-ghost-sm { @btn-ghost-sm }
+
+/* Large ghost button (alias of @btn-ghost-lg). */
+@recipe button-ghost-lg { @btn-ghost-lg }
+
+/* Destructive button (alias of @btn-danger). */
+@recipe button-danger { @btn-danger }
+
+/* Outline button (alias of @btn-outline). */
+@recipe button-outline { @btn-outline }
+
+/* Square icon-only button (alias of @btn-icon). */
+@recipe button-icon { @btn-icon }

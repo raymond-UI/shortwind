@@ -57,6 +57,21 @@ Because the same conditional behaves differently in `.astro` and `.tsx`, moving
 a snippet between them can change whether it renders styled. Don't lean on the
 JSX leniency: write for the literal-only rule everywhere and it works in both.
 
+## First, check if you need a tone, not a recipe
+
+The most common "dynamic" case is **color chosen from data** — a badge's
+severity, a status pill, a trend arrow. You don't need a dynamic class name for
+that. Tone-aware recipes read their color from a `data-tone` attribute, so the
+class name stays a static literal and the *value* rides on data:
+
+```tsx
+<span className="@badge" data-tone={incident.severity}>{incident.severity}</span>
+```
+
+No `rc()`, no build-time expansion — just an attribute. See [Tones](/docs/tones).
+Reach for `rc()` below only when the choice isn't a tone — a genuinely different
+recipe selected at runtime.
+
 ## The fix: expand at build time, bind the result
 
 When you genuinely need to pick between recipes at runtime, resolve them to

@@ -165,6 +165,10 @@ instead:
 
 Recipes referencing a missing token render colorless — no error.
 
+`init` also appends a `shortwind:tones` block here — the `[data-tone="…"]` table
+that lets `@badge` and other tone-aware recipes take their color from data. See
+[Tones](/docs/tones).
+
 ## 5. How recipes reach Tailwind
 
 The loader rewrites `@recipe` tokens to plain Tailwind in transformed source,

@@ -1,13 +1,17 @@
-/* shortwind: layout@0.0.1 sha:48a2a7b6e1a5d7ad — DO NOT EDIT THIS LINE */
+/* shortwind: layout@0.0.2 sha:48025daeec83041a */
 
 /* @guide
    Composition primitives. @stack-* stacks children vertically (flex-col);
    @row* lays them out horizontally (flex-row). Choose the gap with the size
-   suffix (xs/sm/md/lg on stacks). Use @grid-2/3/4 only for true multi-column
-   grids, @center to center on both axes, @full to fill the parent. Common
-   slips: there is no @flex-row (use @row) or @flex-col (use a @stack-*), and
-   the grids are @grid-3, not @grid-cols-3.
+   suffix (xs/sm/md/lg on stacks); bare @stack is the default and equals
+   @stack-md. Use @grid-2/3/4 only for true multi-column grids, @center to
+   center on both axes, @full to fill the parent. Common slips: there is no
+   @flex-row (use @row) or @flex-col (use a @stack-*), and the grids are
+   @grid-3, not @grid-cols-3.
 */
+
+/* Bare stack — default gap, alias for @stack-md. */
+@recipe stack { @stack-md }
 
 /* Vertical stack with extra-small gap. */
 @recipe stack-xs {

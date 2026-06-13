@@ -1,0 +1,30 @@
+/* shortwind: menu@0.0.1 sha:000000 */
+
+/* @guide
+   A dropdown/actions menu (the "…" button's popover). @menu is the panel,
+   @menu-item is a row, @menu-trigger is the control that opens it, and
+   @menu-separator divides groups. The highlighted/active row is data-driven —
+   set data-active on the item rather than swapping recipe names
+   (`<button class="@menu-item" data-active>`); data-disabled dims + disables a
+   row. @menu only styles the panel; pair it with your own positioning.
+*/
+
+/* Dropdown menu panel. */
+@recipe menu {
+  min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md
+}
+
+/* A single menu row. Highlight with data-active, dim with data-disabled. */
+@recipe menu-item {
+  relative flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground outline-none transition-colors hover:bg-muted focus-visible:bg-muted data-[active]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50
+}
+
+/* The control that opens the menu. */
+@recipe menu-trigger {
+  inline-flex items-center justify-center gap-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+}
+
+/* Divider between menu groups. */
+@recipe menu-separator {
+  -mx-1 my-1 h-px bg-border
+}

@@ -5,10 +5,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildThemeSupplement,
+  buildToneBlock,
   findMissingThemeTokens,
   scaffoldTheme,
   THEME_MARKER,
   THEME_SUPPLEMENT_MARKER,
+  TONE_MARKER,
 } from "../src/theme.js";
 
 async function project(opts: {
@@ -205,5 +207,52 @@ describe("buildThemeSupplement", () => {
 
   it("returns null when nothing is missing", () => {
     expect(buildThemeSupplement(nextAppCss, [])).toBeNull();
+  });
+});
+
+describe("buildToneBlock", () => {
+  const classDarkCss = `@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+:root { --muted: oklch(0.97 0 0); }
+.dark { --muted: oklch(0.269 0 0); }
+`;
+
+  it("emits the default semantic tones as data-tone selectors", () => {
+    const block = buildToneBlock(classDarkCss);
+    expect(block).toContain(TONE_MARKER);
+    for (const tone of ["neutral", "success", "warning", "danger", "info"]) {
+      expect(block).toContain(`[data-tone="${tone}"]`);
+    }
+    // Each tone sets the two variables @badge reads.
+    expect(block).toContain('[data-tone="neutral"] { --tone-bg: var(--muted); --tone-fg: var(--muted-foreground); }');
+    // danger/info resolve through theme tokens (flip in dark for free).
+    expect(block).toContain("--tone-fg: var(--destructive);");
+    expect(block).toContain("--tone-fg: var(--primary);");
+  });
+
+  it("wraps success/warning dark overrides in .dark for a class strategy", () => {
+    const block = buildToneBlock(classDarkCss);
+    expect(block).toContain(".dark {");
+    expect(block).not.toContain("prefers-color-scheme");
+    // Only the palette tones carry an explicit dark value.
+    expect(block).toContain("oklch(0.393 0.095 152.535)"); // success dark bg
+    expect(block).toContain("oklch(0.414 0.112 45.904)"); // warning dark bg
+  });
+
+  it("uses the prefers-color-scheme wrapper when that's the project strategy", () => {
+    const mediaCss = `@import "tailwindcss";
+:root { --muted: #eee; }
+@media (prefers-color-scheme: dark) { :root { --muted: #333; } }
+`;
+    const block = buildToneBlock(mediaCss);
+    expect(block).toContain("@media (prefers-color-scheme: dark) {");
+    expect(block).not.toContain(".dark {");
+  });
+
+  it("emits light tones only when there is no dark strategy", () => {
+    const block = buildToneBlock(`@import "tailwindcss";\n:root { --muted: #eee; }\n`);
+    expect(block).toContain('[data-tone="success"]');
+    expect(block).not.toContain(".dark {");
+    expect(block).not.toContain("prefers-color-scheme");
   });
 });

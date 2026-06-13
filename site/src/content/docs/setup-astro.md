@@ -183,6 +183,11 @@ block defining *only* the tokens your theme lacks, using the placeholder
 values above — purely additive, nothing you defined is overridden. Tune the
 placeholders to your palette.
 
+`init` also appends a `shortwind:tones` block — the `[data-tone="…"]` table that
+lets `@badge` and other tone-aware recipes take their color from data. See
+[Tones](/docs/tones). (In `.astro`, set `data-tone` in a literal `class="@badge"`
+element; dynamic tone selection lives in a `.tsx` island.)
+
 ## 6. How recipes reach Tailwind
 
 The integration rewrites `@recipe` tokens to plain Tailwind utilities in
