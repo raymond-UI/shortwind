@@ -1,0 +1,19 @@
+/* shortwind: switch@0.0.1 sha:54fa33bb72839799 */
+
+/* @guide
+   A toggle switch. @switch is the track, @switch-thumb is the sliding knob
+   inside it. The on/off state is data-driven — set data-checked on BOTH the
+   track and the thumb (`<button class="@switch" data-checked><span
+   class="@switch-thumb" data-checked /></button>`). For a checkbox/radio reach
+   for the form family instead.
+*/
+
+/* Toggle track. Add data-checked when on. */
+@recipe switch {
+  peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-input transition-colors data-[checked]:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* Sliding knob. Add data-checked to slide it on. */
+@recipe switch-thumb {
+  pointer-events-none block h-4 w-4 translate-x-0 rounded-full bg-background shadow-sm transition-transform data-[checked]:translate-x-4
+}

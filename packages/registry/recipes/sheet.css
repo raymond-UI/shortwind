@@ -1,0 +1,38 @@
+/* shortwind: sheet@0.0.1 sha:000000 */
+
+/* @guide
+   A slide-over panel (drawer). Three layers mirror the dialog family:
+   @sheet-overlay (dimmed backdrop), @sheet (the positioner that anchors the
+   panel to a side), and @sheet-content (the panel itself). Structure the panel
+   with @sheet-header and @sheet-footer. The edge is data-driven — set
+   data-side=left/right on @sheet (`<div class="@sheet" data-side="right">`)
+   rather than picking a different recipe. @drawer is an alias for @sheet.
+*/
+
+/* Dimmed backdrop behind the sheet. */
+@recipe sheet-overlay {
+  fixed inset-0 z-40 bg-black/50
+}
+
+/* Positioner — anchors the panel to a side via data-side. */
+@recipe sheet {
+  fixed inset-0 z-50 flex data-[side=right]:justify-end data-[side=left]:justify-start
+}
+
+/* The sliding panel. */
+@recipe sheet-content {
+  flex h-full w-3/4 max-w-sm flex-col gap-4 border-border bg-popover p-6 text-popover-foreground shadow-xl
+}
+
+/* Sheet header region. */
+@recipe sheet-header {
+  flex flex-col gap-1
+}
+
+/* Sheet footer with bottom-pinned, right-aligned actions. */
+@recipe sheet-footer {
+  mt-auto flex items-center justify-end gap-2
+}
+
+/* Alias — @drawer reads as @sheet. */
+@recipe drawer { @sheet }

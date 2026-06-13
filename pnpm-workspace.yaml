@@ -11,6 +11,16 @@ allowBuilds:
 # Force the patched postcss: next pulls 8.4.31, which has a moderate XSS
 # advisory (GHSA-qx2v-qp2m-jg93 — unescaped </style> in stringify output).
 # >=8.5.10 is the patch and a semver-compatible bump. Drop once next pins it.
+#
+# Force the patched esbuild: the vite/vitest/tsx dev toolchain pulls 0.27.x,
+# which carries a high-severity dev-server advisory (GHSA-gv7w-rqvm-qjhr — the
+# dev server answers any origin). >=0.28.1 is the patch. It's a dev dependency
+# only (not in any shipped package). 0.28.1 is newer than the 72h release-age
+# window, so esbuild is added to minimumReleaseAgeExclude below to take the
+# security patch immediately. Drop both once vite/vitest pin >=0.28.1.
 overrides:
   devalue: ">=5.8.1"
   postcss: ">=8.5.10"
+  esbuild: ">=0.28.1"
+minimumReleaseAgeExclude:
+  - esbuild

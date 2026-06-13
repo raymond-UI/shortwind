@@ -1,6 +1,6 @@
 {
   "starter": ["card", "button", "layout", "text", "form"],
-  "app": ["card", "button", "layout", "text", "form", "badge", "table", "dialog", "list", "navigation", "feedback", "tooltip"],
+  "app": ["card", "button", "layout", "text", "form", "badge", "table", "dialog", "list", "navigation", "feedback", "tooltip", "menu", "sheet", "stat", "segmented", "switch"],
   "content": ["card", "button", "layout", "text", "form", "badge", "code", "list", "media", "empty"],
   "all": "*"
 }

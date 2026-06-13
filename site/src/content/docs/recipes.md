@@ -40,3 +40,20 @@ A recipe file is a `.css` file with a Shortwind header and one or more
 cascade, no inheritance, no surprises.
 
 See [composition](/docs/composition) for how conflicts are resolved.
+
+## Tone-aware recipes
+
+A recipe can take its color from a `data-tone` attribute instead of baking it in,
+by reading the `--tone-bg` / `--tone-fg` variables with a neutral fallback:
+
+```css
+@recipe badge {
+  inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium
+  bg-[var(--tone-bg,var(--muted))] text-[var(--tone-fg,var(--muted-foreground))]
+}
+```
+
+That's what lets a badge's color be driven by data without a dynamic class name.
+The catalog ships several tone-aware and data-state recipes — `@badge`,
+`@stat-trend`, and the `menu` / `sheet` / `segmented` / `switch` families (which
+read `data-active` / `data-checked` / `data-side`). See [Tones](/docs/tones).

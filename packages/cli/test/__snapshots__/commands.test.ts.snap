@@ -2,10 +2,10 @@
 
 exports[`ls > text format is stable for snapshotting 1`] = `
 "Installed:
-  button  0.0.1
+  button  0.0.2
   card  0.0.1
   form  0.0.2
-  layout  0.0.1
+  layout  0.0.2
   text  0.0.2
 
 Available:
@@ -21,10 +21,15 @@ Available:
   * layout
     list
     media
+    menu
     navigation
     progress
+    segmented
+    sheet
     skeleton
+    stat
     surface
+    switch
     table
   * text
     tooltip"

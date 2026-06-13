@@ -551,6 +551,7 @@ function printInitSummary(result: Awaited<ReturnType<typeof init>>): void {
       `pre-commit:        ${result.huskyPath ?? "skipped (not a git repository)"}`,
       `SKILL.md:          ${result.skillPath}`,
       `theme:             ${describeTheme(result)}`,
+      `tones:             ${result.tonesAction === "written" ? `scaffolded default tones in ${result.tonesPath}` : "skipped"}`,
       `bundler config:    ${describeBundlerConfig(result)}`,
       `agent guide:       ${describeAgentsFile(result)}`,
     ].join("\n"),

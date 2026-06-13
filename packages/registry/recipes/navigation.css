@@ -1,10 +1,12 @@
-/* shortwind: navigation@0.0.1 sha:000000 */
+/* shortwind: navigation@0.0.2 sha:000000 */
 
 /* @guide
-   @nav is the container; links are @nav-link with @nav-link-active for the
-   current page. Tabs mirror that pair: @tab and @tab-active. Use @breadcrumb
-   for trail navigation. Active and inactive are separate recipes — swap the
-   whole class rather than combining them.
+   @navigation is the container; links are @navigation-link with
+   @navigation-link-active for the current page. Tabs mirror that pair: @tab and
+   @tab-active. Use @breadcrumb for trail navigation. Active and inactive are
+   separate recipes — swap the whole class rather than combining them. The short
+   @nav / @nav-link forms are aliases that expand identically; the full-word
+   @navigation-* names are canonical — prefer them.
 */
 
 /* Top-level nav container. */
@@ -36,3 +38,14 @@
 @recipe tab-active {
   inline-flex items-center gap-2 border-b-2 border-primary px-3 py-2 text-sm font-medium text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
 }
+
+/* Full-word canonical aliases — expand identically to the @nav-* short forms. */
+
+/* Top-level nav container (alias of @nav). */
+@recipe navigation { @nav }
+
+/* Inactive nav link (alias of @nav-link). */
+@recipe navigation-link { @nav-link }
+
+/* Active nav link (alias of @nav-link-active). */
+@recipe navigation-link-active { @nav-link-active }

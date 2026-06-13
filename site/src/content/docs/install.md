@@ -152,6 +152,14 @@ values to merge into an existing theme):
 /* end shortwind theme */
 ```
 
+## Tones
+
+Alongside the theme, `init` appends a `shortwind:tones` block — a small
+`[data-tone="…"]` table that powers tone-aware recipes like `@badge`. It's what
+lets a badge's color come from your data (`data-tone={severity}`) without a
+dynamic class name. Like the theme block it's append-only, idempotent, and yours
+to edit or extend. See [Tones](/docs/tones).
+
 ## What the plugin does
 
 The plugin scans your source files for `class="..."` and `className="..."`
