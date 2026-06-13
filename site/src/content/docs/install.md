@@ -59,12 +59,14 @@ ones* with neutral placeholder values:
 }
 ```
 
-The supplement is purely additive — nothing you defined is ever overridden —
-and the dark values follow your project's own strategy (a `.dark` class or
-the `prefers-color-scheme` media query; with neither, the `:root` values
-apply everywhere). Re-running `init` finds nothing missing and changes
-nothing. Tune the placeholder values to your palette, or move them into your
-own theme blocks; the values come from the default block below.
+The supplement is purely additive — nothing you defined is ever overridden — and
+the dark values are written under `.dark` (class-based dark mode). `init` also
+ensures `@custom-variant dark` and, on a `create-next-app` project, converts the
+`@media (prefers-color-scheme: dark)` block to `.dark` so an in-app toggle is the
+single source of truth (see the [Next.js guide](/docs/setup-next#dark-mode) for
+the no-flash seed script). Re-running `init` finds nothing missing and changes
+nothing. Tune the placeholder values to your palette, or move them into your own
+theme blocks; the values come from the default block below.
 
 This is the full default block `init` writes (also the reference for the
 values to merge into an existing theme):

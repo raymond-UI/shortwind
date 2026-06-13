@@ -169,6 +169,29 @@ Recipes referencing a missing token render colorless — no error.
 that lets `@badge` and other tone-aware recipes take their color from data. See
 [Tones](/docs/tones).
 
+### Dark mode
+
+Shortwind sets dark mode up **class-based**: a `.dark` on `<html>` toggles it.
+`init` adds `@custom-variant dark (&:is(.dark *))`, writes dark values under
+`.dark`, and — because `create-next-app` ships an `@media (prefers-color-scheme:
+dark)` block that a class can't toggle (and which would override a force-light
+choice) — **converts that media block to `.dark`**. So the toggle is the single
+source of truth: a `.dark` class flips the whole theme, and force-light works
+even on an OS in dark mode.
+
+To still respect the OS preference on first load (and avoid a flash), seed the
+class before paint. Add this to `app/layout.tsx`, in `<head>`:
+
+```tsx
+<script
+  dangerouslySetInnerHTML={{
+    __html: `(function(){try{var s=localStorage.getItem('theme');var d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d)}catch(e){}})()`,
+  }}
+/>
+```
+
+Your toggle then writes `localStorage.theme` and flips `document.documentElement.classList`.
+
 ## 5. How recipes reach Tailwind
 
 The loader rewrites `@recipe` tokens to plain Tailwind in transformed source,
