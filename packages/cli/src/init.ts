@@ -26,9 +26,9 @@ import { readLockfile, writeLockfile } from "./lockfile.js";
 import {
   buildThemeSupplement,
   buildToneBlock,
+  convertMediaDarkToClass,
   ensureDarkClassVariant,
   findMissingThemeTokens,
-  promoteMediaDarkToClass,
   scaffoldTheme,
   TONE_MARKER,
   type ThemeAction,
@@ -181,7 +181,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
   if (theme.action === "skipped" && theme.themePath && skillRegistry) {
     const css = await readFile(theme.themePath, "utf8");
     missingThemeTokens = findMissingThemeTokens(css, skillRegistry.flattened);
-    const supplement = buildThemeSupplement(css, missingThemeTokens);
+    const supplement = buildThemeSupplement(missingThemeTokens);
     if (supplement) {
       await writeFile(theme.themePath, `${css.replace(/\s*$/, "")}\n\n${supplement}\n`);
       supplementedThemeTokens = missingThemeTokens;
@@ -190,18 +190,17 @@ export async function init(options: InitOptions): Promise<InitResult> {
     }
   }
 
-  // Make dark mode toggle-ready (#93). A stock create-next-app theme drives
-  // dark only from `@media (prefers-color-scheme)`, which a `.dark` class can't
-  // reach — so every dashboard's dark-mode toggle silently does nothing until
-  // hand-rewired. Ensure the `@custom-variant dark` exists, and mirror any
-  // prefers-color-scheme `:root` block into `.dark` so the toggle drives the
-  // base tokens too (the supplement + tones already emit `.dark`). Additive and
-  // idempotent; the `@media` block stays as the system-preference default.
+  // Make dark mode toggle-ready, class-only (#96). A stock create-next-app
+  // theme drives dark from `@media (prefers-color-scheme)`, which a `.dark`
+  // class can't reach — and which overrides a force-light choice when the OS is
+  // dark. Ensure `@custom-variant dark`, then CONVERT that media block into
+  // `.dark` (move the declarations, drop the wrapper) so the toggle is the
+  // single source of truth. Idempotent; only the simple single-`:root` shape is
+  // touched. System-preference seeding moves to the inline script in the setup
+  // docs.
   if (theme.themePath) {
     const css = await readFile(theme.themePath, "utf8");
-    let next = ensureDarkClassVariant(css);
-    const promote = promoteMediaDarkToClass(next);
-    if (promote) next = `${next.replace(/\s*$/, "")}\n\n${promote}\n`;
+    const { css: next } = convertMediaDarkToClass(ensureDarkClassVariant(css));
     if (next !== css) await writeFile(theme.themePath, next);
   }
 
@@ -218,7 +217,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
     const css = await readFile(theme.themePath, "utf8");
     tonesPath = theme.themePath;
     if (!css.includes(TONE_MARKER)) {
-      await writeFile(theme.themePath, `${css.replace(/\s*$/, "")}\n\n${buildToneBlock(css)}\n`);
+      await writeFile(theme.themePath, `${css.replace(/\s*$/, "")}\n\n${buildToneBlock()}\n`);
       tonesAction = "written";
     }
   }
@@ -295,7 +294,11 @@ export function cliVersion(): string | null {
 }
 
 function pickPackages(bundler: ReturnType<typeof detectProject>["bundler"]): string[] {
-  const base = ["@shortwind/tailwind"];
+  // @shortwind/cli is installed so `npx shortwind <cmd>` resolves the local
+  // bin (the package provides the `shortwind` bin). Without it the guidance to
+  // run `npx shortwind doctor` / `build` 404s, since npx tries to download a
+  // nonexistent `shortwind` package (#97).
+  const base = ["@shortwind/cli", "@shortwind/tailwind"];
   switch (bundler) {
     case "vite":
       return [...base, "@shortwind/vite"];
@@ -434,11 +437,10 @@ async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
   await writeFile(vscodePath, next.endsWith("\n") ? next : next + "\n");
 }
 
-// The CLI ships as @shortwind/cli with no `shortwind` bin alias and is not
-// added as a devDependency, so a bare `npx shortwind build` resolves a
-// different (nonexistent) npm package and 404s the user's first commit (#76).
-// Invoke it the same way init itself is invoked.
-const HUSKY_LINE = "npx @shortwind/cli build";
+// init installs @shortwind/cli (which provides the `shortwind` bin), so the
+// hook can invoke the short form — npx resolves the local bin without a
+// network round-trip (#76, #97).
+const HUSKY_LINE = "npx shortwind build";
 
 // Returns the hook path, or null when the target isn't a git repository —
 // installing a pre-commit hook into a non-repo is presumptuous and husky

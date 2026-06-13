@@ -87,7 +87,8 @@ describe("init", () => {
     // adapters are pinned to the CLI's own version (scoped name + @version)
     expect(installed.every((p) => /^@shortwind\/\S+@\d+\.\d+\.\d+/.test(p))).toBe(true);
     const bare = installed.map((p) => p.slice(0, p.lastIndexOf("@"))).sort();
-    expect(bare).toEqual(["@shortwind/tailwind", "@shortwind/vite"].sort());
+    // @shortwind/cli is installed too so `npx shortwind` resolves the bin (#97).
+    expect(bare).toEqual(["@shortwind/cli", "@shortwind/tailwind", "@shortwind/vite"].sort());
   });
 
   it("still scaffolds recipes/config/SKILL when the adapter install fails", async () => {
@@ -215,12 +216,13 @@ describe("init", () => {
     const css = readFileSync(globals, "utf8");
     expect(css).toContain("shortwind:theme-supplement");
     expect(css).toContain("--color-card: var(--card);");
-    // Dark mode is made toggle-ready (#93): the class variant is added, and the
-    // media-query base tokens are mirrored into .dark so a toggle drives them.
+    // Dark mode is made toggle-ready, class-only (#96): the class variant is
+    // added, and the @media (prefers-color-scheme) block is CONVERTED to .dark.
     expect(css).toContain("@custom-variant dark (&:is(.dark *));");
     expect(css).toContain("shortwind:dark-promote");
-    // --background now appears 3×: :root (light) + @media (system) + .dark (toggle).
-    expect(css.match(/--background\s*:/g)).toHaveLength(3);
+    expect(css).not.toContain("prefers-color-scheme"); // @media removed
+    // --background now appears 2×: :root (light) + .dark (toggle).
+    expect(css.match(/--background\s*:/g)).toHaveLength(2);
     expect(css.match(/--color-background\s*:/g)).toHaveLength(1);
 
     // Re-running finds nothing missing and is fully idempotent — no second
@@ -248,7 +250,7 @@ describe("init", () => {
     cleanup.push(dir);
     const globals = path.join(dir, "app", "globals.css");
     await mkdir(path.dirname(globals), { recursive: true });
-    // create-next-app shape: media-query dark mode → tone dark overrides follow.
+    // create-next-app shape: media-query dark mode → converted to class-only.
     await writeFile(
       globals,
       `@import "tailwindcss";\n\n:root { --background: #fff; }\n\n@media (prefers-color-scheme: dark) {\n  :root { --background: #0a0a0a; }\n}\n`,
@@ -267,8 +269,10 @@ describe("init", () => {
     const css = readFileSync(globals, "utf8");
     expect(css).toContain("shortwind:tones");
     expect(css).toContain('[data-tone="success"]');
-    // Tone dark overrides follow the project's prefers-color-scheme strategy.
-    expect(css).toContain("@media (prefers-color-scheme: dark) {");
+    // Tone dark overrides are class-only; the project's @media block was
+    // converted to .dark (#96), so no prefers-color-scheme remains.
+    expect(css).toContain(".dark {");
+    expect(css).not.toContain("prefers-color-scheme");
 
     // Re-running does not duplicate the tone block.
     const again = await init({
@@ -376,7 +380,7 @@ describe("init", () => {
     expect(() => parseJsonc(body)).not.toThrow();
   });
 
-  it("installs a pre-commit hook that invokes the real @shortwind/cli package (#76)", async () => {
+  it("installs a pre-commit hook that runs the build via the local shortwind bin (#76, #97)", async () => {
     const dir = await setupProject();
     cleanup.push(dir);
     await mkdir(path.join(dir, ".git"), { recursive: true });
@@ -391,10 +395,8 @@ describe("init", () => {
 
     expect(result.huskyPath).not.toBeNull();
     const hook = readFileSync(result.huskyPath!, "utf8");
-    // `npx shortwind build` resolves a nonexistent npm package (the CLI has
-    // no `shortwind` bin and isn't a devDependency) — first commit 404s.
-    expect(hook).toContain("npx @shortwind/cli build");
-    expect(hook).not.toMatch(/npx shortwind build/);
+    // init installs @shortwind/cli, so `npx shortwind` resolves the local bin.
+    expect(hook).toContain("npx shortwind build");
     // Husky v9: no shebang, no sourcing of _/husky.sh
     expect(hook).not.toContain("#!/usr/bin/env sh");
     expect(hook).not.toContain("husky.sh");
@@ -649,7 +651,7 @@ describe("init", () => {
     ).rejects.toThrow(/Unknown preset/);
   });
 
-  it("does not call installer when --preset=none and bundler is unknown — still installs @shortwind/tailwind", async () => {
+  it("installs the base packages (@shortwind/cli + tailwind) when --preset=none and bundler is unknown", async () => {
     const dir = await setupProject({ name: "demo" });
     cleanup.push(dir);
 
@@ -661,10 +663,9 @@ describe("init", () => {
       installPackages: installer.fn,
     });
 
-    // bundler unknown → only base package is installed (version-pinned to the CLI)
-    const installed = installer.calls[0]?.packages ?? [];
-    expect(installed).toHaveLength(1);
-    expect(installed[0]).toMatch(/^@shortwind\/tailwind@\d+\.\d+\.\d+/);
+    // bundler unknown → base packages only (version-pinned to the CLI)
+    const installed = (installer.calls[0]?.packages ?? []).map((p: string) => p.slice(0, p.lastIndexOf("@"))).sort();
+    expect(installed).toEqual(["@shortwind/cli", "@shortwind/tailwind"]);
   });
 });
 

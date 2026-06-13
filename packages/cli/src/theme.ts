@@ -183,35 +183,16 @@ const THEME_DARK_VALUES = blockSectionValues(".dark");
 // project's own strategy — `.dark` class (incl. @custom-variant) or the
 // prefers-color-scheme media query — and are omitted when there isn't one
 // (the :root values then apply everywhere).
-const PREFERS_DARK_RE = /@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)/;
-
-// Dark overrides for a block of lines (#93). The `.dark` class block is emitted
-// ALWAYS — it's the only strategy an in-app toggle (a `.dark` on <html>) can
-// drive, and every dashboard wants one. When the project ALSO uses
-// `@media (prefers-color-scheme: dark)`, the same lines are emitted there too so
-// system-preference users aren't regressed. `init` ensures the matching
-// `@custom-variant dark` exists. `mediaWrapRoot` controls the media branch:
-// bare `--token:` declarations need a `:root { … }` wrapper (the supplement);
-// full rules like `[data-tone="x"] { … }` go in flat (the tone block).
-function darkSection(
-  css: string,
-  lines: string[],
-  { mediaWrapRoot = true }: { mediaWrapRoot?: boolean } = {},
-): string[] {
-  const out = [".dark {", ...lines, "}"];
-  if (PREFERS_DARK_RE.test(css)) {
-    out.push("@media (prefers-color-scheme: dark) {");
-    if (mediaWrapRoot) {
-      out.push("  :root {", ...lines.map((l) => `  ${l}`), "  }");
-    } else {
-      out.push(...lines.map((l) => `  ${l}`));
-    }
-    out.push("}");
-  }
-  return out;
+// Dark overrides are class-only (#96): a `.dark { … }` block, the single
+// strategy an in-app toggle (`.dark` on <html>) can drive. `init` ensures the
+// matching `@custom-variant dark` and converts any create-next-app
+// prefers-color-scheme block to `.dark` (see convertMediaDarkToClass), so the
+// toggle is the one source of truth and `@media` never competes with it.
+function darkSection(lines: string[]): string[] {
+  return [".dark {", ...lines, "}"];
 }
 
-export function buildThemeSupplement(css: string, missing: string[]): string | null {
+export function buildThemeSupplement(missing: string[]): string | null {
   const tokens = missing.filter((t) => THEME_LIGHT_VALUES.has(t));
   if (tokens.length === 0) return null;
 
@@ -227,7 +208,7 @@ export function buildThemeSupplement(css: string, missing: string[]): string | n
     ...light,
     "}",
   ];
-  if (dark.length > 0) lines.push(...darkSection(css, dark));
+  if (dark.length > 0) lines.push(...darkSection(dark));
   lines.push("@theme inline {", ...mapping, "}", "/* end shortwind theme-supplement */");
   return lines.join("\n");
 }
@@ -251,26 +232,32 @@ export const DARK_PROMOTE_MARKER = "/* shortwind:dark-promote";
 
 // A stock create-next-app theme puts its dark values in
 // `@media (prefers-color-scheme: dark) { :root { … } }`, which a class toggle
-// can't reach. Mirror those declarations into a `.dark { … }` block so the
-// toggle drives the base tokens too (#93). Additive — the `@media` block stays
-// as the system-preference default. Idempotent via its marker; returns null
-// when there's nothing to promote.
-export function promoteMediaDarkToClass(css: string): string | null {
-  if (css.includes(DARK_PROMOTE_MARKER)) return null;
-  const m = css.match(
-    /@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{\s*:root\s*\{([^}]*)\}/,
-  );
+// can't reach — and worse, it overrides a force-light choice when the OS is in
+// dark mode. CONVERT it to `.dark { … }`: move the declarations and drop the
+// `@media` wrapper, so the `.dark` toggle is the single source of truth (#96).
+// Only the simple single-`:root` shape is touched; a media block with any other
+// content is left alone. Returns the rewritten css and whether it changed;
+// idempotent via the marker. (System-preference seeding moves to a tiny inline
+// script — see the setup docs.)
+const MEDIA_DARK_ROOT_RE =
+  /@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)\s*\{\s*:root\s*\{([^}]*)\}\s*\}/;
+
+export function convertMediaDarkToClass(css: string): { css: string; converted: boolean } {
+  if (css.includes(DARK_PROMOTE_MARKER)) return { css, converted: false };
+  const m = css.match(MEDIA_DARK_ROOT_RE);
   const decls = [...(m?.[1] ?? "").matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map(
     (d) => `  --${d[1]}: ${d[2]!.trim()};`,
   );
-  if (decls.length === 0) return null;
-  return [
-    `${DARK_PROMOTE_MARKER} — base dark tokens mirrored from your @media block so a .dark toggle drives them. */`,
+  if (decls.length === 0) return { css, converted: false };
+  const without = css.replace(MEDIA_DARK_ROOT_RE, "").replace(/\n{3,}/g, "\n\n");
+  const block = [
+    `${DARK_PROMOTE_MARKER} — dark tokens moved out of the system-preference media query so a .dark toggle is the single source of truth. */`,
     ".dark {",
     ...decls,
     "}",
     "/* end shortwind dark-promote */",
   ].join("\n");
+  return { css: `${without.replace(/\s*$/, "")}\n\n${block}\n`, converted: true };
 }
 
 export const TONE_MARKER = "/* shortwind:tones";
@@ -305,9 +292,8 @@ const TONES: readonly Tone[] = [
 ];
 
 // Build the append-only tone block. Dark overrides (success/warning only) go
-// under `.dark` so an in-app toggle drives them, plus the prefers-color-scheme
-// media query when the project uses it (see darkSection / #93).
-export function buildToneBlock(css: string): string {
+// under `.dark` so an in-app toggle drives them (class-only; #96).
+export function buildToneBlock(): string {
   const rule = (name: string, bg: string, fg: string) =>
     `[data-tone="${name}"] { --tone-bg: ${bg}; --tone-fg: ${fg}; }`;
   const lines: string[] = [
@@ -318,7 +304,7 @@ export function buildToneBlock(css: string): string {
   const darkTones = TONES.filter((t) => t.darkBg && t.darkFg);
   if (darkTones.length > 0) {
     const darkRules = darkTones.map((t) => "  " + rule(t.name, t.darkBg!, t.darkFg!));
-    lines.push(...darkSection(css, darkRules, { mediaWrapRoot: false }));
+    lines.push(...darkSection(darkRules));
   }
   lines.push("/* end shortwind tones */");
   return lines.join("\n");

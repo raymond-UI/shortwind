@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildThemeSupplement,
   buildToneBlock,
+  convertMediaDarkToClass,
   ensureDarkClassVariant,
   findMissingThemeTokens,
-  promoteMediaDarkToClass,
   scaffoldTheme,
   THEME_MARKER,
   THEME_SUPPLEMENT_MARKER,
@@ -160,7 +160,7 @@ describe("buildThemeSupplement", () => {
 `;
 
   it("emits only the missing tokens, shadcn-style, with real default values", () => {
-    const block = buildThemeSupplement(nextAppCss, ["border", "card", "muted-foreground"]);
+    const block = buildThemeSupplement(["border", "card", "muted-foreground"]);
     expect(block).not.toBeNull();
     expect(block).toContain(THEME_SUPPLEMENT_MARKER);
     // Light values come from the default theme block, not invented.
@@ -175,52 +175,21 @@ describe("buildThemeSupplement", () => {
     expect(block).not.toContain("--color-foreground:");
   });
 
-  it("emits dark under .dark AND the @media query when the project uses one (#93)", () => {
-    const block = buildThemeSupplement(nextAppCss, ["card"])!;
-    // .dark drives an in-app toggle; @media keeps system-preference working.
-    expect(block).toContain(".dark {");
-    expect(block).toContain("@media (prefers-color-scheme: dark)");
-    expect(block).toContain("--card: oklch(0.205 0 0);");
-  });
-
-  it("follows a .dark class strategy when the project uses one", () => {
-    const css = `@import "tailwindcss";
-@custom-variant dark (&:is(.dark *));
-:root { --background: #fff; }
-.dark { --background: #000; }
-@theme inline { --color-background: var(--background); }
-`;
-    const block = buildThemeSupplement(css, ["card"])!;
+  it("emits dark under .dark only — class-only, no @media (#96)", () => {
+    const block = buildThemeSupplement(["card"])!;
     expect(block).toContain(".dark {");
     expect(block).not.toContain("prefers-color-scheme");
     expect(block).toContain("--card: oklch(0.205 0 0);");
-  });
-
-  it("still emits a .dark block when the project has no dark strategy — toggle-ready (#93)", () => {
-    const css = `@import "tailwindcss";
-:root { --background: #fff; }
-@theme inline { --color-background: var(--background); }
-`;
-    const block = buildThemeSupplement(css, ["card"])!;
-    expect(block).toContain("--card: oklch(1 0 0);");
-    expect(block).toContain(".dark {");
-    expect(block).not.toContain("prefers-color-scheme");
   });
 
   it("returns null when nothing is missing", () => {
-    expect(buildThemeSupplement(nextAppCss, [])).toBeNull();
+    expect(buildThemeSupplement([])).toBeNull();
   });
 });
 
 describe("buildToneBlock", () => {
-  const classDarkCss = `@import "tailwindcss";
-@custom-variant dark (&:is(.dark *));
-:root { --muted: oklch(0.97 0 0); }
-.dark { --muted: oklch(0.269 0 0); }
-`;
-
   it("emits the default semantic tones as data-tone selectors", () => {
-    const block = buildToneBlock(classDarkCss);
+    const block = buildToneBlock();
     expect(block).toContain(TONE_MARKER);
     for (const tone of ["neutral", "success", "warning", "danger", "info"]) {
       expect(block).toContain(`[data-tone="${tone}"]`);
@@ -232,34 +201,16 @@ describe("buildToneBlock", () => {
     expect(block).toContain("--tone-fg: var(--primary);");
   });
 
-  it("wraps success/warning dark overrides in .dark for a class strategy", () => {
-    const block = buildToneBlock(classDarkCss);
+  it("puts success/warning dark overrides under .dark only — class-only (#96)", () => {
+    const block = buildToneBlock();
     expect(block).toContain(".dark {");
     expect(block).not.toContain("prefers-color-scheme");
-    // Only the palette tones carry an explicit dark value.
     expect(block).toContain("oklch(0.393 0.095 152.535)"); // success dark bg
     expect(block).toContain("oklch(0.414 0.112 45.904)"); // warning dark bg
   });
-
-  it("emits tones under .dark AND the @media query when the project uses one (#93)", () => {
-    const mediaCss = `@import "tailwindcss";
-:root { --muted: #eee; }
-@media (prefers-color-scheme: dark) { :root { --muted: #333; } }
-`;
-    const block = buildToneBlock(mediaCss);
-    expect(block).toContain(".dark {");
-    expect(block).toContain("@media (prefers-color-scheme: dark) {");
-  });
-
-  it("still emits a .dark tones block with no dark strategy — toggle-ready (#93)", () => {
-    const block = buildToneBlock(`@import "tailwindcss";\n:root { --muted: #eee; }\n`);
-    expect(block).toContain('[data-tone="success"]');
-    expect(block).toContain(".dark {");
-    expect(block).not.toContain("prefers-color-scheme");
-  });
 });
 
-describe("ensureDarkClassVariant / promoteMediaDarkToClass (#93)", () => {
+describe("ensureDarkClassVariant / convertMediaDarkToClass (#96)", () => {
   it("inserts @custom-variant dark after the tailwind import when absent", () => {
     const out = ensureDarkClassVariant(`@import "tailwindcss";\n:root { --x: 1; }\n`);
     expect(out).toContain("@custom-variant dark (&:is(.dark *));");
@@ -267,22 +218,28 @@ describe("ensureDarkClassVariant / promoteMediaDarkToClass (#93)", () => {
     expect(ensureDarkClassVariant(out)).toBe(out);
   });
 
-  it("mirrors a prefers-color-scheme :root block into .dark", () => {
+  it("converts a prefers-color-scheme block into .dark and removes the @media", () => {
     const css = `@import "tailwindcss";
 :root { --background: #fff; --foreground: #111; }
 @media (prefers-color-scheme: dark) {
   :root { --background: #0a0a0a; --foreground: #ededed; }
 }
 `;
-    const block = promoteMediaDarkToClass(css)!;
-    expect(block).toContain(".dark {");
-    expect(block).toContain("--background: #0a0a0a;");
-    expect(block).toContain("--foreground: #ededed;");
+    const { css: out, converted } = convertMediaDarkToClass(css);
+    expect(converted).toBe(true);
+    expect(out).toContain(".dark {");
+    expect(out).toContain("--background: #0a0a0a;");
+    expect(out).toContain("--foreground: #ededed;");
+    // the @media wrapper is gone — the .dark toggle is the only strategy.
+    expect(out).not.toContain("prefers-color-scheme");
     // idempotent once the marker is present
-    expect(promoteMediaDarkToClass(`${css}\n${block}`)).toBeNull();
+    expect(convertMediaDarkToClass(out).converted).toBe(false);
   });
 
-  it("returns null when there is no media-query dark block", () => {
-    expect(promoteMediaDarkToClass(`@import "tailwindcss";\n:root { --x: 1; }\n`)).toBeNull();
+  it("is a no-op when there is no media-query dark block", () => {
+    const css = `@import "tailwindcss";\n:root { --x: 1; }\n`;
+    const { css: out, converted } = convertMediaDarkToClass(css);
+    expect(converted).toBe(false);
+    expect(out).toBe(css);
   });
 });
