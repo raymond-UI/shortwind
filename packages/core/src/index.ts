@@ -10,7 +10,7 @@ export {
 export type { ExpandMode, ExpandOptions } from "./expander.js";
 export { renderSkillMarkdown } from "./skill.js";
 export type { SkillAdapter, SkillRenderOptions } from "./skill.js";
-export { RESERVED_RECIPE_NAMES, isReservedRecipeName } from "./reserved.js";
+export { RESERVED_RECIPE_NAMES, isReservedRecipeName, looksLikeRecipeToken } from "./reserved.js";
 export {
   RECIPE_SHA_HEX_LENGTH,
   PLACEHOLDER_SHA,

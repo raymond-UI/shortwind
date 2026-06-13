@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { glob } from "tinyglobby";
-import { buildRegistry, isReservedRecipeName, parseRecipeFile } from "@shortwind/core";
+import { buildRegistry, isReservedRecipeName, looksLikeRecipeToken, parseRecipeFile } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
 import { installedFamilies, readConfig } from "../project.js";
 
@@ -100,7 +100,10 @@ export async function lint(options: LintOptions): Promise<LintResult> {
         // would otherwise resolve an inherited Object.prototype member and be
         // silently treated as a known recipe instead of flagged unknown.
         if (Object.hasOwn(registry.flattened, name)) usedRecipes.add(name);
-        else if (enabledRules.has("recipe/unknown")) {
+        // Only flag tokens shaped like a recipe reference; Tailwind v4's own
+        // `@`-utilities (`@container`, `@md:flex`, `@min-[400px]:grid`) are not
+        // unknown recipes (shared with the editor plugin's diagnostic).
+        else if (enabledRules.has("recipe/unknown") && looksLikeRecipeToken(token.value)) {
           findings.push({
             rule: "recipe/unknown",
             severity: "error",

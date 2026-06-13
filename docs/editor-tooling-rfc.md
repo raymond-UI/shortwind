@@ -14,9 +14,17 @@ Status: Phase 0 + Phase 1 landed (branch `spike/ts-plugin`) · Date: 2026-06-13
 - **Packaging — verified.** Ships as the `@shortwind/cli/ts-plugin` *subpath*
   (resolves by name; callable factory; cli bundles the private source). **No new
   published package — stays at 8.**
-- **Phase 1b — next.** Extract the lint rules from `cli` into `core`, then add
-  unknown-recipe diagnostics + did-you-mean quick-fix (reusing them, so Tailwind
-  `@container`/`@md:` variants don't false-flag) and the ESLint `^@` whitelist.
+- **Phase 1b — landed (diagnostics).** Added `looksLikeRecipeToken` to `core`
+  (variant-safe: rejects Tailwind's `@container`/`@md:flex`/`@min-[400px]:grid`),
+  shared by the plugin's **unknown-recipe diagnostic + did-you-mean quick-fix**
+  and `cli lint`'s `recipe/unknown` (which it also hardens — lint no longer
+  false-flags Tailwind variants).
+- **Still pending.** The ESLint `^@` whitelist wiring (auto-editing arbitrary
+  eslint flat configs is unsafe — likely a detect-and-print hint); extracting
+  the *remaining* lint rules (redundant/conflicting/suffix) into `core` for the
+  lower-priority editor diagnostics; and a real-editor smoke (the programmatic
+  harness exercises the exact tsserver API, but VS Code lighting up is the one
+  thing not coverable headless).
 
 ## Problem
 

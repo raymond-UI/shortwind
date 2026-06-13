@@ -97,4 +97,33 @@ describe("ts-plugin — real project registry", () => {
     const res = withPlugin(f, code).getCompletionsAtPosition(f, at(code, 'className="'), {}, undefined);
     expect((res?.entries ?? []).map((e) => e.name)).not.toContain("@badge");
   });
+
+  it("warns on an unknown recipe with a did-you-mean", () => {
+    const code = `export const El = () => <div className="@badeg p-2" />;`;
+    const diags = withPlugin(tsx, code).getSemanticDiagnostics(tsx).filter((d) => d.code === 990001);
+    expect(diags).toHaveLength(1);
+    expect(String(diags[0]!.messageText)).toContain("Unknown Shortwind recipe '@badeg'");
+    expect(String(diags[0]!.messageText)).toContain("Did you mean '@badge'");
+  });
+
+  it("does NOT flag Tailwind @-utilities or known recipes", () => {
+    const code = `export const El = () => <div className="@badge @container @md:flex @min-[400px]:grid" />;`;
+    const diags = withPlugin(tsx, code).getSemanticDiagnostics(tsx).filter((d) => d.code === 990001);
+    expect(diags).toHaveLength(0);
+  });
+
+  it("offers a quick-fix to the suggested recipe", () => {
+    const code = `export const El = () => <div className="@badeg" />;`;
+    const start = code.indexOf("@badeg");
+    const fixes = withPlugin(tsx, code).getCodeFixesAtPosition(
+      tsx,
+      start,
+      start + "@badeg".length,
+      [990001],
+      {},
+      {},
+    );
+    const fix = fixes.find((f) => f.fixName === "shortwind-did-you-mean");
+    expect(fix?.changes[0]?.textChanges[0]?.newText).toBe("@badge");
+  });
 });
