@@ -26,7 +26,9 @@ import { readLockfile, writeLockfile } from "./lockfile.js";
 import {
   buildThemeSupplement,
   buildToneBlock,
+  ensureDarkClassVariant,
   findMissingThemeTokens,
+  promoteMediaDarkToClass,
   scaffoldTheme,
   TONE_MARKER,
   type ThemeAction,
@@ -186,6 +188,21 @@ export async function init(options: InitOptions): Promise<InitResult> {
       missingThemeTokens = [];
       themeAction = "supplemented";
     }
+  }
+
+  // Make dark mode toggle-ready (#93). A stock create-next-app theme drives
+  // dark only from `@media (prefers-color-scheme)`, which a `.dark` class can't
+  // reach — so every dashboard's dark-mode toggle silently does nothing until
+  // hand-rewired. Ensure the `@custom-variant dark` exists, and mirror any
+  // prefers-color-scheme `:root` block into `.dark` so the toggle drives the
+  // base tokens too (the supplement + tones already emit `.dark`). Additive and
+  // idempotent; the `@media` block stays as the system-preference default.
+  if (theme.themePath) {
+    const css = await readFile(theme.themePath, "utf8");
+    let next = ensureDarkClassVariant(css);
+    const promote = promoteMediaDarkToClass(next);
+    if (promote) next = `${next.replace(/\s*$/, "")}\n\n${promote}\n`;
+    if (next !== css) await writeFile(theme.themePath, next);
   }
 
   // Tone-aware recipes (@badge, …) read --tone-bg/--tone-fg, selected by a

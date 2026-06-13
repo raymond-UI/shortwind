@@ -61,9 +61,11 @@ const RECIPE_TOKEN_RE = /@[A-Za-z0-9][\w-]*/g;
 export function findUnexpandedRecipes(code: string, registry: Registry): string[] {
   const known = registry.flattened;
   const found = new Set<string>();
-  // Same rc()/expandClassList exemption as findResidualRecipeTokens (#75):
-  // `class={rc("@nav-link")}` is the documented runtime pattern, not a leak.
-  code = code.replace(RUNTIME_EXPANDER_ARG_RE, "");
+  // Blank comments first (#92): a recipe named inside a `{/* @badge */}` JSX
+  // comment within a className expression is documentation, not a leak.
+  // Then the rc()/expandClassList exemption (#75): `class={rc("@nav-link")}`
+  // is the documented runtime pattern.
+  code = stripComments(code).replace(RUNTIME_EXPANDER_ARG_RE, "");
   for (const m of code.matchAll(CLASS_VALUE_RE)) {
     const value = m[2] ?? m[3] ?? "";
     for (const token of value.match(RECIPE_TOKEN_RE) ?? []) {
@@ -80,16 +82,17 @@ export function findUnexpandedRecipes(code: string, registry: Registry): string[
 // sits at the assignment site (`const cfg = { recipe: "@badge" }`) and only
 // reaches the attribute at runtime. Still keyed on known recipe names so
 // Tailwind container-query variants (`@md:flex`) and unrelated `@`-mentions
-// never false-positive; prose that legitimately names a recipe (docs,
-// comments) can, which is why strict mode is opt-in.
+// never false-positive. Comments are stripped first (#92) so a recipe named
+// in prose — a JSDoc `{@link}` tag (which collides with the @link recipe) or a
+// `/* uses @badge */` note — doesn't fail an otherwise-clean strict build.
 export function findResidualRecipeTokens(code: string, registry: Registry): string[] {
   const known = registry.flattened;
   const found = new Set<string>();
   // A recipe handed to the documented runtime escape hatch is expanded at
   // RUNTIME by design — the literal surviving into build output is the
   // feature, not a leak. Blank those call arguments so strict mode and
-  // rc()/expandClassList compose (#75).
-  const scannable = code.replace(RUNTIME_EXPANDER_ARG_RE, "");
+  // rc()/expandClassList compose (#75). Comments go first (#92).
+  const scannable = stripComments(code).replace(RUNTIME_EXPANDER_ARG_RE, "");
   for (const m of scannable.matchAll(RESIDUAL_TOKEN_RE)) {
     const token = m[0];
     if (Object.hasOwn(known, token.slice(1))) found.add(token);
@@ -106,6 +109,16 @@ const RESIDUAL_TOKEN_RE = /(?<![\w.@-])@[A-Za-z0-9][\w-]*/g;
 // literal-only — a recipe reaching the call through a variable is still
 // invisible to the build and stays flagged.
 const RUNTIME_EXPANDER_ARG_RE = /\b(?:rc|expandClassList)\s*\(\s*(["'`])[^"'`\n]*\1/g;
+
+// Blank comments so a recipe named in prose isn't read as a leak (#92): block
+// comments cover `/* … */`, JSDoc `/** {@link foo} */`, and JSX `{/* … */}`;
+// line comments are stripped only when not part of a `://` URL or escaped
+// `\//`. Class strings never contain these, so real leaks are unaffected.
+function stripComments(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(?<![:\\])\/\/[^\n]*/g, " ");
+}
 
 // One message for every adapter, so Vite/Next/Astro report leaks identically.
 export function residualRecipeMessage(id: string, tokens: string[]): string {

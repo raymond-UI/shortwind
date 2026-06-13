@@ -319,6 +319,26 @@ describe("findResidualRecipeTokens (#67)", () => {
     const code = `const name = "@card";\nconst cls = rc(name);`;
     expect(findResidualRecipeTokens(code, registry)).toEqual(["@card"]);
   });
+
+  it("does not flag a recipe named in a JSDoc/block comment, incl. {@link} (#92)", () => {
+    const code = `/** Renders a pill. See {@link card} and the @badge recipe. */\nexport const Pill = () => null;`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual([]);
+  });
+
+  it("does not flag a recipe named in a line comment (#92)", () => {
+    const code = `// this row uses @card and @link\nexport const x = 1;`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual([]);
+  });
+
+  it("still flags a real leak when a comment is also present (#92)", () => {
+    const code = `/* @badge is a pill */\nconst cfg = { recipe: "@card" };`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual(["@card"]);
+  });
+
+  it("does not over-strip a :// URL on the same line as a real leak (#92)", () => {
+    const code = `const u = "https://shortwind.dev/docs"; const r = "@card";`;
+    expect(findResidualRecipeTokens(code, registry)).toEqual(["@card"]);
+  });
 });
 
 describe("findUnexpandedRecipes", () => {

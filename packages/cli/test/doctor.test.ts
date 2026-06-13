@@ -116,6 +116,19 @@ describe("doctor", () => {
     expect(result.verdict).toBe("clean");
   });
 
+  it("ignores the dev-server output dir (.next/dev) (#91)", async () => {
+    const dir = await setupProject();
+    dirs.push(dir);
+    await write(dir, "src/page.tsx", `export default () => <div className="@card" />;\n`);
+    await write(dir, ".next/server/app/index.html", `<div class="rounded-lg border p-4"></div>\n`);
+    // Dev-server chunks inline framework internals with raw @-tokens; they are
+    // not a production artifact and must not be scanned.
+    await write(dir, ".next/dev/static/chunks/main.js", `const x="@card";\n`);
+
+    const result = await doctor({ cwd: dir });
+    expect(result.verdict).toBe("clean");
+  });
+
   it("exempts the documented rc() runtime escape hatch", async () => {
     const dir = await setupProject();
     dirs.push(dir);
