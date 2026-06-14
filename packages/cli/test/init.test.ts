@@ -308,6 +308,11 @@ describe("init", () => {
     // (local tsconfig plugins don't load under the editor's bundled TypeScript).
     const settings = JSON.parse(readFileSync(path.join(dir, ".vscode", "settings.json"), "utf8"));
     expect(settings["editor.quickSuggestions"]).toEqual({ strings: true });
+    // `-` removed from word separators in TS/JS(X) so retyping a dash re-fires
+    // quick-suggest inside a recipe/Tailwind token (per-language, not global).
+    for (const lang of ["typescriptreact", "javascriptreact", "typescript", "javascript"]) {
+      expect(settings[`[${lang}]`]["editor.wordSeparators"]).not.toContain("-");
+    }
     expect(settings["typescript.tsdk"]).toBe("node_modules/typescript/lib");
     expect(settings["typescript.enablePromptUseWorkspaceTsdk"]).toBe(true);
     expect(settings["typescript.tsserver.pluginPaths"]).toEqual(["."]);
@@ -419,6 +424,15 @@ describe("init", () => {
     expect(body).toContain("tailwindCSS.experimental.classRegex");
     expect(body).toContain('"editor.formatOnSave": true');
     expect(() => parseJsonc(body)).not.toThrow();
+
+    // The classRegex must cover recipe-CSS authoring too: one container pattern
+    // targets `@recipe { … }` bodies so Tailwind IntelliSense fires on the bare
+    // utilities inside recipes/*.css (not just className strings).
+    const settings = parseJsonc(body) as {
+      "tailwindCSS.experimental.classRegex": [string, string][];
+    };
+    const containers = settings["tailwindCSS.experimental.classRegex"].map((p) => p[0]);
+    expect(containers.some((c) => c.includes("@recipe"))).toBe(true);
   });
 
   it("installs a pre-commit hook that runs the build via the local shortwind bin (#76, #97)", async () => {

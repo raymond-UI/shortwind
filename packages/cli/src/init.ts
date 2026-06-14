@@ -424,10 +424,27 @@ async function writeConfig(
 }
 
 const CLASS_REGEX_KEY = ["tailwindCSS.experimental.classRegex"];
+// Per-token charclass shared by every container pattern. Beyond word chars it
+// allows the punctuation Tailwind utilities use — `:` (variants), `/` (opacity),
+// and `[]().,%#!` (arbitrary values like `bg-[var(--tone-bg,var(--muted))]`) —
+// so those match whole instead of truncating at the first `(`.
+const CLASS_TOKEN = "([\\w-@/:\\[\\]().,%#!]+)";
 const CLASS_REGEX_VALUE = [
-  ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
-  ["className\\s*=\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
+  ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", CLASS_TOKEN],
+  ["className\\s*=\\s*['\"]([^'\"]*)['\"]", CLASS_TOKEN],
+  // Recipe authoring: light up Tailwind IntelliSense on the bare utilities
+  // inside a `@recipe <name> { … }` body in recipes/*.css. The Tailwind engine
+  // only walks directives it knows in CSS (@apply/@theme/…), so a custom
+  // at-rule needs this classRegex bridge — verified to complete + hover once the
+  // project's own Tailwind is active (true in every real Shortwind project).
+  ["@recipe\\s+[\\w-]+\\s*\\{([^}]*)\\}", CLASS_TOKEN],
 ];
+
+// VS Code's default word separators minus `-`, so hyphenated tokens count as one
+// word and quick-suggest re-fires on `-`. Applied only to the TS/JS(X) languages
+// where recipe/Tailwind tokens are typed.
+const WORD_SEPARATORS = "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?";
+const WORD_SEPARATOR_LANGS = ["typescriptreact", "javascriptreact", "typescript", "javascript"];
 
 const FMT = { formattingOptions: { tabSize: 2, insertSpaces: true } } as const;
 
@@ -437,12 +454,23 @@ async function wireVscodeClassRegex(
 ): Promise<void> {
   await mkdir(path.dirname(vscodePath), { recursive: true });
   let body = existsSync(vscodePath) ? await readFile(vscodePath, "utf8") : "{}\n";
-  // (1) Tailwind IntelliSense reads recipe bodies via this classRegex (recipe
-  // authoring). (2) The Shortwind TS plugin completes recipe TOKENS inside
-  // className strings, but VS Code won't auto-trigger completion in a string
-  // unless quickSuggestions.strings is on (TS plugins can't add trigger chars).
+  // (1) Tailwind IntelliSense gets a classRegex covering BOTH className strings
+  // and `@recipe { … }` bodies, so utilities complete/hover in JSX and in
+  // recipes/*.css alike (recipe authoring). (2) The Shortwind TS plugin
+  // completes recipe TOKENS inside className strings, but VS Code won't
+  // auto-trigger completion in a string unless quickSuggestions.strings is on
+  // (TS plugins can't add trigger chars).
   body = applyEdits(body, modify(body, CLASS_REGEX_KEY, CLASS_REGEX_VALUE, FMT));
   body = applyEdits(body, modify(body, ["editor.quickSuggestions", "strings"], true, FMT));
+  // Make `-` a word character in TS/JS(X) so VS Code re-fires string
+  // quick-suggest when you retype a dash inside a recipe/Tailwind token
+  // (`@btn-` → variants) AFTER dismissing the dropdown — its string completion
+  // only retriggers on word chars, and a TS plugin can't register `-` as a
+  // trigger char. Scoped per-language so word selection elsewhere is untouched;
+  // best-effort (Ctrl+Space always re-opens the list regardless).
+  for (const lang of WORD_SEPARATOR_LANGS) {
+    body = applyEdits(body, modify(body, [`[${lang}]`, "editor.wordSeparators"], WORD_SEPARATORS, FMT));
+  }
   // A tsconfig language-service plugin loads ONLY under the workspace
   // TypeScript, not the editor's bundled copy (3) — so point the editor at the
   // local TS and prompt to use it. tsserver then resolves the plugin with

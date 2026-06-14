@@ -1,6 +1,6 @@
 # RFC: Editor tooling — recipe-token IntelliSense
 
-Status: Phase 0 + Phase 1 + 1b + editor-load fix landed (branch `spike/ts-plugin`) · Date: 2026-06-14
+Status: Phase 0 + Phase 1 + 1b + editor-load fix + recipe-CSS authoring landed (branch `spike/ts-plugin`) · Date: 2026-06-14
 
 ## Status
 
@@ -34,6 +34,25 @@ Status: Phase 0 + Phase 1 + 1b + editor-load fix landed (branch `spike/ts-plugin
   shared by the plugin's **unknown-recipe diagnostic + did-you-mean quick-fix**
   and `cli lint`'s `recipe/unknown` (which it also hardens — lint no longer
   false-flags Tailwind variants).
+- **Recipe-CSS authoring — landed.** The ts-plugin covers recipe *tokens* in
+  `className`; the *other* half is Tailwind IntelliSense on the **bare utilities
+  inside a `@recipe { … }` body** when authoring `recipes/*.css`. That's the
+  Tailwind extension's job, not ours — wired by giving its
+  `experimental.classRegex` a third container pattern (`@recipe <name> { … }`)
+  alongside the two `class=`/`className=` ones, with a token charclass widened to
+  `[\w-@/:[]().,%#!]` so arbitrary values (`bg-[var(--tone-bg,var(--muted))]`)
+  match whole instead of truncating at the first `(`. Two findings worth keeping:
+  (1) `classRegex` **does** fire inside `.css` files — contrary to common
+  answers — the engine just needs the project's Tailwind to be **active** (a v4
+  `@import "tailwindcss"` entry CSS; a transitive `tailwindcss` in node_modules
+  is not enough); (2) the Tailwind CSS engine natively lights up only directives
+  it knows (`@apply`/`@theme`/…), so a custom at-rule like `@recipe` is invisible
+  without the classRegex bridge — no need to switch recipe bodies to `@apply`.
+  Rejected: a `files.associations` language remap (works but kills CSS
+  highlighting); `classFunctions`/`classAttributes` (markup/JS only, never reach
+  CSS). Cosmetic wart deferred to Phase 2: VS Code's stock CSS validator
+  squiggles `@recipe` as an unknown at-rule (a scoped `css.lint` tweak or the
+  extension's own recipe-CSS language mode would silence it).
 - **Still pending.** The ESLint `^@` whitelist wiring (auto-editing arbitrary
   eslint flat configs is unsafe — likely a detect-and-print hint); extracting
   the *remaining* lint rules (redundant/conflicting/suffix) into `core` for the
