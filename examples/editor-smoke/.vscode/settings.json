@@ -1,6 +1,8 @@
 {
   "editor.quickSuggestions": { "strings": true },
   "typescript.tsserver.log": "verbose",
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
   "tailwindCSS.experimental.classRegex": [
     ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
     ["className\\s*=\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"]

@@ -303,9 +303,13 @@ describe("init", () => {
     expect(names).toContain("@shortwind/cli/ts-plugin");
     expect(names).toContain("next"); // existing plugin preserved
 
-    // completion fires inside className strings without a manual Ctrl+Space
+    // completion fires inside className strings without a manual Ctrl+Space,
+    // and the editor is pointed at the workspace TS so the plugin actually loads
+    // (local tsconfig plugins don't load under the editor's bundled TypeScript).
     const settings = JSON.parse(readFileSync(path.join(dir, ".vscode", "settings.json"), "utf8"));
     expect(settings["editor.quickSuggestions"]).toEqual({ strings: true });
+    expect(settings["typescript.tsdk"]).toBe("node_modules/typescript/lib");
+    expect(settings["typescript.enablePromptUseWorkspaceTsdk"]).toBe(true);
 
     // idempotent — re-running doesn't duplicate the plugin entry
     await init({ cwd: dir, preset: "starter", registry: REGISTRY_PATH, installPackages: installer.fn });

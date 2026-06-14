@@ -157,13 +157,13 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const configPath = path.join(cwd, "shortwind.config.json");
   await writeConfig(configPath, { registry, recipesDir: "recipes" });
 
-  const vscodePath = path.join(cwd, ".vscode", "settings.json");
-  await wireVscodeClassRegex(vscodePath);
-
   // Enable recipe-token IntelliSense (completion/hover/go-to-def) by adding the
   // TS language-service plugin to tsconfig — no extension, since init installs
   // @shortwind/cli which provides it as `./ts-plugin`.
   const tsconfigPluginPath = await wireTsconfigPlugin(cwd);
+
+  const vscodePath = path.join(cwd, ".vscode", "settings.json");
+  await wireVscodeClassRegex(vscodePath, { tsProject: tsconfigPluginPath !== null });
 
   const huskyPath = await installHuskyHook(cwd, path.join(cwd, ".husky", "pre-commit"));
 
@@ -431,7 +431,10 @@ const CLASS_REGEX_VALUE = [
 
 const FMT = { formattingOptions: { tabSize: 2, insertSpaces: true } } as const;
 
-async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
+async function wireVscodeClassRegex(
+  vscodePath: string,
+  opts: { tsProject: boolean } = { tsProject: false },
+): Promise<void> {
   await mkdir(path.dirname(vscodePath), { recursive: true });
   let body = existsSync(vscodePath) ? await readFile(vscodePath, "utf8") : "{}\n";
   // (1) Tailwind IntelliSense reads recipe bodies via this classRegex (recipe
@@ -440,6 +443,13 @@ async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
   // unless quickSuggestions.strings is on (TS plugins can't add trigger chars).
   body = applyEdits(body, modify(body, CLASS_REGEX_KEY, CLASS_REGEX_VALUE, FMT));
   body = applyEdits(body, modify(body, ["editor.quickSuggestions", "strings"], true, FMT));
+  // (3) A tsconfig language-service plugin loads ONLY under the workspace
+  // TypeScript, not the editor's bundled copy. Point the editor at the local TS
+  // and prompt to use it, so the plugin actually loads.
+  if (opts.tsProject) {
+    body = applyEdits(body, modify(body, ["typescript.tsdk"], "node_modules/typescript/lib", FMT));
+    body = applyEdits(body, modify(body, ["typescript.enablePromptUseWorkspaceTsdk"], true, FMT));
+  }
   parseJsonc(body); // sanity — must stay parseable
   await writeFile(vscodePath, body.endsWith("\n") ? body : body + "\n");
 }
