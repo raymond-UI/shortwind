@@ -285,6 +285,52 @@ describe("init", () => {
     expect(readFileSync(globals, "utf8").match(/shortwind:tones/g)).toHaveLength(1);
   });
 
+  it("wires the TS language-service plugin into tsconfig + enables string completion", async () => {
+    const dir = await setupProject({ name: "demo", devDependencies: { typescript: "^5.0.0" } });
+    cleanup.push(dir);
+    // a create-next-app-shaped tsconfig that already has a plugin
+    await writeFile(
+      path.join(dir, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { jsx: "react-jsx", plugins: [{ name: "next" }] } }, null, 2),
+    );
+    const installer = makeInstaller();
+
+    const result = await init({ cwd: dir, preset: "starter", registry: REGISTRY_PATH, installPackages: installer.fn });
+
+    expect(result.tsconfigPluginPath).toBe(path.join(dir, "tsconfig.json"));
+    const tsconfig = JSON.parse(readFileSync(path.join(dir, "tsconfig.json"), "utf8"));
+    const names = tsconfig.compilerOptions.plugins.map((p: { name: string }) => p.name);
+    expect(names).toContain("@shortwind/cli/ts-plugin");
+    expect(names).toContain("next"); // existing plugin preserved
+
+    // completion fires inside className strings without a manual Ctrl+Space,
+    // and the editor is pointed at the workspace TS so the plugin actually loads
+    // (local tsconfig plugins don't load under the editor's bundled TypeScript).
+    const settings = JSON.parse(readFileSync(path.join(dir, ".vscode", "settings.json"), "utf8"));
+    expect(settings["editor.quickSuggestions"]).toEqual({ strings: true });
+    // `-` removed from word separators in TS/JS(X) so retyping a dash re-fires
+    // quick-suggest inside a recipe/Tailwind token (per-language, not global).
+    for (const lang of ["typescriptreact", "javascriptreact", "typescript", "javascript"]) {
+      expect(settings[`[${lang}]`]["editor.wordSeparators"]).not.toContain("-");
+    }
+    expect(settings["typescript.tsdk"]).toBe("node_modules/typescript/lib");
+    expect(settings["typescript.enablePromptUseWorkspaceTsdk"]).toBe(true);
+    expect(settings["typescript.tsserver.pluginPaths"]).toEqual(["."]);
+
+    // idempotent — re-running doesn't duplicate the plugin entry
+    await init({ cwd: dir, preset: "starter", registry: REGISTRY_PATH, installPackages: installer.fn });
+    const again = JSON.parse(readFileSync(path.join(dir, "tsconfig.json"), "utf8"));
+    expect(again.compilerOptions.plugins.filter((p: { name: string }) => p.name === "@shortwind/cli/ts-plugin")).toHaveLength(1);
+  });
+
+  it("skips tsconfig wiring for a non-TS project (no tsconfig.json)", async () => {
+    const dir = await setupProject({ name: "demo" });
+    cleanup.push(dir);
+    const installer = makeInstaller();
+    const result = await init({ cwd: dir, preset: "starter", registry: REGISTRY_PATH, installPackages: installer.fn });
+    expect(result.tsconfigPluginPath).toBeNull();
+  });
+
   it("a mid-copy abort fails with a resumable message, and re-running completes (#78)", async () => {
     const { vi } = await import("vitest");
     const dir = await setupProject();
@@ -378,6 +424,15 @@ describe("init", () => {
     expect(body).toContain("tailwindCSS.experimental.classRegex");
     expect(body).toContain('"editor.formatOnSave": true');
     expect(() => parseJsonc(body)).not.toThrow();
+
+    // The classRegex must cover recipe-CSS authoring too: one container pattern
+    // targets `@recipe { … }` bodies so Tailwind IntelliSense fires on the bare
+    // utilities inside recipes/*.css (not just className strings).
+    const settings = parseJsonc(body) as {
+      "tailwindCSS.experimental.classRegex": [string, string][];
+    };
+    const containers = settings["tailwindCSS.experimental.classRegex"].map((p) => p[0]);
+    expect(containers.some((c) => c.includes("@recipe"))).toBe(true);
   });
 
   it("installs a pre-commit hook that runs the build via the local shortwind bin (#76, #97)", async () => {

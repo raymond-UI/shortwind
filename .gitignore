@@ -11,3 +11,6 @@ dist
 apps/web/public/registry
 apps/web/public/expand*.js
 packages/runtime/src/registry.generated.ts
+# Build output of the TS language-service plugin (the committed package.json in
+# this dir is the resolution stub; the .cjs is emitted by `tsdown`).
+packages/cli/ts-plugin/ts-plugin.cjs

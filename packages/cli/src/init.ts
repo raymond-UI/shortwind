@@ -66,6 +66,9 @@ export type InitResult = {
   skippedFamilies: string[];
   configPath: string;
   vscodePath: string;
+  // tsconfig the TS language-service plugin was added to; null for a non-TS
+  // project (no tsconfig.json to wire).
+  tsconfigPluginPath: string | null;
   // null when the target isn't a git repository (hook not installed).
   huskyPath: string | null;
   skillPath: string;
@@ -154,8 +157,13 @@ export async function init(options: InitOptions): Promise<InitResult> {
   const configPath = path.join(cwd, "shortwind.config.json");
   await writeConfig(configPath, { registry, recipesDir: "recipes" });
 
+  // Enable recipe-token IntelliSense (completion/hover/go-to-def) by adding the
+  // TS language-service plugin to tsconfig — no extension, since init installs
+  // @shortwind/cli which provides it as `./ts-plugin`.
+  const tsconfigPluginPath = await wireTsconfigPlugin(cwd);
+
   const vscodePath = path.join(cwd, ".vscode", "settings.json");
-  await wireVscodeClassRegex(vscodePath);
+  await wireVscodeClassRegex(vscodePath, { tsProject: tsconfigPluginPath !== null });
 
   const huskyPath = await installHuskyHook(cwd, path.join(cwd, ".husky", "pre-commit"));
 
@@ -254,6 +262,7 @@ export async function init(options: InitOptions): Promise<InitResult> {
     skippedFamilies: skipped,
     configPath,
     vscodePath,
+    tsconfigPluginPath,
     huskyPath,
     skillPath,
     themePath: theme.themePath,
@@ -415,26 +424,98 @@ async function writeConfig(
 }
 
 const CLASS_REGEX_KEY = ["tailwindCSS.experimental.classRegex"];
+// Per-token charclass shared by every container pattern. Beyond word chars it
+// allows the punctuation Tailwind utilities use — `:` (variants), `/` (opacity),
+// and `[]().,%#!` (arbitrary values like `bg-[var(--tone-bg,var(--muted))]`) —
+// so those match whole instead of truncating at the first `(`.
+const CLASS_TOKEN = "([\\w-@/:\\[\\]().,%#!]+)";
 const CLASS_REGEX_VALUE = [
-  ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
-  ["className\\s*=\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
+  ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", CLASS_TOKEN],
+  ["className\\s*=\\s*['\"]([^'\"]*)['\"]", CLASS_TOKEN],
+  // Recipe authoring: light up Tailwind IntelliSense on the bare utilities
+  // inside a `@recipe <name> { … }` body in recipes/*.css. The Tailwind engine
+  // only walks directives it knows in CSS (@apply/@theme/…), so a custom
+  // at-rule needs this classRegex bridge — verified to complete + hover once the
+  // project's own Tailwind is active (true in every real Shortwind project).
+  ["@recipe\\s+[\\w-]+\\s*\\{([^}]*)\\}", CLASS_TOKEN],
 ];
 
-async function wireVscodeClassRegex(vscodePath: string): Promise<void> {
+// VS Code's default word separators minus `-`, so hyphenated tokens count as one
+// word and quick-suggest re-fires on `-`. Applied only to the TS/JS(X) languages
+// where recipe/Tailwind tokens are typed.
+const WORD_SEPARATORS = "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?";
+const WORD_SEPARATOR_LANGS = ["typescriptreact", "javascriptreact", "typescript", "javascript"];
+
+const FMT = { formattingOptions: { tabSize: 2, insertSpaces: true } } as const;
+
+async function wireVscodeClassRegex(
+  vscodePath: string,
+  opts: { tsProject: boolean } = { tsProject: false },
+): Promise<void> {
   await mkdir(path.dirname(vscodePath), { recursive: true });
-  let body: string;
-  if (existsSync(vscodePath)) {
-    body = await readFile(vscodePath, "utf8");
-  } else {
-    body = "{}\n";
+  let body = existsSync(vscodePath) ? await readFile(vscodePath, "utf8") : "{}\n";
+  // (1) Tailwind IntelliSense gets a classRegex covering BOTH className strings
+  // and `@recipe { … }` bodies, so utilities complete/hover in JSX and in
+  // recipes/*.css alike (recipe authoring). (2) The Shortwind TS plugin
+  // completes recipe TOKENS inside className strings, but VS Code won't
+  // auto-trigger completion in a string unless quickSuggestions.strings is on
+  // (TS plugins can't add trigger chars).
+  body = applyEdits(body, modify(body, CLASS_REGEX_KEY, CLASS_REGEX_VALUE, FMT));
+  body = applyEdits(body, modify(body, ["editor.quickSuggestions", "strings"], true, FMT));
+  // Make `-` a word character in TS/JS(X) so VS Code re-fires string
+  // quick-suggest when you retype a dash inside a recipe/Tailwind token
+  // (`@btn-` → variants) AFTER dismissing the dropdown — its string completion
+  // only retriggers on word chars, and a TS plugin can't register `-` as a
+  // trigger char. Scoped per-language so word selection elsewhere is untouched;
+  // best-effort (Ctrl+Space always re-opens the list regardless).
+  for (const lang of WORD_SEPARATOR_LANGS) {
+    body = applyEdits(body, modify(body, [`[${lang}]`, "editor.wordSeparators"], WORD_SEPARATORS, FMT));
   }
-  const edits = modify(body, CLASS_REGEX_KEY, CLASS_REGEX_VALUE, {
-    formattingOptions: { tabSize: 2, insertSpaces: true },
-  });
-  const next = applyEdits(body, edits);
-  // sanity — make sure it's parseable
+  // A tsconfig language-service plugin loads ONLY under the workspace
+  // TypeScript, not the editor's bundled copy (3) — so point the editor at the
+  // local TS and prompt to use it. tsserver then resolves the plugin with
+  // classic node10 resolution from where TypeScript is installed; the plugin
+  // ships as a real `@shortwind/cli/ts-plugin/` directory precisely so that
+  // resolution finds it (it ignores the package.json `exports` map). With a
+  // flat node_modules (npm/yarn) that's all it takes. pnpm hides the plugin in
+  // its isolated `.pnpm` store (TS#42688), so add the project as a best-effort
+  // plugin probe location (honored by VS Code's --pluginProbeLocations).
+  if (opts.tsProject) {
+    body = applyEdits(body, modify(body, ["typescript.tsdk"], "node_modules/typescript/lib", FMT));
+    body = applyEdits(body, modify(body, ["typescript.enablePromptUseWorkspaceTsdk"], true, FMT));
+    body = applyEdits(body, modify(body, ["typescript.tsserver.pluginPaths"], ["."], FMT));
+  }
+  parseJsonc(body); // sanity — must stay parseable
+  await writeFile(vscodePath, body.endsWith("\n") ? body : body + "\n");
+}
+
+const TS_PLUGIN_NAME = "@shortwind/cli/ts-plugin";
+
+// Turn on the language-service plugin by adding it to the project's tsconfig
+// `compilerOptions.plugins`. Recipe completion/hover/go-to-def then ride the
+// editor's built-in TypeScript — no marketplace extension. Skips non-TS
+// projects; idempotent. Returns the tsconfig path when wired.
+async function wireTsconfigPlugin(cwd: string): Promise<string | null> {
+  const tsconfigPath = path.join(cwd, "tsconfig.json");
+  if (!existsSync(tsconfigPath)) return null;
+  const body = await readFile(tsconfigPath, "utf8");
+  const parsed = parseJsonc(body) as { compilerOptions?: { plugins?: unknown } } | undefined;
+  const plugins = parsed?.compilerOptions?.plugins;
+  if (Array.isArray(plugins) && plugins.some((p) => (p as { name?: string })?.name === TS_PLUGIN_NAME)) {
+    return tsconfigPath; // already wired
+  }
+  const next = Array.isArray(plugins)
+    ? applyEdits(
+        body,
+        modify(body, ["compilerOptions", "plugins", plugins.length], { name: TS_PLUGIN_NAME }, {
+          ...FMT,
+          isArrayInsertion: true,
+        }),
+      )
+    : applyEdits(body, modify(body, ["compilerOptions", "plugins"], [{ name: TS_PLUGIN_NAME }], FMT));
   parseJsonc(next);
-  await writeFile(vscodePath, next.endsWith("\n") ? next : next + "\n");
+  await writeFile(tsconfigPath, next.endsWith("\n") ? next : next + "\n");
+  return tsconfigPath;
 }
 
 // init installs @shortwind/cli (which provides the `shortwind` bin), so the

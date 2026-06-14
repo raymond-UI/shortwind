@@ -1,0 +1,11 @@
+/* shortwind: layout@0.0.1 sha:000000 */
+
+/* Vertical stack with a medium gap. */
+@recipe stack-md {
+  flex flex-col gap-4
+}
+
+/* Horizontal row, centered. */
+@recipe row {
+  flex flex-row items-center gap-2
+}

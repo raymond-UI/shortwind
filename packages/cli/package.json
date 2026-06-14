@@ -8,8 +8,16 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ts-plugin": "./ts-plugin/ts-plugin.cjs"
+  },
   "files": [
-    "dist"
+    "dist",
+    "ts-plugin"
   ],
   "scripts": {
     "build": "tsdown",
@@ -33,6 +41,7 @@
     "tinyglobby": "^0.2.16"
   },
   "devDependencies": {
+    "@shortwind/ts-plugin": "workspace:*",
     "@types/node": "^25.7.0",
     "tsdown": "^0.22.0"
   },

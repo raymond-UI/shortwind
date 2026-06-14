@@ -1,0 +1,11 @@
+/* shortwind: badge@0.0.1 sha:000000 */
+
+/* Pill badge — tone-aware; set data-tone for color. */
+@recipe badge {
+  inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-[var(--tone-bg,var(--muted))] text-[var(--tone-fg,var(--muted-foreground))]
+}
+
+/* Outline badge — no fill. */
+@recipe badge-outline {
+  inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-foreground
+}
