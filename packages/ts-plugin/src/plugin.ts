@@ -153,18 +153,37 @@ export function init(modules: { typescript: typeof tsmod }) {
       const { registry } = loadProjectRegistry(dirname(fileName));
       const names = Object.keys(registry.flattened).sort();
       if (names.length === 0) return prior;
+      // The `@…` token being typed at the cursor, if any. Covering it with a
+      // replacementSpan is what makes the editor (a) FILTER as you type
+      // (`@b` → @badge/@btn-*) instead of treating `@` as a word boundary and
+      // dropping the list, and (b) REPLACE the existing `@` on accept instead
+      // of inserting after it (`@@btn-primary`). Both are the same bug — a
+      // recipe token isn't a TS identifier, so without an explicit span the
+      // editor's word logic mishandles the leading `@`.
+      const tok = recipeTokenAt(ts, sf, position);
+      const replacementSpan = tok ? { start: tok.start, length: tok.length } : undefined;
       const entries: tsmod.CompletionEntry[] = names.map((n) => ({
         name: `@${n}`,
         kind: ts.ScriptElementKind.constElement,
         kindModifiers: "shortwind",
         sortText: "0",
         insertText: `@${n}`,
+        replacementSpan,
       }));
       if (prior) {
         prior.entries = [...entries, ...prior.entries];
+        // optionalReplacementSpan drives the editor's filter range for the
+        // whole list; set it so our `@…` entries filter against the `@` too.
+        if (replacementSpan) prior.optionalReplacementSpan = replacementSpan;
         return prior;
       }
-      return { isGlobalCompletion: false, isMemberCompletion: false, isNewIdentifierLocation: true, entries };
+      return {
+        isGlobalCompletion: false,
+        isMemberCompletion: false,
+        isNewIdentifierLocation: true,
+        optionalReplacementSpan: replacementSpan,
+        entries,
+      };
     };
 
     proxy.getQuickInfoAtPosition = (fileName, position) => {
@@ -172,11 +191,16 @@ export function init(modules: { typescript: typeof tsmod }) {
       const tok = sf ? recipeTokenAt(ts, sf, position) : null;
       const expansion = tok ? loadProjectRegistry(dirname(fileName)).registry.flattened[tok.name] : undefined;
       if (tok && expansion) {
+        // VS Code renders `documentation` as markdown. A bare run-on of the
+        // utility list is unreadable; show a count, then each utility as its
+        // own inline-code chip so the editor wraps them instead of overflowing.
+        const count = `**${expansion.length}** ${expansion.length === 1 ? "utility" : "utilities"}`;
+        const chips = expansion.map((u) => "`" + u + "`").join(" ");
         return {
           kind: ts.ScriptElementKind.constElement,
           kindModifiers: "shortwind",
           textSpan: { start: tok.start, length: tok.length },
-          documentation: [{ text: expansion.join(" "), kind: "text" }],
+          documentation: [{ text: `${count}\n\n${chips}`, kind: "text" }],
           displayParts: [
             { text: "(shortwind recipe) ", kind: "text" },
             { text: `@${tok.name}`, kind: "className" },

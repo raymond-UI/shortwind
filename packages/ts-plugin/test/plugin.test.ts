@@ -60,6 +60,19 @@ describe("ts-plugin — real project registry", () => {
     expect(names).toContain("@btn-primary");
   });
 
+  it("sets a replacementSpan over the @-token so the editor filters + replaces (no @@)", () => {
+    // Cursor right after `@b` — the editor must know the whole `@b` is being
+    // replaced, else it filters by `b` (dropping the list) and inserts after
+    // the existing `@` (`@@btn-primary`).
+    const code = `export const El = () => <div className="@b" />;`;
+    const pos = code.indexOf("@b") + 2;
+    const res = withPlugin(tsx, code).getCompletionsAtPosition(tsx, pos, {}, undefined);
+    const btn = res?.entries.find((e) => e.name === "@btn-primary");
+    const span = { start: code.indexOf("@b"), length: 2 };
+    expect(btn?.replacementSpan).toEqual(span);
+    expect(res?.optionalReplacementSpan).toEqual(span);
+  });
+
   it("hovers a recipe token with the expansion from the project's recipe file", () => {
     const code = `export const El = () => <div className="@badge" />;`;
     const qi = withPlugin(tsx, code).getQuickInfoAtPosition(tsx, at(code, "@badge", 3));
