@@ -233,6 +233,31 @@ needs non-TS completion.
   `GUESSES` entry must complete or quick-fix to its `expected` recipe. The
   guessability gate becomes "the editor lands it," not "the model guesses it."
 
+## Manual editor smoke (the one thing headless can't cover)
+
+The programmatic harness hits the exact tsserver API, but "VS Code/Cursor lights
+up" is verifiable only by hand. There is intentionally **no in-repo example** —
+inside the pnpm workspace the ts-plugin can't load (TS#42688) and there's no
+active Tailwind, so an in-repo demo would show nothing. Reproduce in a project
+**outside** the workspace:
+
+1. Scaffold a throwaway app and `command npm install` (or yarn) — a **flat**
+   `node_modules`; pnpm hides the plugin in its `.pnpm` store and it won't load.
+   Install the packed `@shortwind/cli` tarball, then `shortwind init`.
+2. Open the folder in VS Code/Cursor (the folder itself, so the local
+   `tsconfig` is picked up).
+3. **TypeScript: Select TypeScript Version → Use Workspace Version** — a TS
+   plugin loads only under the workspace TS, never the editor's bundled copy.
+4. Ensure the project's **Tailwind is active** (a v4 `@import "tailwindcss"`
+   entry CSS) — required for the recipe-CSS half (utilities inside `@recipe {}`).
+5. **TypeScript: Restart TS Server** after any plugin rebuild/config change
+   (plugins load once at startup).
+
+Check: in a `.tsx` file, `@` in `className` completes/hovers/go-to-defs recipe
+tokens; in `recipes/*.css`, utilities inside `@recipe { … }` complete + hover
+(incl. arbitrary values like `bg-[var(--tone-bg,var(--muted))]`). A
+published-package demo will live in the site repo.
+
 ## Open questions
 
 1. `@shortwind/lint` as its own package vs. folding the pure rules into `core`?
