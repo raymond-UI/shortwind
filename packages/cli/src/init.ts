@@ -443,12 +443,16 @@ async function wireVscodeClassRegex(
   // unless quickSuggestions.strings is on (TS plugins can't add trigger chars).
   body = applyEdits(body, modify(body, CLASS_REGEX_KEY, CLASS_REGEX_VALUE, FMT));
   body = applyEdits(body, modify(body, ["editor.quickSuggestions", "strings"], true, FMT));
-  // (3) A tsconfig language-service plugin loads ONLY under the workspace
-  // TypeScript, not the editor's bundled copy. Point the editor at the local TS
-  // and prompt to use it, so the plugin actually loads.
+  // A tsconfig language-service plugin loads ONLY under the workspace
+  // TypeScript, not the editor's bundled copy (3) — and TS resolves the plugin
+  // relative to where TypeScript is INSTALLED, which under pnpm is the isolated
+  // `.pnpm` store, not the project, so it can't find it (4). Fix both: point the
+  // editor at the local TS + prompt to use it, and add the project as a plugin
+  // probe location so the plugin resolves regardless of package manager.
   if (opts.tsProject) {
     body = applyEdits(body, modify(body, ["typescript.tsdk"], "node_modules/typescript/lib", FMT));
     body = applyEdits(body, modify(body, ["typescript.enablePromptUseWorkspaceTsdk"], true, FMT));
+    body = applyEdits(body, modify(body, ["typescript.tsserver.pluginPaths"], ["."], FMT));
   }
   parseJsonc(body); // sanity — must stay parseable
   await writeFile(vscodePath, body.endsWith("\n") ? body : body + "\n");

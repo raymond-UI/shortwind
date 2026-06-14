@@ -19,7 +19,7 @@ export function Demo() {
 
       {/* 4. GO-TO-DEFINITION — F12 (or Cmd/Ctrl-click) on @btn-primary jumps
           straight to its @recipe block in recipes/button.css. */}
-      <button className="@btn-primary ">Save</button>
+      <button className="@btn-primary  ">Save</button>
 
       {/* 5. NO FALSE POSITIVES — Tailwind v4's own @-utilities are left alone
           (no "unknown recipe" squiggle on these). */}

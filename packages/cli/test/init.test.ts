@@ -310,6 +310,7 @@ describe("init", () => {
     expect(settings["editor.quickSuggestions"]).toEqual({ strings: true });
     expect(settings["typescript.tsdk"]).toBe("node_modules/typescript/lib");
     expect(settings["typescript.enablePromptUseWorkspaceTsdk"]).toBe(true);
+    expect(settings["typescript.tsserver.pluginPaths"]).toEqual(["."]);
 
     // idempotent — re-running doesn't duplicate the plugin entry
     await init({ cwd: dir, preset: "starter", registry: REGISTRY_PATH, installPackages: installer.fn });
