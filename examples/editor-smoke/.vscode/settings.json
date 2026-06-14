@@ -1,5 +1,6 @@
 {
   "editor.quickSuggestions": { "strings": true },
+  "typescript.tsserver.log": "verbose",
   "tailwindCSS.experimental.classRegex": [
     ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"],
     ["className\\s*=\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:]+)"]

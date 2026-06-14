@@ -7,7 +7,7 @@ export function Demo() {
     <div className="@stack-md">
       {/* 1. COMPLETION — click between the quotes and type `@` (a list of the
           project's recipes should appear: @badge, @btn-primary, @stack-md, …). */}
-      <div className=""></div>
+      <div className="@"></div>
 
       {/* 2. HOVER — mouse over @badge: a tooltip shows its full Tailwind
           expansion (inline-flex items-center … bg-[var(--tone-bg,…)] …). */}

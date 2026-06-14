@@ -18,7 +18,21 @@ a real editor (the one thing the automated tests can't cover headless).
    Workspace Version**.
 4. Open `src/Demo.tsx` and try the five numbered spots.
 
-If anything seems stale: `Cmd/Ctrl+Shift+P` → **TypeScript: Restart TS Server**.
+If anything seems stale (or after a rebuild of the plugin): `Cmd/Ctrl+Shift+P` →
+**TypeScript: Restart TS Server**.
+
+### Confirm the plugin actually loaded
+
+If nothing lights up, check that tsserver loaded the plugin:
+`Cmd/Ctrl+Shift+P` → **TypeScript: Open TS Server Log** (verbose logging is on
+in this project's settings), then search the log for `shortwind` /
+`ts-plugin`. You should see it being enabled. Two common reasons it wouldn't:
+
+- **Not using the workspace TypeScript** — a plugin only loads under the
+  workspace TS, not the editor's bundled copy (see step 3 above). The TS version
+  shows in the status bar when a `.ts`/`.tsx` file is focused.
+- **Stale build** — re-run `pnpm --filter @shortwind/cli build`, then Restart TS
+  Server.
 
 ## What you should see
 
