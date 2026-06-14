@@ -1,6 +1,6 @@
 # RFC: Editor tooling — recipe-token IntelliSense
 
-Status: Phase 0 + Phase 1 landed (branch `spike/ts-plugin`) · Date: 2026-06-13
+Status: Phase 0 + Phase 1 + 1b + editor-load fix landed (branch `spike/ts-plugin`) · Date: 2026-06-14
 
 ## Status
 
@@ -14,6 +14,21 @@ Status: Phase 0 + Phase 1 landed (branch `spike/ts-plugin`) · Date: 2026-06-13
 - **Packaging — verified.** Ships as the `@shortwind/cli/ts-plugin` *subpath*
   (resolves by name; callable factory; cli bundles the private source). **No new
   published package — stays at 8.**
+- **Editor-load — root-caused & fixed.** The plugin loaded fine in the
+  programmatic TS LanguageService but **not** in a real editor (Cursor), through
+  multiple layers: (1) it loads only under the *workspace* TypeScript, not the
+  editor's bundled copy; (2) under pnpm, tsserver resolves the plugin from the
+  isolated `.pnpm` store, not the project (TS#42688). After clearing both (flat
+  npm install + workspace TS), it *still* failed — the real blocker: **tsserver
+  resolves plugin names with classic node10 resolution, which ignores the
+  package.json `exports` map.** A subpath that existed only via `exports`
+  (`dist/ts-plugin.cjs`) can never resolve in any editor. Fix: ship the plugin as
+  a real **`ts-plugin/` directory** with its own `package.json` `main`, so
+  classic resolution (`ts-plugin/package.json` → main) finds it. Proven by
+  replicating tsserver's exact `resolveModuleName(..., NodeJs)` call from the
+  candidate dir — now resolves to `ts-plugin/ts-plugin.cjs` and the factory
+  loads. Works with a flat node_modules (npm/yarn); pnpm still needs the
+  `pluginPaths` best-effort or a Phase-2 extension.
 - **Phase 1b — landed (diagnostics).** Added `looksLikeRecipeToken` to `core`
   (variant-safe: rejects Tailwind's `@container`/`@md:flex`/`@min-[400px]:grid`),
   shared by the plugin's **unknown-recipe diagnostic + did-you-mean quick-fix**

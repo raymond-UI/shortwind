@@ -13,10 +13,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./ts-plugin": "./dist/ts-plugin.cjs"
+    "./ts-plugin": "./ts-plugin/ts-plugin.cjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "ts-plugin"
   ],
   "scripts": {
     "build": "tsdown",

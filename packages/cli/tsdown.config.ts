@@ -20,6 +20,14 @@ export default defineConfig([
   {
     entry: ["src/ts-plugin.cts"],
     format: "cjs",
+    // Emit into a real `ts-plugin/` directory (with a committed package.json)
+    // instead of dist + an exports subpath: TS's plugin loader resolves plugin
+    // names with CLASSIC node resolution and IGNORES the package.json `exports`
+    // map, so `@shortwind/cli/ts-plugin` must resolve to a physical
+    // `ts-plugin/package.json` → main. (Confirmed in a tsserver log: it probed
+    // ts-plugin/package.json, ts-plugin.js, ts-plugin/index.js — never an
+    // exports target, so a plain dir with its own package.json is what works.)
+    outDir: "ts-plugin",
     outExtensions: () => ({ js: ".cjs" }),
     deps: {
       alwaysBundle: ["@shortwind/ts-plugin", "@shortwind/core", "@shortwind/tailwind"],

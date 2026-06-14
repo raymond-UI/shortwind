@@ -3,12 +3,29 @@
 A 2-minute manual check that the recipe-token IntelliSense actually lights up in
 a real editor (the one thing the automated tests can't cover headless).
 
+> ### ⚠️ Use a flat (npm/yarn) install for the *live-editor* check
+>
+> This folder is a **pnpm workspace member**, which is great for editing recipes
+> and running the headless harness — but a tsconfig language-service plugin
+> **will not load** under pnpm. tsserver resolves plugins from where TypeScript
+> is installed, which under pnpm is the isolated `.pnpm` store, not the project
+> ([TS#42688](https://github.com/microsoft/TypeScript/issues/42688)). The
+> `pluginPaths` setting is a best-effort workaround that VS Code honors but
+> Cursor currently ignores.
+>
+> To verify live plugin loading, install this project's deps with a **flat
+> node_modules** (`npm install` / `yarn`) in a copy *outside* the pnpm
+> workspace, against the packed `@shortwind/cli` tarball. (Also note: the plugin
+> ships as a real `@shortwind/cli/ts-plugin/` **directory** — not an `exports`
+> subpath — because tsserver resolves plugin names with classic node10
+> resolution that ignores the `exports` map.)
+
 ## Run it
 
 1. From the repo root, make sure everything's linked and built:
    ```bash
    pnpm install
-   pnpm --filter @shortwind/cli build   # produces dist/ts-plugin.cjs
+   pnpm --filter @shortwind/cli build   # produces ts-plugin/ts-plugin.cjs
    ```
 2. **Open this folder** (`examples/editor-smoke`) in VS Code or Cursor — open the
    folder itself, not the repo root, so the local `tsconfig` is picked up.
