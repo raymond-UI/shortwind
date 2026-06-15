@@ -33,6 +33,12 @@ const THEME_BLOCK = `${THEME_MARKER} — default tokens for the recipe catalog. 
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.51 0.12 165);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.83 0.15 84);
+  --warning-foreground: oklch(0.28 0.06 50);
+  --danger: oklch(0.51 0.21 27);
+  --danger-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -55,6 +61,12 @@ const THEME_BLOCK = `${THEME_MARKER} — default tokens for the recipe catalog. 
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.59 0.14 163);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.77 0.16 70);
+  --warning-foreground: oklch(0.28 0.06 50);
+  --danger: oklch(0.64 0.24 25);
+  --danger-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
@@ -77,6 +89,12 @@ const THEME_BLOCK = `${THEME_MARKER} — default tokens for the recipe catalog. 
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -346,6 +364,55 @@ export function findMissingThemeTokens(
   return referencedThemeTokens(flattened).filter(
     (name) => !new RegExp(`--(?:color-)?${name}\\s*:`).test(css),
   );
+}
+
+// Locate the project's theme entry CSS — the Tailwind v4 entry
+// (`@import "tailwindcss"`) that carries the theme. Used by `add`/`preset` to
+// supplement tokens and by `doctor` to validate them. Prefers an entry that
+// already defines a theme (marker / @theme / --background); else the first
+// tailwindcss entry. null when the project has none.
+export async function findThemeEntryCss(cwd: string): Promise<string | null> {
+  const cssFiles = await glob(["**/*.css"], {
+    cwd,
+    absolute: true,
+    onlyFiles: true,
+    ignore: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/.output/**", "recipes/**"],
+  });
+  let fallback: string | null = null;
+  for (const file of cssFiles.sort()) {
+    const css = await readFile(file, "utf8");
+    if (!TAILWIND_IMPORT_RE.test(css)) continue;
+    if (
+      css.includes(THEME_MARKER) ||
+      css.includes(THEME_SUPPLEMENT_MARKER) ||
+      /@theme\b/.test(css) ||
+      /--background\s*:/.test(css)
+    ) {
+      return file;
+    }
+    fallback ??= file;
+  }
+  return fallback;
+}
+
+// Append placeholder definitions for any theme color tokens the installed
+// recipes reference but the project's theme doesn't define — the missing half
+// of init's supplement, so `add`/`preset` don't leave newly-installed families
+// pointing at undefined `--color-*` vars (the "bg-popover emits zero CSS,
+// transparent panel" trap). Idempotent: once a token is defined it's no longer
+// missing. No-op when there's no theme entry or nothing is missing.
+export async function appendMissingThemeTokens(
+  cwd: string,
+  flattened: Record<string, string[]>,
+): Promise<{ themePath: string | null; added: string[] }> {
+  const themePath = await findThemeEntryCss(cwd);
+  if (!themePath) return { themePath: null, added: [] };
+  const css = await readFile(themePath, "utf8");
+  const missing = findMissingThemeTokens(css, flattened);
+  const supplement = buildThemeSupplement(missing);
+  if (!supplement) return { themePath, added: [] };
+  await writeFile(themePath, `${css.replace(/\s*$/, "")}\n\n${supplement}\n`);
+  return { themePath, added: missing };
 }
 
 function isTailwindV4(cwd: string): boolean {

@@ -87,6 +87,12 @@ export async function run(argv: string[] = process.argv): Promise<void> {
             `${missing.family} references unknown recipes: ${missing.references.join(", ")}`,
           );
         }
+        if (result.supplementedTokens.length > 0) {
+          p.log.info(
+            `added ${result.supplementedTokens.length} placeholder theme token${result.supplementedTokens.length === 1 ? "" : "s"} ` +
+              `(${result.supplementedTokens.join(", ")}) — tune the values to your palette.`,
+          );
+        }
       },
     );
 
@@ -138,6 +144,12 @@ export async function run(argv: string[] = process.argv): Promise<void> {
       if (opts.registry !== undefined) presetOptions.registry = opts.registry;
       const result = await runPreset(presetOptions);
       p.log.info(`preset ${name}: ${result.added.length} added, ${result.skipped.length} already present`);
+      if (result.supplementedTokens.length > 0) {
+        p.log.info(
+          `added ${result.supplementedTokens.length} placeholder theme token${result.supplementedTokens.length === 1 ? "" : "s"} ` +
+            `(${result.supplementedTokens.join(", ")}) — tune the values to your palette.`,
+        );
+      }
     });
 
   cli
@@ -439,6 +451,17 @@ function printUpgradeSummary(outcomes: Awaited<ReturnType<typeof upgrade>>["outc
 // apart from "the adapter ran and something leaked" — both otherwise present
 // as a green build that ships raw @recipe text.
 function printDoctorReport(result: Awaited<ReturnType<typeof doctor>>, cwd: string): void {
+  // Reported independently of the build-output verdict: a recipe can expand
+  // cleanly yet reference a theme token nothing defines, so `bg-<token>` emits
+  // zero CSS — a green build that still ships unstyled markup.
+  if (result.undefinedTokens.length > 0) {
+    const t = result.undefinedTokens;
+    p.log.error(
+      `recipes reference ${t.length} theme color token${t.length === 1 ? "" : "s"} your theme doesn't define ` +
+        `(${t.join(", ")}). Utilities like \`bg-${t[0]}\` emit zero CSS — a clean build can still ship unstyled markup. ` +
+        `Re-run \`shortwind add\` (or \`shortwind init\`) to scaffold placeholder values, then tune them.`,
+    );
+  }
   if (result.verdict === "no-output") {
     p.log.error(
       `no build output found (looked for .next/, dist/, out/, build/).\n` +
@@ -447,9 +470,11 @@ function printDoctorReport(result: Awaited<ReturnType<typeof doctor>>, cwd: stri
     return;
   }
   if (result.verdict === "clean") {
-    p.log.success(
-      `no unexpanded recipe tokens in ${result.outputDirs.join(", ")} (${result.scannedFiles} files scanned)`,
-    );
+    if (result.undefinedTokens.length === 0) {
+      p.log.success(
+        `no unexpanded recipe tokens in ${result.outputDirs.join(", ")} (${result.scannedFiles} files scanned)`,
+      );
+    }
     return;
   }
   for (const f of result.findings) {

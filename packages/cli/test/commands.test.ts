@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,6 +58,38 @@ describe("add", () => {
     // fingerprint was brute-forceable.
     expect(result.lockfile.families["card"]?.sha).toMatch(/^[a-f0-9]{16}$/);
     expect(result.lockfile.families["card"]?.sha).not.toBe("000000");
+  });
+
+  it("supplements the theme with tokens a newly-added family references (popover bug)", async () => {
+    // A project with an existing MINIMAL theme (background/foreground only),
+    // the create-next-app shape that makes init take the supplement path — so
+    // popover was never defined. Adding @sheet (which uses bg-popover) must now
+    // define it, instead of leaving a utility that emits zero CSS.
+    const dir = await mkdtemp(path.join(tmpdir(), "shortwind-cmd-"));
+    dirs.push(dir);
+    await writeFile(
+      path.join(dir, "package.json"),
+      JSON.stringify({ name: "x", devDependencies: { tailwindcss: "^4.0.0" } }, null, 2),
+    );
+    await writeFile(
+      path.join(dir, "shortwind.config.json"),
+      JSON.stringify({ recipesDir: "recipes", outputPath: "SKILL.md", registry: REGISTRY_PATH }, null, 2),
+    );
+    await mkdir(path.join(dir, "src"), { recursive: true });
+    await writeFile(
+      path.join(dir, "src", "index.css"),
+      `@import "tailwindcss";\n@custom-variant dark (&:is(.dark *));\n` +
+        `:root { --background: #fff; --foreground: #111; }\n` +
+        `@theme inline { --color-background: var(--background); --color-foreground: var(--foreground); }\n`,
+    );
+
+    const result = await add({ cwd: dir, families: ["sheet"], registry: REGISTRY_PATH });
+
+    expect(result.added).toContain("sheet");
+    expect(result.supplementedTokens).toContain("popover");
+    expect(result.supplementedTokens).toContain("popover-foreground");
+    const css = readFileSync(path.join(dir, "src", "index.css"), "utf8");
+    expect(css).toContain("--color-popover: var(--popover);");
   });
 
   it("regenerates SKILL.md with the newly installed family", async () => {

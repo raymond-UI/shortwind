@@ -161,4 +161,42 @@ describe("doctor", () => {
     const result = await doctor({ cwd: dir });
     expect(result.verdict).toBe("clean");
   });
+
+  it("flags theme tokens recipes reference but the theme never defines (zero-CSS trap)", async () => {
+    // @card references card/card-foreground/border/muted/ring. Define a theme
+    // entry with NONE of them — only background/foreground.
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await write(
+      dir,
+      "src/index.css",
+      `@import "tailwindcss";\n@theme inline { --color-background: #fff; --color-foreground: #111; }\n`,
+    );
+    await write(dir, "dist/index.html", `<div class="rounded-lg border p-4"></div>\n`);
+
+    const result = await doctor({ cwd: dir });
+    // token EXPANSION is clean, but the tokens resolve to nothing → not ok.
+    expect(result.verdict).toBe("clean");
+    expect(result.undefinedTokens).toEqual(expect.arrayContaining(["card", "card-foreground", "border"]));
+    expect(result.ok).toBe(false);
+  });
+
+  it("passes token validation when the theme defines every referenced token", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    await write(
+      dir,
+      "src/index.css",
+      `@import "tailwindcss";\n@theme inline {\n` +
+        `  --color-background: #fff; --color-foreground: #111;\n` +
+        `  --color-card: #fff; --color-card-foreground: #111; --color-border: #eee;\n` +
+        `  --color-muted: #f4f4f5; --color-muted-foreground: #888; --color-ring: #ccc;\n` +
+        `}\n`,
+    );
+    await write(dir, "dist/index.html", `<div class="rounded-lg border p-4"></div>\n`);
+
+    const result = await doctor({ cwd: dir });
+    expect(result.undefinedTokens).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
 });

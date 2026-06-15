@@ -14,7 +14,9 @@ import {
   regenerateSkillMd,
   renameFamilyInSource,
   parseInstalledFamily,
+  loadInstalledRegistry,
 } from "../project.js";
+import { appendMissingThemeTokens } from "../theme.js";
 
 export type AddOptions = {
   cwd: string;
@@ -32,6 +34,11 @@ export type AddResult = {
   missingDependencies: { family: string; references: string[] }[];
   lockfile: Lockfile;
   skillPath: string;
+  // Theme entry the missing-token supplement was appended to, and which color
+  // tokens it defined — so newly-installed families don't reference undefined
+  // `--color-*` vars. null/[] when there was no theme or nothing was missing.
+  themePath: string | null;
+  supplementedTokens: string[];
 };
 
 export async function add(options: AddOptions): Promise<AddResult> {
@@ -120,7 +127,29 @@ export async function add(options: AddOptions): Promise<AddResult> {
   await writeLockfile(recipesDir, lock);
   const skillPath = await regenerateSkillMd(cwd, config);
 
-  return { added, skipped, overwritten, missingDependencies, lockfile: lock, skillPath };
+  // Newly-installed families may reference theme color tokens (e.g. popover)
+  // that init never added — only the starter set is supplemented at init time.
+  // Append the now-missing tokens so `bg-popover` resolves instead of emitting
+  // zero CSS (the transparent-panel trap). No-op when nothing landed.
+  let themePath: string | null = null;
+  let supplementedTokens: string[] = [];
+  if (added.length > 0 || overwritten.length > 0) {
+    const registry = loadInstalledRegistry(recipesDir);
+    const supplement = await appendMissingThemeTokens(cwd, registry.flattened);
+    themePath = supplement.themePath;
+    supplementedTokens = supplement.added;
+  }
+
+  return {
+    added,
+    skipped,
+    overwritten,
+    missingDependencies,
+    lockfile: lock,
+    skillPath,
+    themePath,
+    supplementedTokens,
+  };
 }
 
 function readAllInstalledRecipeNames(recipesDir: string): Set<string> {

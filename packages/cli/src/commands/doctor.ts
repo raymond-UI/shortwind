@@ -6,6 +6,7 @@ import { buildRegistry, parseRecipeFile } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
 import { findResidualRecipeTokens } from "@shortwind/tailwind";
 import { installedFamilies, readConfig } from "../project.js";
+import { findThemeEntryCss, findMissingThemeTokens } from "../theme.js";
 import { DEFAULT_CONTENT, extractClassUsages } from "./lint.js";
 
 export type DoctorVerdict =
@@ -40,6 +41,11 @@ export type DoctorResult = {
   findings: DoctorFinding[];
   // Known recipes referenced from source files, as @-tokens, sorted.
   usedInSource: string[];
+  // Theme color tokens the installed recipes reference but the project's theme
+  // never defines (e.g. `bg-popover` with no `--color-popover`) — a recipe
+  // whose utilities expand cleanly yet resolve to zero CSS. Token expansion can
+  // be clean while these are broken, so this is its own signal.
+  undefinedTokens: string[];
 };
 
 const DEFAULT_OUTPUT_DIRS = [".next", "dist", "out", "build"];
@@ -62,6 +68,12 @@ export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
   const recipesDir = path.join(cwd, config.recipesDir);
   const registry = loadRegistryLenient(recipesDir);
 
+  // Independent of the build-output scan: do the installed recipes reference any
+  // theme color token the project never defined? `bg-popover` with no
+  // `--color-popover` expands fine but emits zero CSS — a green build + clean
+  // token scan that still ships unstyled markup. Caught here regardless of build.
+  const undefinedTokens = await findUndefinedThemeTokens(cwd, registry);
+
   const outputDirs = (options.dirs ?? DEFAULT_OUTPUT_DIRS).filter((d) =>
     existsSync(path.join(cwd, d)),
   );
@@ -73,6 +85,7 @@ export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
       scannedFiles: 0,
       findings: [],
       usedInSource: [],
+      undefinedTokens,
     };
   }
 
@@ -103,13 +116,23 @@ export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
   }
 
   return {
-    ok: verdict === "clean",
+    ok: verdict === "clean" && undefinedTokens.length === 0,
     verdict,
     outputDirs,
     scannedFiles: files.length,
     findings,
     usedInSource,
+    undefinedTokens,
   };
+}
+
+// Theme color tokens the installed recipes reference but the project's theme
+// entry doesn't define. Empty when there's no theme entry to validate against.
+async function findUndefinedThemeTokens(cwd: string, registry: Registry): Promise<string[]> {
+  const themePath = await findThemeEntryCss(cwd);
+  if (!themePath) return [];
+  const css = await readFile(themePath, "utf8");
+  return findMissingThemeTokens(css, registry.flattened);
 }
 
 // Doctor's job is scanning build output, not validating recipes — a registry

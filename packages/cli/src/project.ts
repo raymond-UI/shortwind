@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/core";
-import type { Recipe } from "@shortwind/core";
+import type { Recipe, Registry } from "@shortwind/core";
 import { detectProject, skillAdapterFor } from "./detect.js";
 import { BUNDLED_ORIGIN } from "./registry-source.js";
 
@@ -106,6 +106,21 @@ export function parseInstalledFamily(
   const result = parseRecipeFile(source, `${family}.css`);
   if (!result.ok) return null;
   return { recipes: result.value.recipes, header: result.value.header };
+}
+
+// Build the flattened registry of all installed families, leniently — a family
+// that fails to resolve (cycle, unknown ref: lint's job) must not stop callers
+// that only need the expanded utilities (theme-token supplement, doctor). Falls
+// back to a name-only registry so token lookups still work.
+export function loadInstalledRegistry(recipesDir: string): Registry {
+  const allRecipes: Recipe[] = [];
+  for (const family of installedFamilies(recipesDir)) {
+    const parsed = parseInstalledFamily(recipesDir, family);
+    if (parsed) allRecipes.push(...parsed.recipes);
+  }
+  const built = buildRegistry(allRecipes);
+  if (built.ok) return built.value;
+  return { flattened: Object.fromEntries(allRecipes.map((r) => [r.name, []])), families: {} };
 }
 
 export async function regenerateSkillMd(cwd: string, config: ShortwindConfig): Promise<string> {
