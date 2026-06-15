@@ -1,6 +1,6 @@
 {
   "name": "@shortwind/cli",
-  "version": "0.1.0-beta.18",
+  "version": "0.1.0-beta.19",
   "description": "Shortwind CLI — init, add, remove, upgrade, dev, build, lint, ls, preset. Provides the `shortwind` command.",
   "type": "module",
   "bin": {
