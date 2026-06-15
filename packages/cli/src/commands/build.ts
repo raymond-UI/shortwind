@@ -5,7 +5,7 @@ import { buildRegistry, parseRecipeFile, renderSkillMarkdown } from "@shortwind/
 import type { Diagnostic, Recipe } from "@shortwind/core";
 import {
   findTailwindEntryCssFiles,
-  syncSourceDirectiveToFile,
+  syncSafelistFile,
 } from "@shortwind/tailwind";
 import { detectProject, skillAdapterFor } from "../detect.js";
 import { installedFamilies, readConfig } from "../project.js";
@@ -86,7 +86,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   const safelistCssPaths: string[] = [];
   if (bundler !== "vite" && bundler !== "astro") {
     for (const file of findTailwindEntryCssFiles(cwd)) {
-      if (syncSourceDirectiveToFile(file, resolved.value)) changed = true;
+      if (syncSafelistFile(file, resolved.value)) changed = true;
       safelistCssPaths.push(file);
     }
   }

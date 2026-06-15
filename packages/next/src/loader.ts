@@ -6,7 +6,7 @@ import {
   loadRegistryFromDir,
   modeForFile,
   residualRecipeMessage,
-  syncSourceDirectiveToFile,
+  syncSafelistFile,
   transformContent,
   type TransformOptions,
 } from "@shortwind/tailwind";
@@ -64,7 +64,7 @@ function getRegistry(recipesDir: string, entryCss: readonly string[] = []): Cach
   // a read-only filesystem must not fail the module.
   for (const cssPath of entryCss) {
     try {
-      syncSourceDirectiveToFile(cssPath, entry.registry);
+      syncSafelistFile(cssPath, entry.registry);
     } catch {
       // covered again at the next config evaluation
     }

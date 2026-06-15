@@ -64,33 +64,41 @@ describe("withShortwind", () => {
     expect(wrapped.reactStrictMode).toBe(true);
   });
 
-  it("writes the @source inline(...) safelist into the Tailwind entry CSS (#73)", async () => {
+  it("writes the safelist to a sibling file and injects one @import into the entry CSS (#73)", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
     const globals = path.join(dir, "app", "globals.css");
+    const safelist = path.join(dir, "app", "globals.shortwind.css");
     await mkdir(path.dirname(globals), { recursive: true });
     await writeFile(globals, `@import "tailwindcss";\n`);
 
     withShortwind({ cwd: dir })({});
 
+    // Entry CSS gets one managed import; no `@source inline(` clutter.
     const css = readFileSync(globals, "utf8");
-    expect(css).toContain("@source inline(");
-    // A utility that exists only inside the card recipe body — the exact
-    // candidate Tailwind could never discover by scanning files on disk.
-    expect(css).toContain("bg-card");
-    // Idempotent: wrapping again must not duplicate the block.
+    expect(css).toContain(`@import "./globals.shortwind.css";`);
+    expect(css).not.toContain("@source inline(");
+    // The safelist itself lives in the sibling file. A utility that exists only
+    // inside the card recipe body — the exact candidate Tailwind could never
+    // discover by scanning files on disk.
+    const safelistCss = readFileSync(safelist, "utf8");
+    expect(safelistCss).toContain("@source inline(");
+    expect(safelistCss).toContain("bg-card");
+    // Idempotent: wrapping again must not change either file.
     withShortwind({ cwd: dir })({});
     expect(readFileSync(globals, "utf8")).toBe(css);
+    expect(readFileSync(safelist, "utf8")).toBe(safelistCss);
   });
 
   it("loader refreshes the on-disk safelist when recipes change mid-session (#73)", async () => {
     const dir = await makeProject({ "card.css": CARD_CSS });
     dirs.push(dir);
     const globals = path.join(dir, "app", "globals.css");
+    const safelist = path.join(dir, "app", "globals.shortwind.css");
     await mkdir(path.dirname(globals), { recursive: true });
     await writeFile(globals, `@import "tailwindcss";\n`);
     withShortwind({ cwd: dir })({});
-    expect(readFileSync(globals, "utf8")).not.toContain("bg-emerald-100");
+    expect(readFileSync(safelist, "utf8")).not.toContain("bg-emerald-100");
 
     // A custom recipe authored while `next dev` is running.
     await writeFile(
@@ -106,7 +114,7 @@ describe("withShortwind", () => {
       resourcePath: path.join(dir, "src", "App.tsx"),
     };
     shortwindLoader.call(ctx, `export const El = () => <div className="@hero" />;\n`);
-    expect(readFileSync(globals, "utf8")).toContain("bg-emerald-100");
+    expect(readFileSync(safelist, "utf8")).toContain("bg-emerald-100");
   });
 
   it("webpack hook prepends a pre-loader rule for source files", async () => {

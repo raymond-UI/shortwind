@@ -462,6 +462,16 @@ function printDoctorReport(result: Awaited<ReturnType<typeof doctor>>, cwd: stri
         `Re-run \`shortwind add\` (or \`shortwind init\`) to scaffold placeholder values, then tune them.`,
     );
   }
+  // Also independent of the build verdict: the generated safelist import was
+  // hand-edited to point at the wrong file. Shortwind re-adds the correct one
+  // on the next build, but can't recognize the mutated line to clean it up.
+  for (const s of result.staleSafelistImports) {
+    p.log.error(
+      `${path.relative(cwd, s.file)}: imports "${s.found}", but the managed safelist is "${s.expected}". ` +
+        `If you renamed it by hand, restore "${s.expected}" (or delete the line — the next build re-adds it). ` +
+        `A stale import either pulls a wrong/missing file or leaves recipe utilities ungenerated.`,
+    );
+  }
   if (result.verdict === "no-output") {
     p.log.error(
       `no build output found (looked for .next/, dist/, out/, build/).\n` +
@@ -470,7 +480,7 @@ function printDoctorReport(result: Awaited<ReturnType<typeof doctor>>, cwd: stri
     return;
   }
   if (result.verdict === "clean") {
-    if (result.undefinedTokens.length === 0) {
+    if (result.undefinedTokens.length === 0 && result.staleSafelistImports.length === 0) {
       p.log.success(
         `no unexpanded recipe tokens in ${result.outputDirs.join(", ")} (${result.scannedFiles} files scanned)`,
       );

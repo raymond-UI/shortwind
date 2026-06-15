@@ -199,4 +199,35 @@ describe("doctor", () => {
     expect(result.undefinedTokens).toEqual([]);
     expect(result.ok).toBe(true);
   });
+
+  it("flags a hand-edited safelist @import that points at the wrong file", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    // Entry imports a renamed safelist — not the sibling doctor expects.
+    await write(
+      dir,
+      "src/index.css",
+      `@import "tailwindcss";\n@import "./renamed-safelist.shortwind.css";\n`,
+    );
+
+    const result = await doctor({ cwd: dir });
+    expect(result.staleSafelistImports).toHaveLength(1);
+    expect(result.staleSafelistImports[0]!.found).toBe("./renamed-safelist.shortwind.css");
+    expect(result.staleSafelistImports[0]!.expected).toBe("./index.shortwind.css");
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts the correctly-named safelist import (and ./ vs bare path)", async () => {
+    const dir = await setupProject(["card"]);
+    dirs.push(dir);
+    // No `./` prefix, but resolves to the same sibling → not flagged.
+    await write(
+      dir,
+      "src/index.css",
+      `@import "tailwindcss";\n@import "index.shortwind.css";\n`,
+    );
+
+    const result = await doctor({ cwd: dir });
+    expect(result.staleSafelistImports).toEqual([]);
+  });
 });

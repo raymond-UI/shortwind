@@ -56,10 +56,11 @@ describe("build", () => {
       ),
     );
     const globals = path.join(dir, "app", "globals.css");
+    const safelist = path.join(dir, "app", "globals.shortwind.css");
     await (await import("node:fs/promises")).mkdir(path.dirname(globals), { recursive: true });
     await writeFile(globals, `@import "tailwindcss";\n`);
     await init({ cwd: dir, preset: "starter", registry: REGISTRY_PATH, installPackages: async () => {} });
-    expect(readFileSync(globals, "utf8")).not.toContain("bg-emerald-100");
+    expect(readFileSync(safelist, "utf8")).not.toContain("bg-emerald-100");
 
     // A custom recipe authored after init — `shortwind build` must refresh
     // the safelist so its body-only utility reaches Tailwind.
@@ -69,7 +70,7 @@ describe("build", () => {
     );
     const result = await build({ cwd: dir });
     expect(result.safelistCssPaths).toContain(globals);
-    expect(readFileSync(globals, "utf8")).toContain("bg-emerald-100");
+    expect(readFileSync(safelist, "utf8")).toContain("bg-emerald-100");
   });
 
   it("regenerates SKILL.md from ./recipes", async () => {

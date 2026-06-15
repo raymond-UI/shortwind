@@ -115,7 +115,7 @@ describe("init", () => {
     expect(existsSync(path.join(dir, "recipes", ".shortwind-lock.json"))).toBe(true);
   });
 
-  it("writes the @source inline(...) safelist into a Next project's entry CSS (#73)", async () => {
+  it("writes the safelist to a sibling file and injects one @import for a Next project (#73)", async () => {
     const dir = await setupProject({
       name: "demo",
       dependencies: { next: "^16.0.0", react: "^19.0.0" },
@@ -123,6 +123,7 @@ describe("init", () => {
     });
     cleanup.push(dir);
     const globals = path.join(dir, "app", "globals.css");
+    const safelist = path.join(dir, "app", "globals.shortwind.css");
     await mkdir(path.dirname(globals), { recursive: true });
     await writeFile(globals, `@import "tailwindcss";\n`);
 
@@ -135,10 +136,14 @@ describe("init", () => {
     });
 
     expect(result.safelistCssPaths).toContain(globals);
+    // Entry CSS gets one managed import; the safelist clutter lives next door.
     const css = readFileSync(globals, "utf8");
-    expect(css).toContain("@source inline(");
+    expect(css).toContain(`@import "./globals.shortwind.css";`);
+    expect(css).not.toContain("@source inline(");
+    const safelistCss = readFileSync(safelist, "utf8");
+    expect(safelistCss).toContain("@source inline(");
     // A recipe-body-only utility Tailwind can't discover from on-disk sources.
-    expect(css).toContain("bg-card");
+    expect(safelistCss).toContain("bg-card");
     // The summary prints the per-framework setup guide URL from this (#85).
     expect(result.bundler).toBe("next");
   });

@@ -4,7 +4,7 @@ import {
   detectTailwindMajor,
   findTailwindEntryCssFiles,
   loadRegistryFromDir,
-  syncSourceDirectiveToFile,
+  syncSafelistFile,
   TailwindAdapterError,
 } from "@shortwind/tailwind";
 import { clearRegistryCache } from "./loader.js";
@@ -46,10 +46,11 @@ export function withShortwind(
   // in Next, Tailwind v4 reads the entry CSS FROM DISK (PostCSS/Turbopack) and
   // scans on-disk sources — there is no CSS pipeline hook equivalent to Vite's
   // load phase. So the registry-derived `@source inline(...)` safelist must
-  // live on disk too (#73). next.config is evaluated at the start of every
-  // `next dev`/`next build`, which makes this the reliable sync point for both
-  // bundlers; the loader refreshes the same files when recipes change
-  // mid-session (see loader.ts).
+  // live on disk too (#73) — written to a sibling `*.shortwind.css` and pulled
+  // in via a single injected `@import`, so the user's entry CSS stays clean.
+  // next.config is evaluated at the start of every `next dev`/`next build`,
+  // which makes this the reliable sync point for both bundlers; the loader
+  // refreshes the same files when recipes change mid-session (see loader.ts).
   const entryCss = syncSafelist(cwd, recipesDir);
 
   return (nextConfig: NextConfig = {}) => {
@@ -112,7 +113,7 @@ function syncSafelist(cwd: string, recipesDir: string): string[] {
     }
     for (const file of files) {
       try {
-        syncSourceDirectiveToFile(file, registry);
+        syncSafelistFile(file, registry);
       } catch (err) {
         console.warn(`[shortwind] could not write safelist to ${file}: ${String(err)}`);
       }

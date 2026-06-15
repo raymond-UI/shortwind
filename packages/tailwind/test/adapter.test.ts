@@ -1,5 +1,5 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +18,8 @@ import {
   loadRegistryFromDir,
   shortwindPlugin,
   SHORTWIND_INJECT_MARKER,
-  syncSourceDirectiveToFile,
+  syncSafelistFile,
+  safelistFilePathFor,
   TailwindAdapterError,
   transformContent,
 } from "../src/index.js";
@@ -528,20 +529,132 @@ describe("on-disk safelist sync (#73)", () => {
     expect(findTailwindEntryCssFiles(dir)).toEqual([path.join(dir, "app", "globals.css")]);
   });
 
-  it("syncSourceDirectiveToFile upserts the directive and reports change", async () => {
+  it("syncSafelistFile writes a sibling file and injects a single @import", async () => {
+    const dir = await makeDir();
+    const cssPath = path.join(dir, "globals.css");
+    const safelistPath = safelistFilePathFor(cssPath);
+    expect(safelistPath).toBe(path.join(dir, "globals.shortwind.css"));
+    await writeFile(cssPath, `@import "tailwindcss";\n`);
+    const registry: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    expect(syncSafelistFile(cssPath, registry)).toBe(true);
+
+    // Entry CSS gets ONE bare managed import — no `@source inline(` clutter
+    // and no marker comments (it's a user-owned file).
+    const entry = readFileSync(cssPath, "utf8");
+    expect(entry).toBe(`@import "tailwindcss";\n@import "./globals.shortwind.css";\n`);
+    expect(entry).not.toContain("@source inline(");
+    expect(entry).not.toContain("shortwind:source-inject");
+    // The actual safelist lives in the sibling file.
+    const safelist = readFileSync(safelistPath, "utf8");
+    expect(safelist).toContain("@source inline(");
+    expect(safelist).toContain("bg-emerald-100");
+
+    // Unchanged registry → no rewrite; changed registry → refreshed in place.
+    expect(syncSafelistFile(cssPath, registry)).toBe(false);
+    const grown: Registry = { families: {}, flattened: { hero: ["bg-emerald-100", "p-4"] } };
+    expect(syncSafelistFile(cssPath, grown)).toBe(true);
+    expect(readFileSync(safelistPath, "utf8")).toContain("p-4");
+    // The import line stays stable across registry changes.
+    expect(readFileSync(cssPath, "utf8")).toContain(`@import "./globals.shortwind.css";`);
+  });
+
+  it("syncSafelistFile leaves a blank line between the import and the user's content", async () => {
+    const dir = await makeDir();
+    const cssPath = path.join(dir, "globals.css");
+    await writeFile(cssPath, `@import "tailwindcss";\n@custom-variant dark (&:is(.dark *));\n`);
+    const registry: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    syncSafelistFile(cssPath, registry);
+    expect(readFileSync(cssPath, "utf8")).toBe(
+      `@import "tailwindcss";\n@import "./globals.shortwind.css";\n\n@custom-variant dark (&:is(.dark *));\n`,
+    );
+    // Idempotent — the blank line doesn't accumulate on re-runs.
+    expect(syncSafelistFile(cssPath, registry)).toBe(false);
+  });
+
+  it("syncSafelistFile collapses a legacy inline block to the import (migration)", async () => {
+    const dir = await makeDir();
+    const cssPath = path.join(dir, "globals.css");
+    // An entry still carrying the old inline-on-disk block.
+    await writeFile(
+      cssPath,
+      `@import "tailwindcss";\n` +
+        `/* shortwind:source-inject:start */\n` +
+        `@source inline("bg-emerald-100");\n` +
+        `/* shortwind:source-inject:end */\n` +
+        `\nbody { margin: 0; }\n`,
+    );
+    const registry: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    expect(syncSafelistFile(cssPath, registry)).toBe(true);
+    const entry = readFileSync(cssPath, "utf8");
+    expect(entry).not.toContain("@source inline(");
+    expect(entry).not.toContain("shortwind:source-inject"); // markers gone too
+    expect(entry).toContain(`@import "./globals.shortwind.css";`);
+    expect(entry).toContain("body { margin: 0; }");
+  });
+
+  it("syncSafelistFile re-asserts the import — a user deleting or moving it self-heals", async () => {
     const dir = await makeDir();
     const cssPath = path.join(dir, "globals.css");
     await writeFile(cssPath, `@import "tailwindcss";\n`);
     const registry: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
-    expect(syncSourceDirectiveToFile(cssPath, registry)).toBe(true);
-    const written = readFileSync(cssPath, "utf8");
-    expect(written).toContain("@source inline(");
-    expect(written).toContain("bg-emerald-100");
-    // Unchanged registry → no rewrite; changed registry → refreshed in place.
-    expect(syncSourceDirectiveToFile(cssPath, registry)).toBe(false);
-    const grown: Registry = { families: {}, flattened: { hero: ["bg-emerald-100", "p-4"] } };
-    expect(syncSourceDirectiveToFile(cssPath, grown)).toBe(true);
-    expect(readFileSync(cssPath, "utf8")).toContain("p-4");
+    syncSafelistFile(cssPath, registry);
+
+    // The user deletes our import line entirely.
+    await writeFile(cssPath, `@import "tailwindcss";\n\nbody { color: red; }\n`);
+    // Next build re-inserts it — we never depend on the line surviving.
+    expect(syncSafelistFile(cssPath, registry)).toBe(true);
+    expect(readFileSync(cssPath, "utf8")).toBe(
+      `@import "tailwindcss";\n@import "./globals.shortwind.css";\n\nbody { color: red; }\n`,
+    );
+
+    // The user moves it to the bottom. We pull it back to the canonical spot —
+    // and never duplicate it.
+    await writeFile(
+      cssPath,
+      `@import "tailwindcss";\n\nbody { color: red; }\n@import "./globals.shortwind.css";\n`,
+    );
+    syncSafelistFile(cssPath, registry);
+    const healed = readFileSync(cssPath, "utf8");
+    expect(healed.match(/globals\.shortwind\.css/g)).toHaveLength(1);
+    expect(healed).toBe(
+      `@import "tailwindcss";\n@import "./globals.shortwind.css";\n\nbody { color: red; }\n`,
+    );
+
+    // Steady state is idempotent — no churn on a run that changes nothing.
+    expect(syncSafelistFile(cssPath, registry)).toBe(false);
+  });
+
+  it("syncSafelistFile strips an empty injected block that does nothing", async () => {
+    const dir = await makeDir();
+    const cssPath = path.join(dir, "globals.css");
+    // A file carrying only the bare marker pair — no directive between them.
+    await writeFile(
+      cssPath,
+      `@import "tailwindcss";\n` +
+        `/* shortwind:source-inject:start */\n` +
+        `/* shortwind:source-inject:end */\n` +
+        `\nbody { margin: 0; }\n`,
+    );
+    // No recipes → nothing to inject → the dead block is removed entirely.
+    expect(syncSafelistFile(cssPath, { families: {}, flattened: {} })).toBe(true);
+    const out = readFileSync(cssPath, "utf8");
+    expect(out).not.toContain("shortwind:source-inject");
+    expect(out).toBe(`@import "tailwindcss";\nbody { margin: 0; }\n`);
+  });
+
+  it("syncSafelistFile removes the sibling file and import when the registry empties", async () => {
+    const dir = await makeDir();
+    const cssPath = path.join(dir, "globals.css");
+    const safelistPath = safelistFilePathFor(cssPath);
+    await writeFile(cssPath, `@import "tailwindcss";\n`);
+    const registry: Registry = { families: {}, flattened: { hero: ["bg-emerald-100"] } };
+    syncSafelistFile(cssPath, registry);
+    expect(existsSync(safelistPath)).toBe(true);
+
+    const empty: Registry = { families: {}, flattened: {} };
+    expect(syncSafelistFile(cssPath, empty)).toBe(true);
+    expect(existsSync(safelistPath)).toBe(false);
+    expect(readFileSync(cssPath, "utf8")).not.toContain("@import \"./globals.shortwind.css\"");
   });
 
 });

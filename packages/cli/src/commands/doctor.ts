@@ -4,7 +4,11 @@ import path from "node:path";
 import { glob } from "tinyglobby";
 import { buildRegistry, parseRecipeFile } from "@shortwind/core";
 import type { Recipe, Registry } from "@shortwind/core";
-import { findResidualRecipeTokens } from "@shortwind/tailwind";
+import {
+  findResidualRecipeTokens,
+  findTailwindEntryCssFiles,
+  safelistFilePathFor,
+} from "@shortwind/tailwind";
 import { installedFamilies, readConfig } from "../project.js";
 import { findThemeEntryCss, findMissingThemeTokens } from "../theme.js";
 import { DEFAULT_CONTENT, extractClassUsages } from "./lint.js";
@@ -22,6 +26,12 @@ export type DoctorVerdict =
   | "no-output";
 
 export type DoctorFinding = { file: string; tokens: string[] };
+
+// An entry stylesheet importing a `*.shortwind.css` whose path doesn't resolve
+// to the safelist sibling Shortwind manages for it — almost always a hand-edit
+// of the generated import (#84-followup). `expected` is what the import should
+// read; `found` is what's actually there.
+export type StaleSafelistImport = { file: string; found: string; expected: string };
 
 export type DoctorOptions = {
   cwd: string;
@@ -46,9 +56,18 @@ export type DoctorResult = {
   // whose utilities expand cleanly yet resolve to zero CSS. Token expansion can
   // be clean while these are broken, so this is its own signal.
   undefinedTokens: string[];
+  // Entry stylesheets whose `@import "….shortwind.css"` points somewhere other
+  // than the managed sibling — a hand-edit Shortwind can't auto-correct (it
+  // re-adds the right import alongside, but can't recognize the mutated one).
+  staleSafelistImports: StaleSafelistImport[];
 };
 
 const DEFAULT_OUTPUT_DIRS = [".next", "dist", "out", "build"];
+
+// `@import "<anything>.shortwind.css"` — the generated safelist import. Capture
+// the specifier so we can resolve it against the entry and compare to the
+// sibling Shortwind manages.
+const SAFELIST_IMPORT_RE = /@import\s+["']([^"']*\.shortwind\.css)["']/g;
 
 // Only formats a framework emits markup/scripts into. Sourcemaps embed the
 // original source (raw tokens are expected there) and are excluded by not
@@ -74,6 +93,12 @@ export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
   // token scan that still ships unstyled markup. Caught here regardless of build.
   const undefinedTokens = await findUndefinedThemeTokens(cwd, registry);
 
+  // Independent of build output too: has the generated safelist import been
+  // hand-edited to point at the wrong file? Self-healing re-adds the correct
+  // import, but a mutated one it can't recognize lingers as a dead/broken
+  // `@import` — surface it so the silent edge becomes visible.
+  const staleSafelistImports = findStaleSafelistImports(cwd);
+
   const outputDirs = (options.dirs ?? DEFAULT_OUTPUT_DIRS).filter((d) =>
     existsSync(path.join(cwd, d)),
   );
@@ -86,6 +111,7 @@ export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
       findings: [],
       usedInSource: [],
       undefinedTokens,
+      staleSafelistImports,
     };
   }
 
@@ -116,14 +142,45 @@ export async function doctor(options: DoctorOptions): Promise<DoctorResult> {
   }
 
   return {
-    ok: verdict === "clean" && undefinedTokens.length === 0,
+    ok: verdict === "clean" && undefinedTokens.length === 0 && staleSafelistImports.length === 0,
     verdict,
     outputDirs,
     scannedFiles: files.length,
     findings,
     usedInSource,
     undefinedTokens,
+    staleSafelistImports,
   };
+}
+
+// Walk the Tailwind entry stylesheets and flag any `@import "….shortwind.css"`
+// that doesn't resolve to the sibling Shortwind manages for that entry.
+// Comparison is by resolved absolute path, so `./x.shortwind.css` and
+// `x.shortwind.css` (same target) are treated as equal — only a genuinely
+// different target is reported.
+function findStaleSafelistImports(cwd: string): StaleSafelistImport[] {
+  const stale: StaleSafelistImport[] = [];
+  for (const entry of findTailwindEntryCssFiles(cwd)) {
+    const expectedPath = safelistFilePathFor(entry);
+    let css: string;
+    try {
+      css = readFileSync(entry, "utf8");
+    } catch {
+      continue;
+    }
+    for (const m of css.matchAll(SAFELIST_IMPORT_RE)) {
+      const found = m[1] ?? "";
+      const resolved = path.resolve(path.dirname(entry), found);
+      if (resolved !== expectedPath) {
+        stale.push({
+          file: entry,
+          found,
+          expected: `./${path.basename(expectedPath)}`,
+        });
+      }
+    }
+  }
+  return stale;
 }
 
 // Theme color tokens the installed recipes reference but the project's theme

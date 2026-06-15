@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync, existsSync, type Dirent } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, rmSync, existsSync, type Dirent } from "node:fs";
 import path from "node:path";
 import {
   buildRegistry,
@@ -184,34 +184,44 @@ export function hasTailwindImport(css: string): boolean {
 }
 
 // Upsert, not insert-once: when the CSS already carries an injected block the
-// directive is REPLACED if the registry changed, so callers can re-run this on
-// every build (in-memory or on-disk) and the safelist always tracks recipes/.
-export function injectSourceDirective(css: string, registry: Registry): string {
-  const directive = buildSourceDirective(registry);
+// `body` is REPLACED if it changed, so callers can re-run this on every build
+// (in-memory or on-disk) and the injected content always tracks recipes/. An
+// empty `body` removes the block. Insertion lands right after the
+// `@import "tailwindcss"` line so an injected `@import` stays above all plain
+// rules — CSS requires `@import` to precede everything but `@charset`/`@layer`.
+function upsertInjectedBlock(css: string, body: string): string {
   const start = css.indexOf(SHORTWIND_INJECT_MARKER);
   if (start !== -1) {
     const end = css.indexOf(SHORTWIND_INJECT_END_MARKER, start);
     if (end === -1) return css; // half a block — refuse to guess its boundary
     const blockEnd = end + SHORTWIND_INJECT_END_MARKER.length;
-    if (!directive) {
-      // Registry emptied out — drop the block (and the surrounding newlines
-      // the original insertion added) instead of leaving a stale safelist.
+    if (!body.trim()) {
+      // Nothing to inject — drop the whole block (markers and the surrounding
+      // newlines the original insertion added) rather than leave an empty
+      // `start`/`end` pair that does nothing but clutter the file.
       return css.slice(0, start).replace(/\n$/, "") + css.slice(blockEnd).replace(/^\n/, "");
     }
-    const next = `${SHORTWIND_INJECT_MARKER}\n${directive}\n${SHORTWIND_INJECT_END_MARKER}`;
+    const next = `${SHORTWIND_INJECT_MARKER}\n${body}\n${SHORTWIND_INJECT_END_MARKER}`;
     if (css.slice(start, blockEnd) === next) return css;
     return css.slice(0, start) + next + css.slice(blockEnd);
   }
   if (css.includes(LEGACY_INJECT_MARKER)) return css;
-  if (!directive) return css;
+  if (!body.trim()) return css;
   const m = css.match(TAILWIND_IMPORT_RE);
   if (!m) return css;
   const insertAt = (m.index ?? 0) + m[0].length;
   return (
     css.slice(0, insertAt) +
-    `\n${SHORTWIND_INJECT_MARKER}\n${directive}\n${SHORTWIND_INJECT_END_MARKER}\n` +
+    `\n${SHORTWIND_INJECT_MARKER}\n${body}\n${SHORTWIND_INJECT_END_MARKER}\n` +
     css.slice(insertAt)
   );
+}
+
+// In-memory injection (Vite/Astro): the `@source inline(...)` directives live
+// directly in the served CSS string — nothing reaches disk, so there is no
+// file to keep clean.
+export function injectSourceDirective(css: string, registry: Registry): string {
+  return upsertInjectedBlock(css, buildSourceDirective(registry));
 }
 
 // Build output and dependency directories that never hold the user's Tailwind
@@ -259,14 +269,109 @@ export function findTailwindEntryCssFiles(cwd: string): string[] {
   return found.sort();
 }
 
-// On-disk variant of injectSourceDirective: upsert the marker-guarded
-// directive block into the stylesheet and report whether the file changed.
-export function syncSourceDirectiveToFile(cssPath: string, registry: Registry): boolean {
+// The sibling safelist file for an entry stylesheet: `app/globals.css` →
+// `app/globals.shortwind.css`. A SIBLING (not a `.shortwind/` dir) so the
+// injected `@import` is always a flat `./name.css` — no `../` path math that
+// breaks across nested entries, monorepos, or pnpm symlinks, and the file
+// resolves relative to the entry that imports it.
+export function safelistFilePathFor(cssPath: string): string {
+  const dir = path.dirname(cssPath);
+  const base = path.basename(cssPath, ".css");
+  return path.join(dir, `${base}.shortwind.css`);
+}
+
+const SAFELIST_FILE_HEADER =
+  "/* shortwind:generated — recipe-utility safelist. Regenerated on every build/dev and committed,\n" +
+  "   so a fresh clone renders styled before the first build runs. Do not edit by hand. */";
+
+// Full contents of the sibling safelist file, or "" when there are no tokens
+// (caller deletes the file and drops the import).
+export function buildSafelistFile(registry: Registry): string {
+  const directive = buildSourceDirective(registry);
+  if (!directive) return "";
+  return `${SAFELIST_FILE_HEADER}\n${directive}\n`;
+}
+
+// Drop a legacy marker-wrapped block (and the surrounding newlines the
+// original insertion added) wholesale — used to migrate entries written by
+// earlier versions, which guarded the injected content with start/end markers
+// (the inline `@source` block, or the marker-wrapped `@import`). Nothing on
+// disk carries markers anymore; the disk path injects a bare import instead.
+function stripMarkerBlock(css: string): string {
+  const start = css.indexOf(SHORTWIND_INJECT_MARKER);
+  if (start === -1) return css;
+  const end = css.indexOf(SHORTWIND_INJECT_END_MARKER, start);
+  if (end === -1) return css; // half a block — refuse to guess its boundary
+  const blockEnd = end + SHORTWIND_INJECT_END_MARKER.length;
+  return css.slice(0, start).replace(/\n$/, "") + css.slice(blockEnd).replace(/^\n/, "");
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Insert / refresh / remove the single managed `@import "<spec>";` line in an
+// entry stylesheet. No marker comments: the import is deterministic (its path
+// is derived from the entry's own name), so we locate our own line by matching
+// the import itself — anything shortwind manages can be found, updated, and
+// removed without leaving bookkeeping comments in the file the user edits.
+function upsertImportLine(css: string, importSpec: string, present: boolean): string {
+  // Refuse to touch a file carrying the old single-line marker (no end
+  // delimiter to bound) — same caution the marker path always took.
+  if (css.includes(LEGACY_INJECT_MARKER)) return css;
+  // Migrate away any marker-wrapped block, then strip any existing managed
+  // import so re-runs don't duplicate it and an emptied registry drops it.
+  let out = stripMarkerBlock(css);
+  const lineRe = new RegExp(`\\n?[ \\t]*@import\\s+["']${escapeRegExp(importSpec)}["']\\s*;?[ \\t]*`);
+  out = out.replace(lineRe, "");
+  if (!present) return out;
+  const m = out.match(TAILWIND_IMPORT_RE);
+  if (!m) return out; // no `@import "tailwindcss"` to anchor to — leave alone
+  const insertAt = (m.index ?? 0) + m[0].length;
+  // Set the import on its own line and leave a blank line before the user's
+  // content (collapsing any leading blank lines that already followed the
+  // Tailwind import to exactly one). At end-of-file there's nothing to
+  // separate from, so no trailing blank line is added.
+  const rest = out.slice(insertAt).replace(/^(?:[ \t]*\n)+/, "");
+  const separator = rest === "" ? "\n" : "\n\n";
+  return out.slice(0, insertAt) + `\n@import "${importSpec}";` + separator + rest;
+}
+
+// On-disk safelist for adapters where Tailwind reads the entry CSS FROM DISK
+// (Next, bare Tailwind CLI) and has no in-build CSS hook. Instead of injecting
+// the (often dozens of lines) `@source inline(...)` block straight into the
+// user's stylesheet, write it to a sibling `*.shortwind.css` and add a single
+// bare `@import` to the entry — keeping the file the user actually edits down
+// to one managed line, no marker comments. Verified: Tailwind v4 honors
+// `@source inline(...)` reached through an `@import`. Idempotent and
+// self-migrating — an entry still carrying the old marker block (inline
+// `@source` or marker-wrapped import) has it collapsed to the bare import on
+// the next run. Returns whether anything changed.
+export function syncSafelistFile(cssPath: string, registry: Registry): boolean {
   const css = readFileSync(cssPath, "utf8");
-  const next = injectSourceDirective(css, registry);
-  if (next === css) return false;
-  writeFileSync(cssPath, next);
-  return true;
+  const safelistPath = safelistFilePathFor(cssPath);
+  const fileContent = buildSafelistFile(registry);
+  let changed = false;
+
+  if (fileContent) {
+    const existing = existsSync(safelistPath) ? readFileSync(safelistPath, "utf8") : null;
+    if (existing !== fileContent) {
+      writeFileSync(safelistPath, fileContent);
+      changed = true;
+    }
+  } else if (existsSync(safelistPath)) {
+    // Registry emptied out (every recipe removed) — don't leave a stale,
+    // orphaned safelist next to the entry.
+    rmSync(safelistPath);
+    changed = true;
+  }
+
+  const next = upsertImportLine(css, `./${path.basename(safelistPath)}`, Boolean(fileContent));
+  if (next !== css) {
+    writeFileSync(cssPath, next);
+    changed = true;
+  }
+  return changed;
 }
 
 // Single source of truth for the html-vs-jsx decision, shared by every adapter
