@@ -1,12 +1,23 @@
 {
   "tailwindCSS.experimental.classRegex": [
-    [
-      "class\\s*[=:]\\s*['\"]([^'\"]*)['\"]",
-      "([\\w-@/:]+)"
-    ],
-    [
-      "className\\s*=\\s*['\"]([^'\"]*)['\"]",
-      "([\\w-@/:]+)"
-    ]
-  ]
+    ["class\\s*[=:]\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:\\[\\]().,%#!]+)"],
+    ["className\\s*=\\s*['\"]([^'\"]*)['\"]", "([\\w-@/:\\[\\]().,%#!]+)"],
+    ["@recipe\\s+[\\w-]+\\s*\\{([^}]*)\\}", "([\\w-@/:\\[\\]().,%#!]+)"]
+  ],
+  "editor.quickSuggestions": { "strings": true },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.tsserver.pluginPaths": ["."],
+  "[typescriptreact]": {
+    "editor.wordSeparators": "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?"
+  },
+  "[javascriptreact]": {
+    "editor.wordSeparators": "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?"
+  },
+  "[typescript]": {
+    "editor.wordSeparators": "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?"
+  },
+  "[javascript]": {
+    "editor.wordSeparators": "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?"
+  }
 }
