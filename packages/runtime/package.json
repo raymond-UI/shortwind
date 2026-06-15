@@ -1,6 +1,6 @@
 {
   "name": "@shortwind/runtime",
-  "version": "0.1.0-beta.17",
+  "version": "0.1.0-beta.18",
   "description": "Browser runtime for Shortwind. Walks the DOM, expands @recipe tokens, ships the default catalog inline.",
   "type": "module",
   "main": "./dist/index.js",
