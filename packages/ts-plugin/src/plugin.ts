@@ -168,7 +168,9 @@ export function init(modules: { typescript: typeof tsmod }) {
         kindModifiers: "shortwind",
         sortText: "0",
         insertText: `@${n}`,
-        replacementSpan,
+        // Omit (not `undefined`) when there's no token — `exactOptionalPropertyTypes`
+        // forbids assigning undefined to an optional TextSpan property.
+        ...(replacementSpan ? { replacementSpan } : {}),
       }));
       if (prior) {
         prior.entries = [...entries, ...prior.entries];
@@ -181,7 +183,7 @@ export function init(modules: { typescript: typeof tsmod }) {
         isGlobalCompletion: false,
         isMemberCompletion: false,
         isNewIdentifierLocation: true,
-        optionalReplacementSpan: replacementSpan,
+        ...(replacementSpan ? { optionalReplacementSpan: replacementSpan } : {}),
         entries,
       };
     };
