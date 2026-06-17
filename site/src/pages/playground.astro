@@ -1,6 +1,6 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import Playground from "../islands/Playground.tsx";
+import PlaygroundStudio from "../islands/PlaygroundStudio.tsx";
 import { flattenedRegistry } from "../lib/catalog-data";
 
 // expand() reads only registry.flattened, so the flattened map (recipe → tokens)
@@ -10,17 +10,8 @@ const flattened = flattenedRegistry();
 
 <BaseLayout
   title="Playground"
-  description="Type @recipe shorthand and watch it expand to Tailwind, live."
+  description="Type @recipe shorthand and watch it expand to Tailwind, live — with honest token counts and the full recipe palette."
+  appShell
 >
-  <section class="@wrapper py-10">
-    <header class="@stack-sm mb-6">
-      <p class="@eyebrow">live expander</p>
-      <h1 class="@heading-xl">Playground</h1>
-      <p class="@lead max-w-2xl">
-        Type the shorthand an LLM would emit. Watch it expand to Tailwind — and
-        count the tokens saved.
-      </p>
-    </header>
-    <Playground client:load flattened={flattened} />
-  </section>
+  <PlaygroundStudio client:load flattened={flattened} />
 </BaseLayout>

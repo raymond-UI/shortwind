@@ -22,30 +22,31 @@ interface Props {
 const { title, description, docs, current, headings, prev, next } = Astro.props;
 ---
 
-<BaseLayout title={title} description={description}>
-  <div
-    class="@wrapper grid grid-cols-1 gap-10 py-10 lg:grid-cols-[12rem_minmax(0,1fr)_12rem]"
-  >
-    <aside class="hidden lg:block">
-      <div class="sticky top-20">
-        <DocsSidebar docs={docs} current={current} />
-      </div>
+{/* App shell (like /catalog and /playground): header fixed, nav · article · TOC
+    each scroll independently, the page itself never scrolls. */}
+<BaseLayout title={title} description={description} appShell>
+  <div class="grid h-full grid-cols-1 grid-rows-1 lg:grid-cols-[15rem_minmax(0,1fr)_14rem]">
+    {/* documentation nav — scrolls independently */}
+    <aside class="hidden min-h-0 overflow-y-auto border-r border-border bg-card/40 px-5 py-8 lg:block">
+      <DocsSidebar docs={docs} current={current} />
     </aside>
 
-    <article class="min-w-0">
-      <header class="@stack-sm mb-8 border-b border-border pb-6">
-        <p class="@eyebrow">Docs</p>
-        <h1 class="@heading-xl">{title}</h1>
-        {description && <p class="@lead">{description}</p>}
-      </header>
-      <div class="prose-doc"><slot /></div>
-      <PrevNext prev={prev} next={next} />
+    {/* article — scrolls independently */}
+    <article class="min-h-0 min-w-0 overflow-y-auto">
+      <div class="mx-auto max-w-3xl px-6 py-10 lg:px-12">
+        <header class="@stack-sm mb-8 border-b border-border pb-6">
+          <p class="@eyebrow">Docs</p>
+          <h1 class="@heading-xl">{title}</h1>
+          {description && <p class="@lead">{description}</p>}
+        </header>
+        <div class="prose-doc"><slot /></div>
+        <PrevNext prev={prev} next={next} />
+      </div>
     </article>
 
-    <aside class="hidden lg:block">
-      <div class="sticky top-20">
-        <Toc headings={headings} />
-      </div>
+    {/* on this page — scrolls independently */}
+    <aside class="hidden min-h-0 overflow-y-auto border-l border-border px-5 py-8 lg:block">
+      <Toc headings={headings} />
     </aside>
   </div>
 </BaseLayout>

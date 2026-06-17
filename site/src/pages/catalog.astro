@@ -1,27 +1,25 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import Catalog from "../islands/Catalog.tsx";
-import { loadCatalog } from "../lib/catalog-data";
+import CatalogBrowser from "../islands/CatalogBrowser.tsx";
+import { loadCatalog, flattenedRegistry } from "../lib/catalog-data";
 
-// Build-time: parse owned recipes → families with expansions. Passed into the
-// island as a prop (serialized into the hydration payload), so there is no
-// runtime fetch.
+// Build-time: parse owned recipes → families (name, description, expansion) and
+// the flattened registry (recipe → tokens) used for live previews. Both ship in
+// the island's hydration payload — no runtime fetch.
 const { families } = loadCatalog();
+const flattened = flattenedRegistry();
 const recipeCount = families.reduce((n, f) => n + f.recipes.length, 0);
 ---
 
 <BaseLayout
   title="Recipe catalog"
-  description="Every recipe in the default Shortwind registry, with its expanded Tailwind class list and a live preview."
+  description="Browse every recipe in the default Shortwind registry — its expanded Tailwind class list and a live preview."
+  appShell
 >
-  <section class="@wrapper py-10">
-    <header class="@stack-sm mb-8">
-      <p class="@eyebrow">{families.length} families · {recipeCount} recipes</p>
-      <h1 class="@heading-xl">Recipe catalog</h1>
-      <p class="@lead max-w-2xl">
-        Every recipe, its full Tailwind expansion, and a live preview.
-      </p>
-    </header>
-    <Catalog client:load families={families} />
-  </section>
+  <CatalogBrowser
+    client:load
+    families={families}
+    flattened={flattened}
+    recipeCount={recipeCount}
+  />
 </BaseLayout>

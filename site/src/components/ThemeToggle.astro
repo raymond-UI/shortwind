@@ -1,11 +1,16 @@
 ---
 // Framework-free light/dark toggle. The no-flash bootstrap in BaseHead sets the
 // initial class; this just flips and persists it.
+//
+// SiteHeader renders this twice (desktop + mobile), so the button must NOT carry
+// a unique id (duplicate ids → both inline scripts bind the same first button →
+// two listeners cancel out). Instead every toggle shares ONE delegated handler,
+// guarded so it's installed once no matter how many instances render.
 ---
 
 <button
   type="button"
-  id="theme-toggle"
+  data-theme-toggle
   aria-label="Toggle color theme"
   class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 >
@@ -14,10 +19,15 @@
 </button>
 
 <script is:inline>
-  document.getElementById("theme-toggle")?.addEventListener("click", () => {
-    const isDark = document.documentElement.classList.toggle("dark");
-    try {
-      localStorage.setItem("theme", isDark ? "dark" : "light");
-    } catch {}
-  });
+  if (!window.__swThemeToggleBound) {
+    window.__swThemeToggleBound = true;
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element) || !t.closest("[data-theme-toggle]")) return;
+      const isDark = document.documentElement.classList.toggle("dark");
+      try {
+        localStorage.setItem("theme", isDark ? "dark" : "light");
+      } catch {}
+    });
+  }
 </script>
