@@ -66,11 +66,14 @@ export default defineSchema({
     // tombstones any active page whose `expiresAt <= now` via the SAME
     // `applyLifecycle('delete')` path as a user delete (tombstone, NOT a hard
     // delete — the record + versions are retained, PRD §8.2).
-    expiresAt: v.union(v.number(), v.null()),
+    // Optional in the validator so existing/direct page writers (and rows
+    // created before this field landed) don't need to set it; absent === null.
+    expiresAt: v.optional(v.union(v.number(), v.null())),
     // CLOUD-51 (ADDITIVE). Optional project-grouping handle so an account can
     // bucket its pages (e.g. "marketing-site"); null when ungrouped. Backed by
-    // `by_project` for an account-scoped group `find` filter.
-    projectGroup: v.union(v.string(), v.null()),
+    // `by_project` for an account-scoped group `find` filter. Optional in the
+    // validator for the same back-compat reason as `expiresAt` above.
+    projectGroup: v.optional(v.union(v.string(), v.null())),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
