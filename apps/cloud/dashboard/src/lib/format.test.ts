@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { describeRecipeEdit, shortHash, formatTime } from "./format";
+import {
+  describeRecipeEdit,
+  shortHash,
+  formatTime,
+  formatBytes,
+} from "./format";
 
 describe("describeRecipeEdit (PRD §5.4 phrasing)", () => {
   it("renders a version transition + plural pages", () => {
@@ -31,5 +36,20 @@ describe("shortHash / formatTime", () => {
   });
   it("formats epoch ms to a stable UTC string", () => {
     expect(formatTime(0)).toBe("1970-01-01 00:00:00Z");
+  });
+});
+
+describe("formatBytes (CLOUD-43 storage meter)", () => {
+  it("returns 0 B for empty/zero/negative", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(-5)).toBe("0 B");
+  });
+  it("formats whole bytes without a decimal", () => {
+    expect(formatBytes(512)).toBe("512 B");
+  });
+  it("steps to binary units with one decimal", () => {
+    expect(formatBytes(1024)).toBe("1 KiB");
+    expect(formatBytes(1536)).toBe("1.5 KiB");
+    expect(formatBytes(5_242_880)).toBe("5 MiB");
   });
 });

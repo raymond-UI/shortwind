@@ -43,6 +43,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
     skip ? "skip" : args,
   );
   const policy = useQuery(api.dashboard.getAccountPolicy, skip ? "skip" : args);
+  // CLOUD-43: the metered-billing usage query (additive module, api.billing.*).
+  const usage = useQuery(api.billing.getUsage, skip ? "skip" : args);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
 
   const value = useMemo<DashboardData>(
@@ -52,11 +54,12 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       recipeEdits,
       moderation,
       policy,
+      usage,
       setPolicy: async (next) => {
         await setPolicyMutation({ bearer: BEARER, ...next });
       },
     }),
-    [pages, auditLog, recipeEdits, moderation, policy, setPolicyMutation],
+    [pages, auditLog, recipeEdits, moderation, policy, usage, setPolicyMutation],
   );
 
   return <DashboardDataProvider value={value}>{children}</DashboardDataProvider>;

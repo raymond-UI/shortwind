@@ -16,6 +16,24 @@ export function shortHash(hash: string): string {
 }
 
 /**
+ * Bytes → a short human size for the storage meter (CLOUD-43). Binary units
+ * (1024-step) since storage is measured in bytes; one decimal past KiB. `0 B`
+ * for an empty/never-published account. Deterministic — golden-testable.
+ */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  const rounded = unit === 0 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded} ${units[unit]}`;
+}
+
+/**
  * The canonical recipe-edit phrasing the human reads (PRD §5.4):
  *   "@card 0.4.0 → 0.5.0, affects 12 pages on next publish"
  * For a family's first version (`fromVersion === null`) we say "created".

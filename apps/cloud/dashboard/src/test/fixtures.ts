@@ -5,6 +5,7 @@ import type {
   PageWithVersions,
   RecipeEditRow,
   AccountPolicy,
+  UsageMeters,
 } from "../lib/types";
 
 /**
@@ -122,6 +123,15 @@ export const mockPolicy: AccountPolicy = {
   updatedAt: 1_700_000_000_000,
 };
 
+/** Mock metered-billing usage (CLOUD-43). Shapes `billing.getUsage` returns. */
+export const mockUsage: UsageMeters = {
+  publishes: 42,
+  customDomains: 3,
+  storageBytes: 5_242_880, // 5 MiB
+  periodStart: null,
+  periodEnd: 1_700_000_400_000,
+};
+
 /**
  * Build a `DashboardData` from optional overrides. `setPolicy` defaults to a
  * spy-able async no-op so policy tests can assert it was called.
@@ -135,6 +145,7 @@ export function makeData(
     recipeEdits: mockRecipeEdits,
     moderation: mockModeration,
     policy: mockPolicy,
+    usage: mockUsage,
     setPolicy: async () => {},
     ...overrides,
   };
