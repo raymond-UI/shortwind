@@ -220,6 +220,31 @@ describe("CLOUD-22 router: not found", () => {
   });
 });
 
+describe("CLOUD-SUBDOMAIN router: per-page subdomain serving", () => {
+  it("serves a <subdomain>.shortwind.dev/ request via the cold source (host passed through)", async () => {
+    const r = route({ pageId: "page_sub" });
+    await seedArtifact(r);
+    // The cold source (Convex resolveRoute) does the subdomain logic; the router
+    // just passes the host + path through and caches under (host, path).
+    const cold = vi.fn<ColdRouteSource>(async (host, path) =>
+      host === "cloud-ops.shortwind.dev" && path === "/" ? r : null,
+    );
+    const d = deps({ coldRoute: cold });
+
+    const res = await run(req("cloud-ops.shortwind.dev", "/"), d);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(HTML);
+    expect(cold).toHaveBeenCalledWith("cloud-ops.shortwind.dev", "/");
+
+    // The subdomain route is now cached under route:cloud-ops.shortwind.dev/ — a
+    // repeat view is a KV hit (no second cold call).
+    expect(await lookupRoute(E, "cloud-ops.shortwind.dev", "/")).toEqual(r);
+    const res2 = await run(req("cloud-ops.shortwind.dev", "/"), d);
+    expect(res2.status).toBe(200);
+    expect(cold).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("CLOUD-22 kv: deleteRoute", () => {
   it("evicts a route from KV (idempotent)", async () => {
     const r = route({ pageId: "page_del" });

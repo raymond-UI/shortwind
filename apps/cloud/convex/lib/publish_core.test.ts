@@ -4,8 +4,10 @@ import {
   assembleArtifact,
   bumpRecipeVersion,
   lockfileVersions,
+  resolveRootDomain,
   runPublish,
   runUpdate,
+  subdomainUrl,
   type AuditWrite,
   type EdgePort,
   type NewPageVersion,
@@ -63,9 +65,17 @@ class MemoryData implements PublishDataPort {
   async getPage(pageId: string): Promise<PageRecord | null> {
     return this.pages.get(pageId) ?? null;
   }
+  // CLOUD-SUBDOMAIN: global (cross-account) subdomain-uniqueness probe.
+  async subdomainTaken(label: string): Promise<boolean> {
+    for (const p of this.pages.values()) {
+      if (p.subdomain === label) return true;
+    }
+    return false;
+  }
   async insertPage(page: {
     accountId: string;
     slug: string;
+    subdomain: string;
     visibility: "public" | "unlisted" | "private";
     tags: string[];
   }): Promise<string> {
@@ -74,6 +84,7 @@ class MemoryData implements PublishDataPort {
       id,
       accountId: page.accountId,
       slug: page.slug,
+      subdomain: page.subdomain,
       currentVersion: 0,
       visibility: page.visibility,
       tags: page.tags,
@@ -148,14 +159,20 @@ class MemoryStorage implements StoragePort {
 
 class MemoryEdge implements EdgePort {
   invalidated: string[] = [];
-  routes: { pageId: string; slug: string; version: number; artifactKey: string }[] =
-    [];
+  routes: {
+    pageId: string;
+    slug: string;
+    subdomain: string;
+    version: number;
+    artifactKey: string;
+  }[] = [];
   async invalidate(url: string): Promise<void> {
     this.invalidated.push(url);
   }
   async putRoute(args: {
     pageId: string;
     slug: string;
+    subdomain: string;
     version: number;
     artifactKey: string;
   }): Promise<void> {
@@ -232,7 +249,8 @@ describe("runPublish — create", () => {
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.result.id).toMatch(/^page_/);
-    expect(out.result.url).toBe("https://shortwind.app/my-status");
+    // CLOUD-SUBDOMAIN: the canonical URL is now the per-page subdomain.
+    expect(out.result.url).toBe("https://my-status.shortwind.app");
     expect(out.result.version).toBe(1);
 
     expect(storage.artifacts).toHaveLength(1);
@@ -245,9 +263,11 @@ describe("runPublish — create", () => {
     expect(data.pages.get(out.result.id)!.currentVersion).toBe(1);
     // The lockfile snapshot is persisted for the next diff.
     expect(data.lockfiles.get(out.result.id)).toEqual(lockfile());
-    // Edge route registered + URL invalidated.
+    // Edge route registered (carries slug + subdomain) + URL invalidated.
     expect(edge.routes).toHaveLength(1);
-    expect(edge.invalidated).toEqual(["https://shortwind.app/my-status"]);
+    expect(edge.routes[0]!.slug).toBe("my-status");
+    expect(edge.routes[0]!.subdomain).toBe("my-status");
+    expect(edge.invalidated).toEqual(["https://my-status.shortwind.app"]);
     // A page.publish audit row exists.
     expect(data.audits.some((a) => a.action === "page.publish")).toBe(true);
   });
@@ -269,7 +289,7 @@ describe("runPublish — create", () => {
     const { deps } = makeDeps();
     const input = await basePublishInput({ slug: undefined, title: "My Status Page!" });
     const out = await runPublish(input, deps);
-    expect(out.ok && out.result.url).toBe("https://shortwind.app/my-status-page");
+    expect(out.ok && out.result.url).toBe("https://my-status-page.shortwind.app");
   });
 });
 
@@ -383,10 +403,10 @@ describe("runUpdate — version bump, same URL, prior retained (PRD §5.6)", () 
     expect(data.pages.get(pageId)!.currentVersion).toBe(2);
     // A fresh artifact written for v2 (distinct content hash).
     expect(storage.artifacts).toHaveLength(2);
-    // Edge invalidated the same URL again.
+    // Edge invalidated the same (subdomain) URL again.
     expect(edge.invalidated).toEqual([
-      "https://shortwind.app/my-status",
-      "https://shortwind.app/my-status",
+      "https://my-status.shortwind.app",
+      "https://my-status.shortwind.app",
     ]);
     expect(data.audits.some((a) => a.action === "page.update")).toBe(true);
   });
@@ -406,6 +426,104 @@ describe("runUpdate — version bump, same URL, prior retained (PRD §5.6)", () 
       deps,
     );
     expect(data.recipeVersions).toHaveLength(0);
+  });
+});
+
+describe("CLOUD-SUBDOMAIN — per-page subdomain serving", () => {
+  it("a free slug gets the bare <slug> as its globally-unique subdomain", async () => {
+    const { data, deps } = makeDeps();
+    const out = await runPublish(await basePublishInput(), deps);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // The page stores the bare slug as its subdomain.
+    expect(data.pages.get(out.result.id)!.subdomain).toBe("my-status");
+    // The published URL is https://<slug>.shortwind.app.
+    expect(out.result.url).toBe("https://my-status.shortwind.app");
+  });
+
+  it("a same-slug publish from a DIFFERENT account gets <slug>-<id> (no collision)", async () => {
+    const { data, deps } = makeDeps();
+    // First account takes the bare label.
+    const first = await runPublish(await basePublishInput(), deps);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(data.pages.get(first.result.id)!.subdomain).toBe("my-status");
+
+    // A second account publishes the SAME slug — slug-collision is per-account, so
+    // this is a NEW page, but the subdomain is global so it must disambiguate.
+    const second = await runPublish(
+      await basePublishInput({ actor: { accountId: "acct_2", tokenId: "tok_2" } }),
+      deps,
+    );
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    const label = data.pages.get(second.result.id)!.subdomain!;
+    // Disambiguated: my-status-<id>, NOT the bare label, and globally unique.
+    expect(label).toMatch(/^my-status-[a-z0-9]+$/);
+    expect(label).not.toBe("my-status");
+    expect(second.result.url).toBe(`https://${label}.shortwind.app`);
+  });
+
+  it("avoids a reserved system label even when the slug is free", async () => {
+    const { data, deps } = makeDeps();
+    // A page whose slug would be the reserved system label `cloud` must NOT take
+    // the bare `cloud` subdomain (that would shadow a system host).
+    const out = await runPublish(
+      await basePublishInput({ slug: "cloud" }),
+      deps,
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    const label = data.pages.get(out.result.id)!.subdomain!;
+    expect(label).not.toBe("cloud");
+    expect(label).toMatch(/^cloud-[a-z0-9]+$/);
+  });
+
+  it("update keeps the SAME subdomain (stable once minted)", async () => {
+    const { data, deps } = makeDeps();
+    const created = await runPublish(await basePublishInput(), deps);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const pageId = created.result.id;
+    const original = data.pages.get(pageId)!.subdomain;
+
+    const updated = await runUpdate(
+      {
+        actor: { accountId: ACCOUNT, tokenId: TOKEN },
+        pageId,
+        html: '<div class="@card">v2</div>',
+        recipes: [{ family: "card", source: await cleanCardSource() }],
+        lockfile: lockfile(),
+      },
+      deps,
+    );
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    // Same subdomain, same URL.
+    expect(data.pages.get(pageId)!.subdomain).toBe(original);
+    expect(updated.result.url).toBe(created.result.url);
+    expect(updated.result.url).toBe("https://my-status.shortwind.app");
+  });
+});
+
+describe("CLOUD-SUBDOMAIN — URL helpers", () => {
+  it("resolveRootDomain derives the apex from the base URL host", () => {
+    expect(resolveRootDomain({ baseUrl: "https://c.shortwind.dev" })).toBe(
+      "shortwind.dev",
+    );
+    expect(resolveRootDomain({ baseUrl: "https://shortwind.app" })).toBe(
+      "shortwind.app",
+    );
+    // An explicit rootDomain overrides the derivation.
+    expect(
+      resolveRootDomain({ baseUrl: "https://c.shortwind.dev", rootDomain: "x.io" }),
+    ).toBe("x.io");
+  });
+
+  it("subdomainUrl builds https://<subdomain>.<root>", () => {
+    expect(subdomainUrl("shortwind.dev", "cloud-ops")).toBe(
+      "https://cloud-ops.shortwind.dev",
+    );
   });
 });
 

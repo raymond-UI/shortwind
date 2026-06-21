@@ -44,6 +44,17 @@ export function serveHost(): string {
 }
 
 /**
+ * CLOUD-SUBDOMAIN: the apex domain pages are served under as per-page subdomains
+ * (`https://<subdomain>.<rootDomain>`). MUST match the publish-side
+ * `pageRootDomain()` (convex/pages.ts) so the eviction targets the SAME host the
+ * publish registered the route under. Env override (`PAGES_ROOT_DOMAIN`) lets a
+ * different deployment retarget; the hardcoded fallback mirrors `pageRootDomain`.
+ */
+export function rootDomain(): string {
+  return process.env.PAGES_ROOT_DOMAIN ?? "shortwind.dev";
+}
+
+/**
  * The canonical KV key for a route. MUST match `worker/src/kv.ts`
  * `routeKey(host, path)`: host lowercased, path normalized to a leading slash,
  * prefixed `route:`. The serve Worker writes routes under
@@ -63,6 +74,20 @@ export function routeKey(host: string, path: string): string {
  */
 export function routeKeyForSlug(slug: string, host: string = serveHost()): string {
   return routeKey(host, `/${slug}`);
+}
+
+/**
+ * CLOUD-SUBDOMAIN: the route key for a page's per-page SUBDOMAIN serve. The serve
+ * Worker resolves `<subdomain>.<root>/` (host = the subdomain host, path = `/`),
+ * so the KV route key is `route:{subdomain}.{root}/`. MUST stay byte-identical to
+ * how worker/src/kv.ts `routeKey(host, path)` keys a subdomain request (host
+ * lowercased, path `/`) — both are golden-tested.
+ */
+export function routeKeyForSubdomain(
+  subdomain: string,
+  root: string = rootDomain(),
+): string {
+  return routeKey(`${subdomain}.${root}`, "/");
 }
 
 /**
@@ -131,6 +156,23 @@ export async function evictRouteForSlug(slug: string): Promise<void> {
 }
 
 /**
+ * CLOUD-SUBDOMAIN: evict EVERY KV route key a page may be served under — the
+ * legacy path-based key (`route:{serveHost}/{slug}`) AND, when the page has a
+ * subdomain, the per-page subdomain key (`route:{subdomain}.{root}/`). A killed/
+ * deleted/expired page must stop serving on BOTH the path host and its subdomain.
+ * Fail-safe per key — never throws (see {@link evictKvRouteByKey}).
+ */
+export async function evictRouteForPage(
+  slug: string,
+  subdomain?: string | null,
+): Promise<void> {
+  await evictKvRouteByKey(routeKeyForSlug(slug));
+  if (subdomain) {
+    await evictKvRouteByKey(routeKeyForSubdomain(subdomain));
+  }
+}
+
+/**
  * The internalAction that actually performs the KV REST eviction. Scheduled (not
  * called inline) by the kill/delete/expiry mutations so the `fetch` runs in an
  * action context. Fail-safe: `evictRouteForSlug` swallows + logs any error, so a
@@ -138,10 +180,14 @@ export async function evictRouteForSlug(slug: string): Promise<void> {
  * forever — the DB tombstone/quarantine is already the source of truth.
  */
 export const evictRouteAction = internalAction({
-  args: { slug: v.string() },
+  args: {
+    slug: v.string(),
+    // CLOUD-SUBDOMAIN: evict the per-page subdomain route key too when present.
+    subdomain: v.optional(v.union(v.string(), v.null())),
+  },
   returns: v.null(),
   handler: async (_ctx, args) => {
-    await evictRouteForSlug(args.slug);
+    await evictRouteForPage(args.slug, args.subdomain ?? null);
     return null;
   },
 });
@@ -171,8 +217,11 @@ export interface SchedulerCtx {
 export async function scheduleRouteEviction(
   ctx: SchedulerCtx,
   slug: string,
+  subdomain?: string | null,
 ): Promise<void> {
   await ctx.scheduler.runAfter(0, internal.lib.edge_kv.evictRouteAction, {
     slug,
+    // CLOUD-SUBDOMAIN: thread the subdomain so the action evicts that key too.
+    subdomain: subdomain ?? null,
   });
 }

@@ -91,10 +91,10 @@ async function publishPage(
 function recordingPort(): {
   port: KillEdgePort;
   invalidated: string[];
-  evicted: { pageId: string; slug: string }[];
+  evicted: { pageId: string; slug: string; subdomain?: string | null }[];
 } {
   const invalidated: string[] = [];
-  const evicted: { pageId: string; slug: string }[] = [];
+  const evicted: { pageId: string; slug: string; subdomain?: string | null }[] = [];
   return {
     invalidated,
     evicted,
@@ -190,6 +190,10 @@ describe("killPage — fast global kill (PRD §8.2/§8.4)", () => {
     // The edge was purged + the KV route evicted (fast global kill).
     expect(rec.invalidated.length).toBeGreaterThanOrEqual(1);
     expect(rec.evicted.map((e) => e.pageId)).toContain(pageId);
+    // CLOUD-SUBDOMAIN: the eviction carries the page's subdomain so the kill path
+    // evicts the per-page subdomain KV key (`route:<subdomain>.<root>/`) too, not
+    // just the legacy path-based key. The bare slug is the subdomain here.
+    expect(rec.evicted.find((e) => e.pageId === pageId)!.subdomain).toBe("kill-me");
 
     await t.run(async (ctx) => {
       const page = await ctx.db.get(pageId as never);

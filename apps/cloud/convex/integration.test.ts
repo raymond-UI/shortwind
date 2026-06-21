@@ -102,7 +102,8 @@ describe("CLOUD-30a integration — publish → find → get → update", () => 
     expect(published.ok).toBe(true);
     if (!published.ok) throw new Error("publish collided unexpectedly");
     expect(published.version).toBe(1);
-    expect(published.url).toContain("/my-status-page");
+    // CLOUD-SUBDOMAIN: the canonical URL is now the per-page subdomain.
+    expect(published.url).toBe("https://my-status-page.shortwind.dev");
     const pageId = published.id;
 
     // page + version rows actually landed (handler-level scoping proof).
@@ -110,6 +111,9 @@ describe("CLOUD-30a integration — publish → find → get → update", () => 
       const page = await ctx.db.get(pageId as never);
       expect(page).not.toBeNull();
       expect((page as { slug: string }).slug).toBe("my-status-page");
+      // CLOUD-SUBDOMAIN: the page stores its globally-unique subdomain label
+      // (the bare slug, since it is free across all accounts here).
+      expect((page as { subdomain?: string }).subdomain).toBe("my-status-page");
       expect((page as { accountId: string }).accountId).toBe(accountId);
       expect((page as { currentVersion: number }).currentVersion).toBe(1);
 

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveSlug,
+  deriveSubdomain,
+  isReservedSubdomain,
   MAX_SLUG_LENGTH,
+  mintSubdomainId,
   RESERVED_SLUGS,
+  RESERVED_SUBDOMAINS,
   slugCollision,
   validateSlug,
 } from "./slug.js";
@@ -94,5 +98,61 @@ describe("slugCollision -> idempotent-publish 409 signal (PRD 3.2)", () => {
     expect(slugCollision("landing", { id: "pg_123", slug: "other" })).toEqual({
       collision: false,
     });
+  });
+});
+
+describe("CLOUD-SUBDOMAIN — reserved subdomain labels", () => {
+  it("flags the platform/system labels as reserved", () => {
+    for (const label of RESERVED_SUBDOMAINS) {
+      expect(isReservedSubdomain(label)).toBe(true);
+    }
+    expect(isReservedSubdomain("c")).toBe(true);
+    expect(isReservedSubdomain("CLOUD")).toBe(true); // case-insensitive
+  });
+
+  it("does not flag an ordinary page label", () => {
+    expect(isReservedSubdomain("cloud-ops")).toBe(false);
+    expect(isReservedSubdomain("my-status")).toBe(false);
+  });
+});
+
+describe("CLOUD-SUBDOMAIN — mintSubdomainId", () => {
+  it("produces a lowercase DNS-label-safe id of the requested length", () => {
+    const id = mintSubdomainId(6, () => 0.5);
+    expect(id).toMatch(/^[a-z0-9]{6}$/);
+  });
+});
+
+describe("CLOUD-SUBDOMAIN — deriveSubdomain (the Vercel hybrid)", () => {
+  it("returns the bare slug when it is globally free and not reserved", async () => {
+    const label = await deriveSubdomain("my-status", async () => false);
+    expect(label).toBe("my-status");
+  });
+
+  it("disambiguates with <slug>-<id> when the bare label is taken", async () => {
+    const taken = new Set(["my-status"]);
+    const label = await deriveSubdomain(
+      "my-status",
+      async (l) => taken.has(l),
+      () => "abc123",
+    );
+    expect(label).toBe("my-status-abc123");
+  });
+
+  it("never returns a reserved label even when it is free", async () => {
+    const label = await deriveSubdomain("cloud", async () => false, () => "abc123");
+    expect(label).toBe("cloud-abc123");
+  });
+
+  it("re-mints the id until the disambiguated label is free", async () => {
+    const taken = new Set(["my-status", "my-status-aaa"]);
+    const ids = ["aaa", "bbb"];
+    let i = 0;
+    const label = await deriveSubdomain(
+      "my-status",
+      async (l) => taken.has(l),
+      () => ids[i++] ?? "zzz",
+    );
+    expect(label).toBe("my-status-bbb");
   });
 });

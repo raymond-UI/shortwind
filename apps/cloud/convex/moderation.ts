@@ -531,7 +531,7 @@ export interface KillEdgePort {
    * test port ignores it (a 1-arg `evictRoute(route)` is assignable here).
    */
   evictRoute(
-    args: { pageId: string; slug: string },
+    args: { pageId: string; slug: string; subdomain?: string | null },
     ctx?: SchedulerCtx,
   ): Promise<void>;
 }
@@ -550,12 +550,14 @@ export interface KillEdgePort {
  */
 const defaultKillEdgePort: KillEdgePort = {
   invalidate: async () => {},
-  evictRoute: async ({ slug }, ctx) => {
+  evictRoute: async ({ slug, subdomain }, ctx) => {
     // A mutation cannot `fetch`; schedule the KV REST delete to run in an action
     // the instant `killPage` commits. No scheduler (shouldn't happen in prod) →
     // skip. Fail-safe: the scheduled action swallows + logs any Cloudflare error.
+    // CLOUD-SUBDOMAIN: thread the subdomain so the per-page subdomain KV key is
+    // evicted alongside the legacy path-based one.
     if (ctx === undefined) return;
-    await scheduleRouteEviction(ctx, slug);
+    await scheduleRouteEviction(ctx, slug, subdomain ?? null);
   },
 };
 
@@ -700,7 +702,10 @@ export const killPage = mutation({
     // Fast global kill: purge the edge cache + evict the KV route so the pulled
     // page stops resolving on the hot path. One object, one cache key (PRD §8.2).
     await killEdgePort.invalidate(publicUrl(page.slug));
-    await killEdgePort.evictRoute({ pageId: args.pageId, slug: page.slug }, ctx);
+    await killEdgePort.evictRoute(
+      { pageId: args.pageId, slug: page.slug, subdomain: page.subdomain ?? null },
+      ctx,
+    );
 
     return {
       lifecycle: outcome.lifecycle,

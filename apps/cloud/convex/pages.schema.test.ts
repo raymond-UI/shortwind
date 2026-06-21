@@ -32,6 +32,8 @@ describe("publish/update adapters write fields the schema declares", () => {
       new Set([
         "accountId",
         "slug",
+        // CLOUD-SUBDOMAIN (additive): the page's globally-unique subdomain label.
+        "subdomain",
         "customDomain",
         "visibility",
         "lifecycle",

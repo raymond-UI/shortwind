@@ -45,6 +45,7 @@ import {
 } from "../../shared/src/fingerprint.js";
 import {
   deriveSlug,
+  deriveSubdomain,
   slugCollision,
   validateSlug,
   type ExistingPageRef,
@@ -129,6 +130,12 @@ export interface PageRecord {
   id: string;
   accountId: string;
   slug: string;
+  /**
+   * CLOUD-SUBDOMAIN: the page's globally-unique subdomain label. May be absent on
+   * legacy rows created before the field landed; the update path falls back to the
+   * slug for the URL when so.
+   */
+  subdomain?: string;
   currentVersion: number;
 }
 
@@ -187,10 +194,18 @@ export interface PublishDataPort {
   findPageBySlug(accountId: string, slug: string): Promise<PageRecord | null>;
   /** Load a page by id (update path), or null if it does not exist. */
   getPage(pageId: string): Promise<PageRecord | null>;
+  /**
+   * CLOUD-SUBDOMAIN: is `label` already taken as a subdomain by ANY page across
+   * ALL accounts? Backs the global-uniqueness check that decides whether a page
+   * gets the bare `<slug>` or the disambiguated `<slug>-<id>` label.
+   */
+  subdomainTaken(label: string): Promise<boolean>;
   /** Insert a new page shell (no current version yet) → its new id. */
   insertPage(page: {
     accountId: string;
     slug: string;
+    /** The globally-unique subdomain label minted for this page. */
+    subdomain: string;
     visibility: "public" | "unlisted" | "private";
     tags: string[];
   }): Promise<string>;
@@ -256,6 +271,11 @@ export interface EdgePort {
   putRoute(args: {
     pageId: string;
     slug: string;
+    /**
+     * CLOUD-SUBDOMAIN: the page's subdomain label, so the edge can also register
+     * the `<subdomain>.<root>/` route key (not just the legacy path-based one).
+     */
+    subdomain: string;
     version: number;
     artifactKey: string;
   }): Promise<void>;
@@ -265,6 +285,13 @@ export interface EdgePort {
 export interface PublishEnv {
   /** Public origin used to render a page URL, e.g. "https://shortwind.app". */
   baseUrl: string;
+  /**
+   * CLOUD-SUBDOMAIN: the apex domain pages are served under as subdomains, e.g.
+   * "shortwind.dev". The published URL is `https://<subdomain>.<rootDomain>`. When
+   * omitted, the root domain is derived from `baseUrl`'s host (dropping a single
+   * leading system label like `c.`), so existing callers need no change.
+   */
+  rootDomain?: string;
 }
 
 /** The full injected dependency bundle. */
@@ -288,9 +315,40 @@ export function artifactKey(
   return `artifacts/${accountId}/${pageId}/${expandedHash}.html`;
 }
 
-/** Render the public URL for a page slug under the platform origin. */
+/** Render the (legacy path-based) public URL for a page slug under the origin. */
 export function pageUrl(baseUrl: string, slug: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/${slug}`;
+}
+
+/**
+ * CLOUD-SUBDOMAIN: the apex domain pages are served under as subdomains. Derived
+ * from an explicit `rootDomain` when given, else from the `baseUrl` host with a
+ * single leading system label stripped (`c.shortwind.dev` → `shortwind.dev`,
+ * `shortwind.dev` → `shortwind.dev`). Always lowercase, no scheme/port.
+ */
+export function resolveRootDomain(env: PublishEnv): string {
+  if (env.rootDomain && env.rootDomain.trim() !== "") {
+    return env.rootDomain.toLowerCase();
+  }
+  let host = env.baseUrl;
+  host = host.replace(/^[a-z]+:\/\//i, ""); // strip scheme
+  host = host.replace(/\/.*$/, ""); // strip path
+  host = host.replace(/:.*$/, ""); // strip port
+  host = host.toLowerCase();
+  const labels = host.split(".");
+  // A 3+-label host with a single leading system label (the serve host, e.g.
+  // `c.shortwind.dev`) collapses to its registrable apex `shortwind.dev`.
+  if (labels.length >= 3) return labels.slice(1).join(".");
+  return host;
+}
+
+/**
+ * CLOUD-SUBDOMAIN: the page's canonical published URL — `https://<subdomain>.<root>`.
+ * This is what publish/update now return (the Vercel-style per-page subdomain),
+ * replacing the legacy `c.shortwind.dev/<slug>` form.
+ */
+export function subdomainUrl(rootDomain: string, subdomain: string): string {
+  return `https://${subdomain}.${rootDomain}`;
 }
 
 /** Lockfile → the `{ family: version }` snapshot stored on a `PageVersion`. */
@@ -486,10 +544,19 @@ export async function runPublish(
     };
   }
 
-  // 4. Insert the page shell.
+  // 3b. CLOUD-SUBDOMAIN: mint the page's globally-unique subdomain label — the
+  //     bare slug when it is free across ALL accounts (and not a reserved system
+  //     label), else `slug-<id>` re-minted until unique. Stored on the page so it
+  //     is stable; the published URL is `https://<subdomain>.<rootDomain>`.
+  const subdomain = await deriveSubdomain(slug.value, (label) =>
+    deps.data.subdomainTaken(label),
+  );
+
+  // 4. Insert the page shell (with its minted subdomain).
   const pageId = await deps.data.insertPage({
     accountId: acct,
     slug: slug.value,
+    subdomain,
     visibility: input.visibility ?? "public",
     tags: [...(input.tags ?? [])],
   });
@@ -529,11 +596,15 @@ export async function runPublish(
   // 9. Persist the lockfile snapshot for the next publish's diff.
   await deps.data.putStoredLockfile(pageId, input.lockfile);
 
-  // 10. Edge: register the route + invalidate the URL.
-  const url = pageUrl(deps.env.baseUrl, slug.value);
+  // 10. Edge: register the route + invalidate the URL. The page's canonical URL
+  //     is now the per-page subdomain (`https://<subdomain>.<root>`); the edge
+  //     port carries both slug + subdomain so it can register the subdomain route
+  //     key AND keep the legacy path-based one working.
+  const url = subdomainUrl(resolveRootDomain(deps.env), subdomain);
   await deps.edge.putRoute({
     pageId,
     slug: slug.value,
+    subdomain,
     version,
     artifactKey: built.artifactKey,
   });
@@ -609,11 +680,15 @@ export async function runUpdate(
   await deps.data.patchPageCurrentVersion(input.pageId, versionId, version);
   await deps.data.putStoredLockfile(input.pageId, input.lockfile);
 
-  // SAME url — the slug is retained from the page record (PRD §3.2 identity).
-  const url = pageUrl(deps.env.baseUrl, page.slug);
+  // SAME url — both the slug AND the subdomain are retained from the page record
+  //   (PRD §3.2 identity; the subdomain is stable once minted). Legacy rows with
+  //   no stored subdomain fall back to the slug as the label.
+  const subdomain = page.subdomain ?? page.slug;
+  const url = subdomainUrl(resolveRootDomain(deps.env), subdomain);
   await deps.edge.putRoute({
     pageId: input.pageId,
     slug: page.slug,
+    subdomain,
     version,
     artifactKey: built.artifactKey,
   });

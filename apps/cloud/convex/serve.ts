@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireRead } from "./lib/auth_guard.js";
+import { isReservedSubdomain } from "../shared/src/slug.js";
 
 /**
  * CLOUD-30b — the Worker serve-path COLD SOURCE (PRD §6.1, §6.3).
@@ -59,6 +60,35 @@ export function pathToSlug(path: string): string {
   return trimmed;
 }
 
+/**
+ * CLOUD-SUBDOMAIN: extract the per-page subdomain label from a serve host, or
+ * null when the host is not a single-label subdomain under a 2-label apex.
+ *
+ * The Vercel-style serve host is `<label>.shortwind.dev` — exactly ONE label in
+ * front of the 2-label registrable apex (`shortwind.dev`). We treat any 3-label
+ * host as `<label>.<apex>` and return the leading label, EXCEPT when that label
+ * is a reserved/system subdomain (`c`, `www`, `api`, …) — those are system hosts
+ * (e.g. the legacy `c.shortwind.dev` path-based serve, `…workers.dev`) and MUST
+ * fall through to path-based resolution, never resolve as a page.
+ *
+ * A bare apex (`shortwind.dev`), a `*.workers.dev` host (4 labels, leading label
+ * is the script name = reserved-ish but more importantly NOT a 3-label host), or
+ * any deeper host returns null → the caller uses path-as-slug resolution. This
+ * keeps the existing `c.shortwind.dev/<slug>` and `…workers.dev/<slug>` serving
+ * working unchanged.
+ */
+export function subdomainLabel(host: string): string | null {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  const labels = h.split(".");
+  // Exactly `<label>.<sld>.<tld>` — one label in front of a 2-label apex.
+  if (labels.length !== 3) return null;
+  const label = labels[0]!;
+  if (label === "") return null;
+  // Reserved/system labels are NOT page subdomains — fall through to path-based.
+  if (isReservedSubdomain(label)) return null;
+  return label;
+}
+
 /** Project a page row + its current version into the Worker route contract. The
  * artifactKey lives on the current pageVersions row; null when unpublished. */
 function toServeRoute(
@@ -93,6 +123,27 @@ export const resolveRoute = query({
   args: { host: v.string(), path: v.string() },
   returns: serveRouteValidator,
   handler: async (ctx, args) => {
+    // 1. CLOUD-SUBDOMAIN: a per-page subdomain host (`<label>.shortwind.dev`,
+    //    label not reserved/system) resolves the page by its globally-unique
+    //    `subdomain` via the `by_subdomain` index. This is the Vercel-style hot
+    //    path; the request path is irrelevant (the page serves at the host root).
+    const label = subdomainLabel(args.host);
+    if (label !== null) {
+      const page = await ctx.db
+        .query("pages")
+        .withIndex("by_subdomain", (q) => q.eq("subdomain", label))
+        .first();
+      if (page === null) return null;
+      const version =
+        page.currentVersionId === null
+          ? null
+          : await ctx.db.get(page.currentVersionId);
+      return toServeRoute(page, version);
+    }
+
+    // 2. LEGACY path-based serving (backward-compat): the request path IS the
+    //    page slug (`c.shortwind.dev/<slug>`, `…workers.dev/<slug>`). Kept so the
+    //    live demo (`c.shortwind.dev/cloud-ops`) and any older link still serve.
     const slug = pathToSlug(args.path);
     if (slug === "") return null;
 

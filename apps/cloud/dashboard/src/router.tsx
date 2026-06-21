@@ -32,6 +32,11 @@ export function getRouter() {
 
   const router = createRouter({
     routeTree,
+    // Served under `/cloud` (routed at https://shortwind.dev/cloud). The
+    // TanStack Start plugin also injects this from Vite `base` via the
+    // `TSS_ROUTER_BASEPATH` define (router.update on SSR + hydration), but we
+    // set it explicitly so the router is correct even outside that injection.
+    basepath: "/cloud",
     scrollRestoration: true,
     context: {
       queryClient,

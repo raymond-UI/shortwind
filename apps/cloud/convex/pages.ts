@@ -81,6 +81,8 @@ const pageRecordValidator = v.union(
     id: v.id("pages"),
     accountId: v.id("accounts"),
     slug: v.string(),
+    // CLOUD-SUBDOMAIN: the page's stable subdomain label (absent on legacy rows).
+    subdomain: v.optional(v.string()),
     currentVersion: v.number(),
   }),
   v.null(),
@@ -98,6 +100,24 @@ export const findPageBySlug = internalQuery({
       )
       .unique();
     return row ? toPageRecord(row) : null;
+  },
+});
+
+/**
+ * CLOUD-SUBDOMAIN: is `label` already taken as a subdomain by ANY page across ALL
+ * accounts? Backs the global-uniqueness check at publish (the bare slug vs the
+ * disambiguated `slug-<id>` decision). Index-backed via `by_subdomain` — a single
+ * `unique()` probe, not a scan.
+ */
+export const subdomainTaken = internalQuery({
+  args: { label: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("pages")
+      .withIndex("by_subdomain", (q) => q.eq("subdomain", args.label))
+      .first();
+    return row !== null;
   },
 });
 
@@ -161,6 +181,8 @@ export const commitNewPage = internalMutation({
   args: {
     accountId: v.id("accounts"),
     slug: v.string(),
+    // CLOUD-SUBDOMAIN: the globally-unique subdomain label minted by the core.
+    subdomain: v.string(),
     visibility: v.union(
       v.literal("public"),
       v.literal("unlisted"),
@@ -174,6 +196,7 @@ export const commitNewPage = internalMutation({
     return ctx.db.insert("pages", {
       accountId: args.accountId,
       slug: args.slug,
+      subdomain: args.subdomain,
       customDomain: null,
       visibility: args.visibility,
       lifecycle: "active",
@@ -345,10 +368,14 @@ function makeDataPort(ctx: RunnerCtx, tokenId: TokenId): PublishDataPort {
       }),
     getPage: (pageId) =>
       ctx.runQuery(internal.pages.getPageById, { pageId: pageId as Id<"pages"> }),
+    // CLOUD-SUBDOMAIN: global subdomain-uniqueness probe (by_subdomain index).
+    subdomainTaken: (label) =>
+      ctx.runQuery(internal.pages.subdomainTaken, { label }),
     insertPage: (page) =>
       ctx.runMutation(internal.pages.commitNewPage, {
         accountId: page.accountId as AccountId,
         slug: page.slug,
+        subdomain: page.subdomain,
         visibility: page.visibility,
         tags: page.tags,
       }),
@@ -535,16 +562,22 @@ async function invalidateEdge(url: string): Promise<void> {
 async function putEdgeRoute(route: {
   pageId: string;
   slug: string;
+  subdomain: string;
   version: number;
   artifactKey: string;
 }): Promise<void> {
   // CLOUD-30: write the hostname+path → page-version route into the Worker KV
   // namespace consumed by worker/src/kv.ts so the hot path resolves the artifact.
+  // Two route keys map to this page: the legacy path-based one
+  // (`route:{serveHost}/{slug}`) and the per-page subdomain one
+  // (`route:{subdomain}.{root}/`). The hot path lazily populates KV on a cold
+  // miss either way, so an eager put here is an optimization, not required —
+  // left as a documented placeholder (the read-through fallback resolves both).
   void route;
 }
 
 async function deleteEdgeRoute(
-  route: { pageId: string; slug: string },
+  route: { pageId: string; slug: string; subdomain?: string | null },
   ctx?: SchedulerCtx,
 ): Promise<void> {
   // CLOUD-30b: evict the hostname+path → page-version route from the Worker KV
@@ -560,7 +593,9 @@ async function deleteEdgeRoute(
   // No worker code is imported into Convex (CLAUDE.md dependency direction);
   // `lib/edge_kv` re-derives the route key to match worker/src/kv.ts.
   if (ctx === undefined) return; // No scheduler (shouldn't happen in prod) → skip.
-  await scheduleRouteEviction(ctx, route.slug);
+  // CLOUD-SUBDOMAIN: thread the subdomain so the per-page subdomain KV key is
+  // evicted alongside the legacy path-based one (the page serves under both).
+  await scheduleRouteEviction(ctx, route.slug, route.subdomain ?? null);
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +617,7 @@ export interface LifecycleEdgePort {
    * test ports ignore it (a 1-arg `evictRoute(route)` is assignable here).
    */
   evictRoute(
-    args: { pageId: string; slug: string },
+    args: { pageId: string; slug: string; subdomain?: string | null },
     ctx?: SchedulerCtx,
   ): Promise<void>;
 }
@@ -848,7 +883,7 @@ export const commitScanBlock = internalMutation({
     const url = summaryUrl(pageBaseUrl(), page.slug);
     await lifecycleEdgePort.invalidate(url);
     await lifecycleEdgePort.evictRoute(
-      { pageId: args.pageId, slug: page.slug },
+      { pageId: args.pageId, slug: page.slug, subdomain: page.subdomain ?? null },
       ctx,
     );
 
@@ -1192,14 +1227,25 @@ function makeDeps(ctx: RunnerCtx, tokenId: TokenId): PublishDeps {
     data: makeDataPort(ctx, tokenId),
     storage: makeStoragePort(),
     edge: makeEdgePort(),
-    env: { baseUrl: pageBaseUrl() },
+    env: { baseUrl: pageBaseUrl(), rootDomain: pageRootDomain() },
   };
 }
 
 function pageBaseUrl(): string {
   // CLOUD-30: read the public origin from env (`PAGES_BASE_URL`). Fallback keeps
-  // URLs well-formed in dev/test deployments.
+  // URLs well-formed in dev/test deployments. This is the LEGACY path-based serve
+  // origin (`c.shortwind.dev/<slug>`), kept for backward-compat (CLOUD-31 edge
+  // eviction + the demo page still serve from it).
   return process.env.PAGES_BASE_URL ?? "https://c.shortwind.dev";
+}
+
+/**
+ * CLOUD-SUBDOMAIN: the apex domain pages are served under as per-page subdomains
+ * (`https://<subdomain>.<rootDomain>`). Read from env (`PAGES_ROOT_DOMAIN`),
+ * else default to `shortwind.dev`. The publish/update URL builder uses this.
+ */
+function pageRootDomain(): string {
+  return process.env.PAGES_ROOT_DOMAIN ?? "shortwind.dev";
 }
 
 function flattenOutcome(outcome: PublishOutcome) {
@@ -1223,6 +1269,8 @@ function toPageRecord(row: Doc<"pages">) {
     id: row._id,
     accountId: row.accountId,
     slug: row.slug,
+    // CLOUD-SUBDOMAIN: surface the stable subdomain so the update path retains it.
+    subdomain: row.subdomain,
     currentVersion: row.currentVersion,
   };
 }
@@ -1680,7 +1728,7 @@ export const sweepExpired = internalMutation({
       const url = summaryUrl(pageBaseUrl(), page.slug);
       await lifecycleEdgePort.invalidate(url);
       await lifecycleEdgePort.evictRoute(
-        { pageId: page._id, slug: page.slug },
+        { pageId: page._id, slug: page.slug, subdomain: page.subdomain ?? null },
         ctx,
       );
       tombstoned += 1;
@@ -1721,7 +1769,7 @@ export const deletePage = mutation({
     const url = summaryUrl(pageBaseUrl(), page.slug);
     await lifecycleEdgePort.invalidate(url);
     await lifecycleEdgePort.evictRoute(
-      { pageId: args.id, slug: page.slug },
+      { pageId: args.id, slug: page.slug, subdomain: page.subdomain ?? null },
       ctx,
     );
 

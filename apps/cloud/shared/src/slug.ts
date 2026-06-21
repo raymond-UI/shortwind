@@ -47,6 +47,92 @@ export const RESERVED_SLUGS: readonly string[] = [
 const RESERVED = new Set(RESERVED_SLUGS);
 
 /**
+ * Subdomain labels reserved by the platform — a page's subdomain must never
+ * shadow a system hostname under `*.shortwind.dev`. Kept lowercase to match the
+ * canonical DNS-label form. A derived subdomain that would land on one of these
+ * is suffixed (`<slug>-<id>`) instead, and the serve resolver refuses to resolve
+ * these labels as pages so a system host (e.g. `c.shortwind.dev`) is never
+ * shadowed by a page.
+ */
+export const RESERVED_SUBDOMAINS: readonly string[] = [
+  "www",
+  "c",
+  "api",
+  "app",
+  "dashboard",
+  "cloud",
+  "@", // the apex marker — never a page label.
+];
+
+const RESERVED_SUBDOMAIN_SET = new Set(RESERVED_SUBDOMAINS);
+
+/** True when `label` is a platform-reserved/system subdomain (no page may take it). */
+export function isReservedSubdomain(label: string): boolean {
+  return RESERVED_SUBDOMAIN_SET.has(label.toLowerCase());
+}
+
+/**
+ * Mint a short, lowercase, DNS-label-safe id used to disambiguate a colliding
+ * subdomain (`<slug>-<id>`). 6 chars from a 32-symbol alphabet (no vowels/ambiguous
+ * chars) → ~10^9 space, plenty for collision-avoidance with a retry loop.
+ *
+ * Pure-ish: takes an injected `rand` (defaults to `Math.random`) so callers/tests
+ * can make it deterministic. Returns only `[a-z0-9]`, so the result is always a
+ * valid slug fragment.
+ */
+const SUBDOMAIN_ID_ALPHABET = "0123456789bcdfghjkmnpqrstvwxyz";
+
+export function mintSubdomainId(
+  length = 6,
+  rand: () => number = Math.random,
+): string {
+  let out = "";
+  for (let i = 0; i < length; i += 1) {
+    const idx = Math.floor(rand() * SUBDOMAIN_ID_ALPHABET.length);
+    out += SUBDOMAIN_ID_ALPHABET[idx] ?? "0";
+  }
+  return out;
+}
+
+/**
+ * Derive the globally-unique subdomain label for a page (the Vercel hybrid):
+ * the bare `slug` when it is free across ALL accounts AND not a reserved/system
+ * label, else `slug-<id>` re-minted until unique. Pure: the caller passes an
+ * `isTaken(label)` predicate that consults the global `by_subdomain` index and a
+ * `mint()` that produces the disambiguating id (defaults to {@link mintSubdomainId}).
+ *
+ * The bare slug already satisfies the DNS-label grammar (it is a validated slug),
+ * and `<slug>-<id>` stays a valid label because the id is `[a-z0-9]`. The combined
+ * length is bounded by clamping the slug so `slug-id` never exceeds the label cap.
+ */
+export async function deriveSubdomain(
+  slug: string,
+  isTaken: (label: string) => Promise<boolean>,
+  mint: () => string = () => mintSubdomainId(),
+): Promise<string> {
+  // The bare slug wins when it is globally free and not a reserved system label.
+  if (!isReservedSubdomain(slug) && !(await isTaken(slug))) {
+    return slug;
+  }
+  // Otherwise disambiguate: clamp the slug so `slug-<id>` fits the label cap, then
+  // re-mint the id until the label is globally free (and never reserved — the id
+  // suffix makes a reserved bare label non-reserved, but we re-check defensively).
+  const id0 = mint();
+  const maxSlug = Math.max(1, MAX_SLUG_LENGTH - (id0.length + 1));
+  const stem = slug.slice(0, maxSlug).replace(/-+$/g, "") || slug.slice(0, maxSlug);
+  // Bounded retry — practically never loops more than once at this id space.
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const id = attempt === 0 ? id0 : mint();
+    const label = `${stem}-${id}`;
+    if (!isReservedSubdomain(label) && !(await isTaken(label))) {
+      return label;
+    }
+  }
+  // Exhausted (astronomically unlikely): fall back to a fresh long id.
+  return `${stem}-${mint()}${mint()}`;
+}
+
+/**
  * Derive a canonical slug from arbitrary human input: lowercase, replace any
  * run of non-`[a-z0-9]` with a single hyphen, trim hyphens, truncate. Returns
  * `{ ok: false }` when nothing slug-able remains.

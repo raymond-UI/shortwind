@@ -92,6 +92,8 @@ describe("find-query indexes exist (CLOUD-10 spec)", () => {
       ]),
     );
     expect(indexFields("pages", "by_slug")).toEqual(["accountId", "slug"]);
+    // CLOUD-SUBDOMAIN: global subdomain → page resolution (serve host lookup).
+    expect(indexFields("pages", "by_subdomain")).toEqual(["subdomain"]);
     expect(indexFields("pages", "by_account")).toEqual(["accountId"]);
     expect(indexFields("pages", "by_customDomain")).toEqual(["customDomain"]);
     expect(indexFields("pages", "by_tag")).toEqual(["tags"]);

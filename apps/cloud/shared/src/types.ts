@@ -88,6 +88,14 @@ export interface Page {
   accountId: Id<"accounts">;
   /** Stable URL handle. Unique per account; collision -> 409. */
   slug: string;
+  /**
+   * CLOUD-SUBDOMAIN (additive). The page's globally-unique DNS subdomain label.
+   * The published URL is `https://<subdomain>.shortwind.dev`. Equals `slug` when
+   * that label is free across ALL accounts, else `slug-<id>` so a publish never
+   * collides. Stable once minted (retained on update). Optional: rows created
+   * before this field landed may omit it (absent ⇒ path-based serving only).
+   */
+  subdomain?: string;
   /** Optional bound custom hostname (Cloudflare for SaaS). */
   customDomain: string | null;
   visibility: PageVisibility;

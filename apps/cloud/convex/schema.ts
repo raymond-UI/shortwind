@@ -40,6 +40,15 @@ export default defineSchema({
     accountId: v.id("accounts"),
     // Stable URL handle. Unique per account (collision -> 409, enforced in app).
     slug: v.string(),
+    // CLOUD-SUBDOMAIN (ADDITIVE): the page's globally-unique DNS subdomain label
+    // (the Vercel hybrid). The published URL is `https://<subdomain>.shortwind.dev`.
+    // Equals `slug` when that label is free across ALL accounts, else `slug-<id>`
+    // so a publish never collides. Stable once minted (retained on update). Backed
+    // by `by_subdomain` for the serve-path host → page resolution. Optional in the
+    // validator so rows created before this field landed (and any direct writer
+    // that omits it) stay valid — the serve resolver treats absent as "no
+    // subdomain serving for this page" and the path-based serve still works.
+    subdomain: v.optional(v.string()),
     // Optional bound custom hostname (Cloudflare for SaaS); null when unbound.
     customDomain: v.union(v.string(), v.null()),
     // PageVisibility: who can reach the page.
@@ -79,6 +88,10 @@ export default defineSchema({
   })
     // Resolve a page by (account, slug) — the primary publish/lookup path.
     .index("by_slug", ["accountId", "slug"])
+    // CLOUD-SUBDOMAIN: resolve a page by its globally-unique subdomain label
+    // (the serve-path host `<subdomain>.shortwind.dev` → page lookup) and check
+    // global uniqueness at publish. Spans all accounts (the label is global).
+    .index("by_subdomain", ["subdomain"])
     // List an account's pages.
     .index("by_account", ["accountId"])
     // Custom-domain serve path resolves host -> page.
