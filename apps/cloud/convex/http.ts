@@ -261,6 +261,66 @@ async function setVisibilityHandlerImpl(
   }
 }
 
+// ---------------------------------------------------------------------------
+// CLOUD-32 — abuse-report intake (PRD §8.2). The reachable, monitored endpoint
+// NCMEC reporting flows through. NO auth (anyone can report); maps to
+// reportAbuse, which opens a `reported` case without pulling the page.
+// ---------------------------------------------------------------------------
+
+/** Narrow an unknown to the accepted abuse categories. */
+function asAbuseCategory(
+  value: unknown,
+): "csam" | "phishing" | "malware" | "other" {
+  return value === "csam" ||
+    value === "phishing" ||
+    value === "malware" ||
+    value === "other"
+    ? value
+    : "other";
+}
+
+/**
+ * POST /v1/abuse → file an abuse report against a page (PRD §8.2). Public (no
+ * Authorization required). Body: `{ pageId, reason, category?, reporterContact? }`.
+ * Returns `{ state: "reported" }` on success; a malformed body (missing pageId /
+ * reason) → 400; an unknown page → 404.
+ */
+const abuseHandler = httpAction(async (ctx, request) => {
+  const body = await readJsonBody(request);
+  const pageId = body["pageId"];
+  const reason = body["reason"];
+  if (typeof pageId !== "string" || typeof reason !== "string" || !reason) {
+    return json(
+      {
+        error: {
+          code: "BAD_REQUEST",
+          message: "`pageId` and `reason` are required",
+        },
+      },
+      400,
+    );
+  }
+  const reporterContact = body["reporterContact"];
+  try {
+    const result = await ctx.runMutation(api.moderation.reportAbuse, {
+      pageId: pageId as Id<"pages">,
+      reason,
+      category: asAbuseCategory(body["category"]),
+      reporterContact:
+        typeof reporterContact === "string" ? reporterContact : null,
+    });
+    return json(result, 202);
+  } catch (err) {
+    if (err instanceof ConvexError) {
+      const data = err.data as { code?: string } | undefined;
+      if (data?.code === "NOT_FOUND") return json({ error: data }, 404);
+    }
+    return errorResponse(err);
+  }
+});
+
+http.route({ path: "/v1/abuse", method: "POST", handler: abuseHandler });
+
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });
 http.route({ path: "/v1/pages", method: "POST", handler: publishHandler });
 http.route({

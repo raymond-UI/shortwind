@@ -4,6 +4,28 @@ import type { Id } from "./_generated/dataModel";
 import { requireWrite } from "./lib/auth-guard.js";
 
 /**
+ * CLOUD-32 — abuse intake + fast global kill + CSAM/NCMEC preservation (PRD §8).
+ *
+ * This module EXTENDS the CLOUD-31 lifecycle state machine above with the legal
+ * surface PRD §8 mandates at launch:
+ *
+ *   reportAbuse  — the reachable, UNAUTHENTICATED intake (anyone can report; the
+ *                  monitored endpoint NCMEC reporting flows through). Opens a
+ *                  `reported` case; it does NOT pull the page (a human/classifier
+ *                  drives the kill).
+ *   killPage     — the FAST GLOBAL KILL. In ONE transaction:
+ *                    applyLifecycle('quarantine')  → seal R2, lifecycle pulled
+ *                    + edge cache purge + KV route evict (via {@link KillEdgePort})
+ *                    + persist preservedR2Key (preserve-not-delete, §8.2)
+ *                    + for CSAM: preservationExpiresAt = now + 60d, ncmecReportId.
+ *                  Same path for phishing/malware (§8.4).
+ *
+ * Preserve-not-delete is structural: the kill SEALS the object (records its
+ * sealed-store key) and pulls the public route; it NEVER hard-deletes. The
+ * version rows (the R2 object pointers) are retained for the legal window.
+ */
+
+/**
  * Page lifecycle state machine (CLOUD-31, PRD §8.2).
  *
  * Two orthogonal axes the platform must keep distinct:
@@ -220,11 +242,25 @@ async function currentArtifactKey(
 }
 
 /**
+ * The CLOUD-32 legal-preservation fields a kill/report may set on the case. Each
+ * is optional in the patch sense: `undefined` leaves an existing value untouched
+ * (so a `kill` after a `report` keeps the reporter contact), while an explicit
+ * value (including `null`) is written. The sealed-store key + the NCMEC report id
+ * + the 60-day preservation clock all live HERE on the case now (CLOUD-31
+ * recorded the sealed key on auditLog.metadata as a workaround).
+ */
+interface ModerationCaseFields {
+  reporterContact?: string | null;
+  ncmecReportId?: string | null;
+  preservedR2Key?: string | null;
+  preservationExpiresAt?: number | null;
+}
+
+/**
  * Upsert the page's moderation case to `state`. One case per page (the latest
- * case is the live one); the case is never deleted — its state advances. The
- * sealed-key location lives on the audit entry (the `moderation` schema is owned
- * by CLOUD-00 and carries no key column), so this writes the state + reason +
- * timestamps only.
+ * case is the live one); the case is never deleted — its state advances. Writes
+ * the state + reason + timestamps, plus any provided CLOUD-32 legal fields
+ * (reporter contact, sealed key, NCMEC report id, preservation clock).
  */
 async function upsertModeration(
   ctx: { db: any },
@@ -234,8 +270,19 @@ async function upsertModeration(
     state: ModerationState;
     reason: string | null;
     now: number;
-  },
+  } & ModerationCaseFields,
 ): Promise<void> {
+  // Only fields explicitly present in `args` are written; `undefined` ⇒ leave as-is.
+  const caseFields: Record<string, unknown> = {};
+  if (args.reporterContact !== undefined)
+    caseFields.reporterContact = args.reporterContact;
+  if (args.ncmecReportId !== undefined)
+    caseFields.ncmecReportId = args.ncmecReportId;
+  if (args.preservedR2Key !== undefined)
+    caseFields.preservedR2Key = args.preservedR2Key;
+  if (args.preservationExpiresAt !== undefined)
+    caseFields.preservationExpiresAt = args.preservationExpiresAt;
+
   const existing = await ctx.db
     .query("moderation")
     .withIndex("by_page", (q: any) => q.eq("pageId", args.pageId))
@@ -245,6 +292,7 @@ async function upsertModeration(
       state: args.state,
       reason: args.reason ?? existing.reason,
       updatedAt: args.now,
+      ...caseFields,
     });
     return;
   }
@@ -253,9 +301,10 @@ async function upsertModeration(
     accountId: args.accountId,
     state: args.state,
     reason: args.reason,
-    reporterContact: null,
-    ncmecReportId: null,
-    preservationExpiresAt: null,
+    reporterContact: args.reporterContact ?? null,
+    ncmecReportId: args.ncmecReportId ?? null,
+    preservedR2Key: args.preservedR2Key ?? null,
+    preservationExpiresAt: args.preservationExpiresAt ?? null,
     createdAt: args.now,
     updatedAt: args.now,
   });
@@ -365,6 +414,13 @@ export async function applyLifecycle(
     tokenId: TokenId | null;
     transition: LifecycleTransition;
     reason: string | null;
+    /**
+     * Extra legal-preservation fields to record on the moderation case (CLOUD-32
+     * kill path): reporter contact, NCMEC report id, the 60-day clock. Applied on
+     * the same upsert so the case lands in one transaction. The sealed key is set
+     * automatically by the sealing transition and need not be passed here.
+     */
+    caseFields?: ModerationCaseFields;
   },
 ): Promise<{ lifecycle: Lifecycle; sealedKey: string | null }> {
   const page = await ctx.db.get(args.pageId);
@@ -396,6 +452,14 @@ export async function applyLifecycle(
       state: result.moderationState,
       reason: args.reason,
       now,
+      // Persist the sealed-store location ON the case (preserve-not-delete). A
+      // sealing transition records the key; a clearing one resets it to null.
+      ...(result.seals
+        ? { preservedR2Key: sealed }
+        : result.moderationState === "cleared"
+          ? { preservedR2Key: null }
+          : {}),
+      ...args.caseFields,
     });
   }
 
@@ -416,3 +480,202 @@ export async function applyLifecycle(
 
   return { lifecycle: result.lifecycle, sealedKey: sealed };
 }
+
+// ===========================================================================
+// CLOUD-32 — abuse intake + fast global kill + CSAM/NCMEC preservation.
+// ===========================================================================
+
+/**
+ * The legally-mandated preservation window for reported CSAM material: 60 days
+ * (18 U.S.C. § 2258A / the REPORT Act — report ASAP and no later than 60 days,
+ * preserve the material + related data). A CSAM kill stamps
+ * `preservationExpiresAt = now + PRESERVATION_WINDOW_MS`; a sweep (CLOUD-30b/-33)
+ * holds the sealed object until then.
+ */
+export const PRESERVATION_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
+
+/**
+ * Abuse categories the intake + kill path accept. `csam` is the legally-special
+ * one (drives the 60-day preservation clock + NCMEC report id); `phishing` /
+ * `malware` (PRD §8.4) ride the SAME kill path; `other` covers the rest.
+ */
+export type AbuseCategory = "csam" | "phishing" | "malware" | "other";
+
+const abuseCategoryValidator = v.union(
+  v.literal("csam"),
+  v.literal("phishing"),
+  v.literal("malware"),
+  v.literal("other"),
+);
+
+// ---------------------------------------------------------------------------
+// Kill edge port (PRD §8.2 fast global kill). The kill purges the edge cache +
+// evicts the KV route through this injectable seam so the pulled page stops
+// resolving on the hot path "in seconds". The production port is wired for real
+// at deploy (CLOUD-30b: Cloudflare cache purge + KV delete); offline it is a
+// no-op. `__setKillEdgePort` exists ONLY so the integration tests can assert the
+// edge effects fired. This mirrors pages.ts's `LifecycleEdgePort` but lives here
+// (and is NOT imported from pages.ts) so the dependency direction stays one-way:
+// pages.ts imports `applyLifecycle` from this module, never the reverse.
+// ---------------------------------------------------------------------------
+
+/** The edge effects the fast global kill drives. */
+export interface KillEdgePort {
+  /** Purge the edge cache for the page URL so the artifact stops being served. */
+  invalidate(url: string): Promise<void>;
+  /** Evict the KV route so the killed page stops resolving on the edge. */
+  evictRoute(args: { pageId: string; slug: string }): Promise<void>;
+}
+
+/** The production no-op port (real Cloudflare wiring lands in CLOUD-30b). */
+const defaultKillEdgePort: KillEdgePort = {
+  invalidate: async () => {},
+  evictRoute: async () => {},
+};
+
+let killEdgePort: KillEdgePort = defaultKillEdgePort;
+
+/** Test-only: override the kill edge port to assert it was driven. */
+export function __setKillEdgePort(port: KillEdgePort): void {
+  killEdgePort = port;
+}
+
+/** Test-only: restore the default (no-op) kill edge port. */
+export function __resetKillEdgePort(): void {
+  killEdgePort = defaultKillEdgePort;
+}
+
+/** The platform origin pages serve under (mirrors pages.ts `pageBaseUrl`). */
+function killBaseUrl(): string {
+  // CLOUD-30b reads the public origin from env; the fallback keeps the purge URL
+  // well-formed in dev/test.
+  return "https://shortwind.app";
+}
+
+/** The public URL the kill purges from the edge cache. */
+function publicUrl(slug: string): string {
+  return `${killBaseUrl().replace(/\/+$/, "")}/${slug}`;
+}
+
+// ---------------------------------------------------------------------------
+// CONTENT HASH-MATCHING SEAM (PRD §8.2 "proactive hash-matching").
+//
+// CLOUD-33 wires the real known-CSAM hash-list match on the PUBLISH path and
+// calls killPage on a hit (moving us from reactive/actual-knowledge-only to a
+// proactive posture). The seam is intentionally left here, documented, with no
+// behavior: CLOUD-33 owns the hash-list integration + the publish-time hook.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Public verbs.
+// ---------------------------------------------------------------------------
+
+/**
+ * reportAbuse — the reachable abuse-report intake (PRD §8.2). UNAUTHENTICATED:
+ * anyone can report (this is the monitored endpoint NCMEC reporting flows
+ * through). Opens (or refreshes) a `reported` moderation case; it does NOT pull
+ * the page — an operator/classifier drives the kill. Idempotent-ish: a second
+ * report on the same page refreshes the single case rather than duplicating.
+ */
+export const reportAbuse = mutation({
+  args: {
+    pageId: v.id("pages"),
+    reporterContact: v.union(v.string(), v.null()),
+    reason: v.string(),
+    category: abuseCategoryValidator,
+  },
+  returns: v.object({
+    state: v.literal("reported"),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.get(args.pageId);
+    if (!page) {
+      // No existence leak beyond "not found" (intake is public).
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+    }
+    const now = Date.now();
+    await upsertModeration(ctx, {
+      pageId: args.pageId,
+      accountId: page.accountId,
+      state: "reported",
+      reason: `[${args.category}] ${args.reason}`,
+      now,
+      reporterContact: args.reporterContact,
+    });
+    await ctx.db.insert("auditLog", {
+      accountId: page.accountId,
+      action: "page.abuse.report",
+      targetId: args.pageId,
+      actorTokenId: null,
+      metadata: {
+        category: args.category,
+        reason: args.reason,
+        reporterContact: args.reporterContact,
+      },
+      createdAt: now,
+    });
+    return { state: "reported" as const };
+  },
+});
+
+/**
+ * killPage — the FAST GLOBAL KILL (PRD §8.2/§8.4). requireWrite (operator/admin
+ * token). In ONE transaction:
+ *   - applyLifecycle('quarantine'): active → quarantined, R2 object SEALED
+ *     (sealed-store key recorded), NEVER hard-deleted;
+ *   - persist preservedR2Key on the case (preserve-not-delete);
+ *   - for `csam`: stamp preservationExpiresAt = now + 60 days + record
+ *     ncmecReportId;
+ *   - purge the edge cache + evict the KV route so the page stops serving;
+ *   - audit (via applyLifecycle).
+ * phishing/malware ride the identical path (just no NCMEC clock).
+ */
+export const killPage = mutation({
+  args: {
+    bearer: v.string(),
+    pageId: v.id("pages"),
+    reason: v.string(),
+    category: abuseCategoryValidator,
+    ncmecReportId: v.optional(v.string()),
+  },
+  returns: v.object({
+    lifecycle: lifecycleValidator,
+    preservedR2Key: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const auth = await requireWrite(ctx, args.bearer);
+    const page = await ctx.db.get(args.pageId);
+    if (!page || page.accountId !== auth.accountId) {
+      // Account-scoped not-found (no existence leak): mirror pages.deletePage.
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+    }
+
+    const isCsam = args.category === "csam";
+    const now = Date.now();
+
+    // active → quarantined: seal the object + open/advance the case + persist the
+    // legal fields, all in this transaction (preserve-not-delete enforced inside).
+    const outcome = await applyLifecycle(ctx, {
+      pageId: args.pageId,
+      accountId: auth.accountId,
+      tokenId: auth.tokenId,
+      transition: "quarantine",
+      reason: `[${args.category}] ${args.reason}`,
+      caseFields: {
+        // CSAM: the 60-day preservation clock + the NCMEC CyberTipline report id.
+        ncmecReportId: args.ncmecReportId ?? (isCsam ? null : undefined),
+        preservationExpiresAt: isCsam ? now + PRESERVATION_WINDOW_MS : undefined,
+      },
+    });
+
+    // Fast global kill: purge the edge cache + evict the KV route so the pulled
+    // page stops resolving on the hot path. One object, one cache key (PRD §8.2).
+    await killEdgePort.invalidate(publicUrl(page.slug));
+    await killEdgePort.evictRoute({ pageId: args.pageId, slug: page.slug });
+
+    return {
+      lifecycle: outcome.lifecycle,
+      preservedR2Key: outcome.sealedKey,
+    };
+  },
+});
