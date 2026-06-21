@@ -51,4 +51,9 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
+  // CLOUD-33 (manual, additive): the rate-limiter component registered in
+  // convex.config.ts. Declared by hand because `convex dev` can't run offline
+  // (no CONVEX_DEPLOYMENT); a real `convex dev` (CLOUD-30) regenerates this and
+  // supersedes the edit. Consumed by `lib/rate-limit.ts` (`components.rateLimiter`).
+  rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
 };

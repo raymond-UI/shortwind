@@ -11,6 +11,19 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireRead, requireWrite } from "./lib/auth-guard.js";
 import { applyLifecycle } from "./moderation.js";
 import {
+  classifyContent,
+  hashMatch,
+  type ClassifyConfig,
+  type ClassifyResult,
+  type HashMatchResult,
+  type KnownHashList,
+} from "./lib/content-scan.js";
+import {
+  checkPublishLimit,
+  type PublishLimitResult,
+  type RateLimitRunCtx,
+} from "./lib/rate-limit.js";
+import {
   runPublish,
   runUpdate,
   type EdgePort,
@@ -458,15 +471,333 @@ export interface LifecycleEdgePort {
   evictRoute(args: { pageId: string; slug: string }): Promise<void>;
 }
 
-let lifecycleEdgePort: LifecycleEdgePort = {
+const defaultLifecycleEdgePort: LifecycleEdgePort = {
   invalidate: (url) => invalidateEdge(url),
   evictRoute: (route) => deleteEdgeRoute(route),
 };
+
+let lifecycleEdgePort: LifecycleEdgePort = defaultLifecycleEdgePort;
 
 /** Test-only: override the lifecycle edge port to assert it was driven. */
 export function __setLifecycleEdgePort(port: LifecycleEdgePort): void {
   lifecycleEdgePort = port;
 }
+
+/** Test-only: restore the production (no-op placeholder) lifecycle edge port. */
+export function __resetLifecycleEdgePort(): void {
+  lifecycleEdgePort = defaultLifecycleEdgePort;
+}
+
+// ===========================================================================
+// CLOUD-33 — publish-time content scan + per-account rate limit (PRD §8.2/§8.4).
+//
+// A SINGLE guarded hook (`runPublishScan`) sits at the START of the publish
+// action, after auth and BEFORE `runPublish`. It is deliberately self-contained
+// and additive — it does NOT touch the core publish/update/find/get pipeline:
+//
+//   1. rate limit  — per-account publish token bucket (lib/rate-limit). A trip
+//                    throws `RATE_LIMITED` carrying `retryAfter` (the action
+//                    never reaches `runPublish`).
+//   2. hash match  — proactive known-CSAM hash-list match over the artifact
+//                    (lib/content-scan). A hit BLOCKS publish and opens a
+//                    moderation case via the CLOUD-32 kill seam
+//                    (`applyLifecycle('quarantine', csam)`): the page is
+//                    materialized only to be sealed + quarantined in the same
+//                    action (preserve-not-delete, NCMEC 60-day clock) and is
+//                    NEVER public (excluded from `find`). The action returns a
+//                    `blocked` outcome.
+//   3. classifier  — phishing/malware/abuse scoring (lib/content-scan). A
+//                    `block` verdict rejects + opens a `reported` case; a
+//                    `review` verdict ALLOWS the publish but flags it (a
+//                    `reported` case + audit) for human follow-up.
+//
+// The known-CSAM hash list and the domain-reputation provider are INJECTABLE
+// (lib/content-scan): offline + in tests they are in-memory; the real NCMEC /
+// industry list + reputation feed are wired at deploy (CLOUD-30b). The hook reads
+// them through `scanSources` so a test can supply a list with a known hash.
+// ===========================================================================
+
+/** The disposition the scan decides for a publish, as plain data. */
+export type PublishScanDecision =
+  | { kind: "allow" }
+  | { kind: "flag"; reason: string; score: number }
+  | { kind: "block-csam"; listId: string; hash: string }
+  | { kind: "block-classifier"; reason: string; score: number };
+
+/**
+ * The PURE scan decision: given the hash-match + classifier results, decide the
+ * publish disposition. CSAM hash match is the hard block (drives the CSAM kill
+ * seam); else the classifier gate (`block` rejects, `review` flags, `allow`
+ * passes). No IO — the action does the materialize/kill/flag based on this.
+ */
+export function decidePublishScan(
+  hash: HashMatchResult,
+  classify: ClassifyResult,
+): PublishScanDecision {
+  if (hash.match) {
+    return { kind: "block-csam", listId: hash.listId ?? "unknown", hash: hash.hash };
+  }
+  if (classify.verdict === "block") {
+    return {
+      kind: "block-classifier",
+      reason: `classifier:${classify.signals.map((s) => s.name).join(",") || "score"}`,
+      score: classify.score,
+    };
+  }
+  if (classify.verdict === "review") {
+    return {
+      kind: "flag",
+      reason: `classifier:${classify.signals.map((s) => s.name).join(",") || "score"}`,
+      score: classify.score,
+    };
+  }
+  return { kind: "allow" };
+}
+
+/**
+ * The injectable scan sources (known-CSAM hash list + classifier config). The
+ * DEFAULTS are the production posture: an EMPTY hash list (the real NCMEC list is
+ * wired at deploy — CLOUD-30b) and the default classifier config. Tests override
+ * via `__setScanSources` to supply a list with a known hash / a tuned threshold.
+ */
+export interface ScanSources {
+  hashList: KnownHashList;
+  classifyConfig?: ClassifyConfig;
+}
+
+let scanSources: ScanSources = {
+  // Empty until CLOUD-30b wires the real NCMEC / industry hash list. An empty
+  // list means hashMatch never fires offline — the proactive seam is present and
+  // exercised, the data source is deferred.
+  hashList: { id: "ncmec", has: () => false },
+};
+
+/** Test-only: inject the scan sources (a hash list with a known hash, etc.). */
+export function __setScanSources(sources: ScanSources): void {
+  scanSources = sources;
+}
+
+/** Test-only: restore the production (empty hash list) scan sources. */
+export function __resetScanSources(): void {
+  scanSources = { hashList: { id: "ncmec", has: () => false } };
+}
+
+/** The scan/limit outcome handed back to the publish action. */
+export type PublishScanGate =
+  | { proceed: true; flag: null | { reason: string; score: number } }
+  | { proceed: false; rejection: ScanRejection };
+
+/** A non-proceed scan result — the action turns this into a thrown error. */
+export type ScanRejection =
+  | { code: "RATE_LIMITED"; retryAfter: number }
+  | { code: "BLOCKED_CSAM"; listId: string }
+  | { code: "BLOCKED_CONTENT"; reason: string; score: number };
+
+/**
+ * The publish-scan hook. Runs the rate-limit check then the content scan over the
+ * artifact (`html` + optional `css`). Returns a {@link PublishScanGate}:
+ *   - `proceed:false` ⇒ the action rejects (rate-limit / CSAM / classifier block);
+ *     on a CSAM/classifier block the moderation case is opened AFTER the page is
+ *     materialized (the kill seam needs a pageId) — see the publish action.
+ *   - `proceed:true, flag` ⇒ publish proceeds; a non-null `flag` is recorded as a
+ *     `reported` case + audit after the page lands (review verdict).
+ *
+ * Self-contained: it reads nothing from and writes nothing to the publish core.
+ */
+export async function runPublishScan(
+  ctx: RateLimitRunCtx,
+  args: { accountId: string; html: string; css?: string },
+): Promise<PublishScanGate> {
+  // 1. Per-account publish rate limit.
+  const limit: PublishLimitResult = await checkPublishLimit(ctx, args.accountId);
+  if (!limit.ok) {
+    return {
+      proceed: false,
+      rejection: { code: "RATE_LIMITED", retryAfter: limit.retryAfter ?? 0 },
+    };
+  }
+
+  // 2. Content scan over the artifact bytes (html + css preamble).
+  const artifact = args.css ? `${args.css}\n${args.html}` : args.html;
+  const hash = await hashMatch(artifact, scanSources.hashList);
+  const classify = classifyContent(args.html, scanSources.classifyConfig);
+  const decision = decidePublishScan(hash, classify);
+
+  switch (decision.kind) {
+    case "allow":
+      return { proceed: true, flag: null };
+    case "flag":
+      return {
+        proceed: true,
+        flag: { reason: decision.reason, score: decision.score },
+      };
+    case "block-csam":
+      return {
+        proceed: false,
+        rejection: { code: "BLOCKED_CSAM", listId: decision.listId },
+      };
+    case "block-classifier":
+      return {
+        proceed: false,
+        rejection: {
+          code: "BLOCKED_CONTENT",
+          reason: decision.reason,
+          score: decision.score,
+        },
+      };
+  }
+}
+
+/**
+ * Internal mutation: BLOCK a scan-flagged publish — pull the page so it is never
+ * public AND evict the edge route it was just published on, then open/advance the
+ * moderation case. Both block kinds quarantine through the CLOUD-32 seam so the
+ * page stops serving (lifecycle → quarantined, excluded from `find`):
+ *
+ *   - `csam`       — `applyLifecycle('quarantine', csam)`: seal the artifact, open
+ *                    the CSAM case, stamp the 60-day NCMEC clock (preserve-not-
+ *                    delete). The CSAM case reason carries the matched list id.
+ *   - `classifier` — `applyLifecycle('quarantine')` too: a `block` verdict is a
+ *                    HARD reject, so the page must NOT stay public/findable while a
+ *                    human actions it. The case reason marks it `classifier-block`.
+ *
+ * THE LEGAL-CRITICAL STEP (PR #143 review BLOCKER): `runPublish` already published
+ * an `active` KV route (`edge.putRoute`) for this page before this mutation runs,
+ * so flipping the DB row to `quarantined` is NOT enough — the artifact would keep
+ * serving a live 200 from the KV/edge cache for up to the 1h route TTL. We MUST
+ * evict the route + purge the edge cache the same way `deletePage`/`killPage` do
+ * (`lifecycleEdgePort.invalidate` + `evictRoute`) so it stops serving immediately.
+ *
+ * IDEMPOTENT BLOCK (review nit): a publish retried with an idempotencyKey re-scans
+ * and re-blocks; the page is then ALREADY `quarantined`, so the pure transition
+ * (`active → quarantined` only) would reject with `INVALID_TRANSITION`. We guard
+ * that: an already-quarantined page is treated as a successful (idempotent) block —
+ * we skip the transition but still evict the edge route, so the action surfaces
+ * `CSAM_BLOCKED`/`CONTENT_BLOCKED`, never the confusing `INVALID_TRANSITION`.
+ */
+export const commitScanBlock = internalMutation({
+  args: {
+    pageId: v.id("pages"),
+    accountId: v.id("accounts"),
+    actorTokenId: v.union(v.id("tokens"), v.null()),
+    kind: v.union(v.literal("csam"), v.literal("classifier")),
+    reason: v.string(),
+    listId: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.get(args.pageId);
+    if (!page || page.accountId !== args.accountId) {
+      // The page was just materialized by this same action — absence is a bug.
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+    }
+
+    // Quarantine (pull) the page UNLESS it is already quarantined (an idempotent
+    // re-block of a prior block). `active → quarantined` is the only legal source,
+    // so re-entering applyLifecycle on a quarantined page would throw
+    // INVALID_TRANSITION; treat the already-quarantined state as block-success.
+    if (page.lifecycle === "active") {
+      const now = Date.now();
+      const isCsam = args.kind === "csam";
+      await applyLifecycle(ctx, {
+        pageId: args.pageId,
+        accountId: args.accountId,
+        tokenId: args.actorTokenId,
+        transition: "quarantine",
+        reason: isCsam
+          ? `[csam] proactive hash-match (${args.listId ?? "unknown"})`
+          : `[classifier-block] ${args.reason}`,
+        caseFields: isCsam
+          ? {
+              // NCMEC 60-day preservation clock (matches moderation.killPage csam).
+              ncmecReportId: null,
+              preservationExpiresAt: now + 60 * 24 * 60 * 60 * 1000,
+            }
+          : undefined,
+      });
+      await ctx.db.insert("auditLog", {
+        accountId: args.accountId,
+        action: "page.scan.block",
+        targetId: args.pageId,
+        actorTokenId: args.actorTokenId,
+        metadata: { kind: args.kind, reason: args.reason },
+        createdAt: now,
+      });
+    }
+
+    // LEGAL-CRITICAL: evict the KV route + purge the edge cache the publish just
+    // put up, so the blocked artifact stops serving immediately (not after TTL).
+    // Mirrors deletePage/killPage. Driven on EVERY block (incl. idempotent re-block)
+    // so a retry re-asserts the eviction.
+    const url = summaryUrl(pageBaseUrl(), page.slug);
+    await lifecycleEdgePort.invalidate(url);
+    await lifecycleEdgePort.evictRoute({ pageId: args.pageId, slug: page.slug });
+
+    return null;
+  },
+});
+
+/**
+ * Internal mutation: drop a cached idempotency result for a blocked publish. The
+ * core `runPublish` caches `{ok:true}` keyed by `idempotencyKey` BEFORE this hook
+ * quarantines+throws, so a naive retry would replay that cached success instead of
+ * re-blocking. We delete the cached row on a block so a retry re-scans → re-blocks
+ * (the re-block is idempotent — see `commitScanBlock`).
+ */
+export const dropIdempotency = internalMutation({
+  args: { accountId: v.id("accounts"), key: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("idempotencyKeys")
+      .withIndex("by_key", (q) =>
+        q.eq("accountId", args.accountId).eq("key", args.key),
+      )
+      .unique();
+    if (row) await ctx.db.delete(row._id);
+    return null;
+  },
+});
+
+/**
+ * Internal mutation: flag a `review`-verdict publish for human follow-up. Opens a
+ * `reported` moderation case + audit but LEAVES the page active/public (the
+ * classifier is uncertain — a human confirms). Additive; does not pull the page.
+ */
+export const commitScanFlag = internalMutation({
+  args: {
+    pageId: v.id("pages"),
+    accountId: v.id("accounts"),
+    actorTokenId: v.union(v.id("tokens"), v.null()),
+    reason: v.string(),
+    score: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    await ctx.db.insert("moderation", {
+      pageId: args.pageId,
+      accountId: args.accountId,
+      state: "reported",
+      reason: `[classifier-review] ${args.reason}`,
+      reporterContact: null,
+      ncmecReportId: null,
+      preservedR2Key: null,
+      preservationExpiresAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("auditLog", {
+      accountId: args.accountId,
+      action: "page.scan.flag",
+      targetId: args.pageId,
+      actorTokenId: args.actorTokenId,
+      metadata: { reason: args.reason, score: args.score },
+      createdAt: now,
+    });
+    return null;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Public verbs.
@@ -520,6 +851,26 @@ export const publish = action({
     const auth = await ctx.runQuery(internal.pages.authForWrite, {
       bearer: args.bearer,
     });
+
+    // --- CLOUD-33 publish-time guard (after auth, before the pipeline) --------
+    // A single, self-contained call: rate limit + content scan. A rate-limit
+    // trip or a content block short-circuits the pipeline; a `review` flag rides
+    // along and is recorded after the page lands. See `runPublishScan`.
+    const gate = await runPublishScan(ctx, {
+      accountId: auth.accountId,
+      html: args.html,
+      css: args.css,
+    });
+    if (!gate.proceed && gate.rejection.code === "RATE_LIMITED") {
+      // Trip → reject WITHOUT materializing anything (no page created).
+      throw new ConvexError({
+        code: "RATE_LIMITED",
+        message: "Publish rate limit exceeded for this account",
+        retryAfter: gate.rejection.retryAfter,
+      });
+    }
+    // --------------------------------------------------------------------------
+
     const deps = makeDeps(ctx, auth.tokenId);
     const outcome = await runPublish(
       {
@@ -536,6 +887,83 @@ export const publish = action({
       },
       deps,
     );
+
+    // --- CLOUD-33 post-materialize scan disposition ---------------------------
+    // The scan ran on the artifact above. The CLOUD-32 kill seam / case open needs
+    // a pageId, so a BLOCK acts here once the publish landed, then THROWS so the
+    // action never returns a success for blocked content (the page is quarantined +
+    // its edge route evicted, never public). A `review` flag rides along and is
+    // recorded but the publish still succeeds.
+    //
+    // A blocked publish has TWO materialize shapes that both resolve to a page id:
+    //   - `outcome.ok`        → the page we just created (first attempt);
+    //   - 409 collision       → an idempotency RETRY whose slug now resolves to the
+    //                           page the FIRST attempt quarantined. `runPublish`
+    //                           returns a 409 (the slug is taken) instead of
+    //                           re-creating, so we re-block that SAME page (the
+    //                           re-block is idempotent — already-quarantined ⇒
+    //                           block-success) and re-surface CSAM_BLOCKED/
+    //                           CONTENT_BLOCKED, never a confusing 409 for content
+    //                           that must never publish.
+    if (!gate.proceed) {
+      const blockedPageId: Id<"pages"> = outcome.ok
+        ? (outcome.result.id as Id<"pages">)
+        : (outcome.collision.existingId as Id<"pages">);
+      // A blocked publish must NOT leave a cached `{ok:true}` idempotency result
+      // (`runPublish` writes one before we block): a retry must re-scan + re-block,
+      // not replay a success that was never honored. Drop it before we throw.
+      if (args.idempotencyKey !== undefined) {
+        await ctx.runMutation(internal.pages.dropIdempotency, {
+          accountId: auth.accountId as Id<"accounts">,
+          key: args.idempotencyKey,
+        });
+      }
+      if (gate.rejection.code === "BLOCKED_CSAM") {
+        // Proactive CSAM hash match → quarantine via the CLOUD-32 kill seam + open
+        // the CSAM case (preserve-not-delete, 60-day clock) + EVICT the edge route
+        // the publish just put up (the page is pulled and stops serving at once).
+        await ctx.runMutation(internal.pages.commitScanBlock, {
+          pageId: blockedPageId,
+          accountId: auth.accountId as Id<"accounts">,
+          actorTokenId: auth.tokenId as Id<"tokens">,
+          kind: "csam",
+          reason: "proactive hash-match",
+          listId: gate.rejection.listId,
+        });
+        throw new ConvexError({
+          code: "CSAM_BLOCKED",
+          message: "Publish blocked: content matched a known-CSAM hash list",
+        });
+      }
+      if (gate.rejection.code === "BLOCKED_CONTENT") {
+        // Classifier block → quarantine (a `block` verdict is a hard reject — the
+        // page is NOT left public) + open the case + EVICT the edge route.
+        await ctx.runMutation(internal.pages.commitScanBlock, {
+          pageId: blockedPageId,
+          accountId: auth.accountId as Id<"accounts">,
+          actorTokenId: auth.tokenId as Id<"tokens">,
+          kind: "classifier",
+          reason: gate.rejection.reason,
+        });
+        throw new ConvexError({
+          code: "CONTENT_BLOCKED",
+          message: "Publish blocked by the content classifier",
+          score: gate.rejection.score,
+        });
+      }
+    }
+    if (outcome.ok && gate.proceed && gate.flag) {
+      // `review` verdict → publish allowed but flagged for human follow-up.
+      await ctx.runMutation(internal.pages.commitScanFlag, {
+        pageId: outcome.result.id as Id<"pages">,
+        accountId: auth.accountId as Id<"accounts">,
+        actorTokenId: auth.tokenId as Id<"tokens">,
+        reason: gate.flag.reason,
+        score: gate.flag.score,
+      });
+    }
+    // --------------------------------------------------------------------------
+
     return flattenOutcome(outcome);
   },
 });
