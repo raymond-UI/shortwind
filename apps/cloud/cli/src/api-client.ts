@@ -110,6 +110,46 @@ export interface PublishResult {
   version: number;
 }
 
+/** One authored file in a bundle publish (CLOUD-50): its path + shorthand HTML. */
+export interface BundleFilePayload {
+  /** Bundle-relative POSIX path, e.g. "index.html" or "docs/guide.html". */
+  path: string;
+  /** The file's shorthand HTML (recipe tokens in `class=`/`className=`). */
+  html: string;
+}
+
+/**
+ * The `POST /v1/bundles` request body (CLOUD-50) — a linked multi-file deploy
+ * under one entry point. `recipes` carries only the touched family bodies (same
+ * rule as a single-file publish); `bearer` rides in the Authorization header.
+ */
+export interface BundlePayload {
+  files: BundleFilePayload[];
+  /** The bundle-relative path of the entry file the slug routes to. */
+  entryPath: string;
+  recipes: RecipePayload[];
+  lockfile: Lockfile;
+  slug?: string;
+  title?: string;
+  css?: string;
+}
+
+/** A served file in a published bundle, as returned by `publishBundle`. */
+export interface BundleFileResult {
+  path: string;
+  artifactKey: string;
+  sourceHash: string;
+  entry: boolean;
+}
+
+/** A successful bundle publish result (CLOUD-50). */
+export interface BundleResult {
+  bundleId: string;
+  url: string;
+  version: number;
+  files: BundleFileResult[];
+}
+
 // ---------------------------------------------------------------------------
 // Typed errors — non-2xx responses become these so callers branch on `kind`.
 // ---------------------------------------------------------------------------
@@ -175,6 +215,8 @@ export interface ApiClient {
   getPage(id: string): Promise<GetResult>;
   publishPage(payload: PublishPayload): Promise<PublishResult>;
   updatePage(id: string, payload: UpdatePayload): Promise<PublishResult>;
+  /** `POST /v1/bundles` — publish a linked multi-file bundle (CLOUD-50). */
+  publishBundle?(payload: BundlePayload): Promise<BundleResult>;
   /** `DELETE /v1/pages/{id}` — tombstone the page (CLOUD-31/34). */
   deletePage?(id: string): Promise<void>;
   /** `PATCH /v1/pages/{id}/visibility` — set the access level (CLOUD-31/34). */
@@ -356,6 +398,10 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
         `/v1/pages/${encodeURIComponent(id)}`,
         payload,
       );
+    },
+
+    publishBundle(payload: BundlePayload): Promise<BundleResult> {
+      return request<BundleResult>("POST", "/v1/bundles", payload);
     },
 
     async deletePage(id: string): Promise<void> {

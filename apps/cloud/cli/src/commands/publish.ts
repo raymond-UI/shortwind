@@ -17,6 +17,9 @@ import {
   createApiClient,
   resolveBaseUrl,
   type ApiClient,
+  type BundleFilePayload,
+  type BundlePayload,
+  type BundleResult,
   type PublishPayload,
   type PublishResult,
   type RecipePayload,
@@ -46,6 +49,14 @@ export interface PublishOptions {
   visibility?: string;
   idempotencyKey?: string;
   json?: boolean;
+  /**
+   * CLOUD-50 (additive): publish `file`'s DIRECTORY as a linked multi-file
+   * bundle, with `file` as the entry point. The other `.html` files in the
+   * directory become linked siblings; cross-file relative links resolve to the
+   * served siblings (link-before-deploy, done server-side). Single-file publish
+   * behavior is unchanged when this flag is absent.
+   */
+  bundle?: boolean;
 }
 
 export function publish(file: string, opts: PublishOptions): StubResult {
@@ -59,6 +70,7 @@ export function publish(file: string, opts: PublishOptions): StubResult {
       visibility: opts.visibility ?? null,
       idempotencyKey: opts.idempotencyKey ?? null,
       json: Boolean(opts.json),
+      bundle: Boolean(opts.bundle),
     },
   };
 }
@@ -187,6 +199,97 @@ export async function runPublish(
 }
 
 // ---------------------------------------------------------------------------
+// CLOUD-50 — `publish --bundle <entry-file>`: publish the entry file's directory
+// as a linked multi-file bundle. ADDITIVE — single-file publish is unchanged.
+//
+// Split the same way as the single-file path: a PURE payload assembler
+// (`assembleBundlePayload`), a render (`renderBundleResult`), a driver over an
+// injected client (`runBundle`), and the IO shell (`publishBundleFromFile`) that
+// reads the directory. The server does the link-rewrite (link-before-deploy);
+// the CLI just ships the entry point + the sibling files + the touched recipes.
+// ---------------------------------------------------------------------------
+
+/** An {@link ApiClient} known to carry `publishBundle` (the bundle handler's seam). */
+export type BundleCapableClient = ApiClient & {
+  publishBundle(payload: BundlePayload): Promise<BundleResult>;
+};
+
+/**
+ * Assemble the bundle publish body. PURE (no IO): the caller supplies the files
+ * (entry + siblings), which one is the entry, the home lockfile, and the
+ * candidate palette; this selects ONLY the touched family bodies (same CLOUD-03
+ * rule as the single-file path) and attaches them once for the whole bundle.
+ * The entry file is moved to the FRONT of `files` for a stable wire order.
+ */
+export async function assembleBundlePayload(input: {
+  files: readonly BundleFilePayload[];
+  entryPath: string;
+  lockfile: Lockfile;
+  candidates: readonly CandidateRecipe[];
+  domain?: string | undefined;
+  title?: string | undefined;
+}): Promise<BundlePayload> {
+  if (input.files.length === 0) {
+    throw new Error("bundle has no files");
+  }
+  if (!input.files.some((f) => f.path === input.entryPath)) {
+    throw new Error(
+      `bundle entry "${input.entryPath}" is not one of the bundle files`,
+    );
+  }
+  const touched = await selectTouchedRecipes(input.candidates);
+  const recipes: RecipePayload[] = touched.map((t) => {
+    const candidate = input.candidates.find((c) => c.family === t.family)!;
+    return { family: t.family, source: candidate.source };
+  });
+  // Deterministic order: entry first, then the rest sorted by path.
+  const entry = input.files.find((f) => f.path === input.entryPath)!;
+  const rest = input.files
+    .filter((f) => f.path !== input.entryPath)
+    .sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    files: [entry, ...rest],
+    entryPath: input.entryPath,
+    recipes,
+    lockfile: input.lockfile,
+    ...(input.domain ? { slug: input.domain } : {}),
+    ...(input.title ? { title: input.title } : {}),
+  };
+}
+
+/** Render a bundle publish outcome (or its `--json` envelope). */
+export function renderBundleResult(result: BundleResult, json: boolean): string {
+  if (json) return JSON.stringify(result, null, 2);
+  const lines = [
+    `published bundle ${result.url}`,
+    `id:      ${result.bundleId}`,
+    `version: v${result.version}`,
+    `files:   ${result.files.length}`,
+  ];
+  for (const f of result.files) {
+    lines.push(`  ${f.entry ? "→" : " "} ${f.path}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Run `publish --bundle` against an injected api-client. Returns the rendered
+ * output + the created bundle id. STATELESS — the id is printed, never stored.
+ */
+export async function runBundle(
+  client: BundleCapableClient,
+  payload: BundlePayload,
+  json: boolean,
+): Promise<PublishRun> {
+  const result = await client.publishBundle(payload);
+  return {
+    ok: true,
+    output: renderBundleResult(result, json),
+    id: result.bundleId,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // IO shell — read the recipe palette + the HTML file, resolve the active home.
 // Kept thin and separate from the pure assembly/render above so the network
 // path is the only un-unit-tested seam.
@@ -222,6 +325,90 @@ export function readPaletteCandidates(home: ResolvedHome): CandidateRecipe[] {
  * only), and POST it. Returns the rendered output. The api-client is injected
  * so even this shell can be exercised in tests with a fake client + temp home.
  */
+/**
+ * Read a bundle's files off disk: the entry `file` + every other `.html` file in
+ * its directory (recursively), each as a `{ path, html }` with a bundle-relative
+ * POSIX path. The entry's relative path is returned as `entryPath`. Pure-ish IO
+ * (fs only) so the assembly above stays unit-testable without a directory.
+ */
+export function readBundleDir(file: string): {
+  files: BundleFilePayload[];
+  entryPath: string;
+} {
+  const dir = path.dirname(path.resolve(file));
+  const entryPath = toPosix(path.relative(dir, path.resolve(file)));
+  const files: BundleFilePayload[] = [];
+  const walk = (current: string): void => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.name.startsWith(".")) continue;
+      const abs = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(abs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (path.extname(entry.name).toLowerCase() !== ".html") continue;
+      files.push({
+        path: toPosix(path.relative(dir, abs)),
+        html: readFileSync(abs, "utf8"),
+      });
+    }
+  };
+  walk(dir);
+  if (!files.some((f) => f.path === entryPath)) {
+    // The entry file itself may be non-.html (defensive) — include it explicitly.
+    files.push({ path: entryPath, html: readFileSync(path.resolve(file), "utf8") });
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return { files, entryPath };
+}
+
+/** Normalize an OS path to POSIX separators (bundle paths are always POSIX). */
+function toPosix(p: string): string {
+  return p.split(path.sep).join("/");
+}
+
+/**
+ * The `publish --bundle <entry-file>` flow: resolve the home + token, read the
+ * entry file's directory as a bundle (entry + siblings), assemble the payload
+ * (touched bodies only, shared across the bundle), and POST it to `/v1/bundles`.
+ * The api-client is injected so the shell is exercisable with a fake + temp home.
+ */
+export async function publishBundleFromFile(
+  file: string,
+  opts: PublishOptions,
+  deps: {
+    home?: ResolvedHome;
+    client?: BundleCapableClient;
+    baseUrl?: string;
+  } = {},
+): Promise<PublishRun> {
+  const home = deps.home ?? resolveHome();
+  const account = readActiveAccount(home.root);
+  if (!account) {
+    throw new Error(
+      "not logged in — run `shortwind-cloud login` (no active account in the Shortwind home)",
+    );
+  }
+  const { files, entryPath } = readBundleDir(file);
+  const lockfile = readHomeLockfile(home.root);
+  const candidates = readPaletteCandidates(home);
+  const payload = await assembleBundlePayload({
+    files,
+    entryPath,
+    lockfile,
+    candidates,
+    domain: opts.domain,
+  });
+  const client =
+    deps.client ??
+    (createApiClient({
+      baseUrl: resolveBaseUrl(deps.baseUrl),
+      token: account.token.accessToken,
+    }) as BundleCapableClient);
+  return runBundle(client, payload, Boolean(opts.json));
+}
+
 export async function publishFromFile(
   file: string,
   opts: PublishOptions,
@@ -231,6 +418,14 @@ export async function publishFromFile(
     baseUrl?: string;
   } = {},
 ): Promise<PublishRun> {
+  // CLOUD-50: `--bundle` deploys the entry file's directory as a linked bundle.
+  if (opts.bundle) {
+    return publishBundleFromFile(file, opts, {
+      home: deps.home,
+      client: deps.client as BundleCapableClient | undefined,
+      baseUrl: deps.baseUrl,
+    });
+  }
   const home = deps.home ?? resolveHome();
   const account = readActiveAccount(home.root);
   if (!account) {

@@ -126,6 +126,45 @@ export default defineSchema({
     // List an account's recipe-edit history.
     .index("by_account", ["accountId"]),
 
+  // CLOUD-50 (ADDITIVE). Mirrors shared `BundleVersion`. An immutable published
+  // snapshot of a BUNDLE — a linked multi-file deploy under ONE entry point
+  // (PRD §10 Phase 3). Forward-only like `pageVersions` (PRD §5.6): a publish
+  // appends a new row; the prior version is retained (frozen) for rollback. A
+  // bundle is identified by its account-scoped `slug` (the entry handle); the
+  // CURRENT version is the highest `version` row for that (accountId, slug), so
+  // no separate bundle record table is needed (keeps this purely additive).
+  bundleVersions: defineTable({
+    accountId: v.id("accounts"),
+    // Stable URL handle of the entry point. Unique per account at the head
+    // version (collision → 409, enforced in app, mirroring `pages.by_slug`).
+    slug: v.string(),
+    // Optional reference to a `pages` row when a bundle's entry is also tracked
+    // as a page (the single-file entry identity); null for a pure bundle deploy.
+    entryPageId: v.union(v.id("pages"), v.null()),
+    // The bundle-relative path of the entry file (the one the slug routes to).
+    entryPath: v.string(),
+    // Monotonic version counter for this (accountId, slug) bundle; bumps per publish.
+    version: v.number(),
+    // The served files: each authored path → its frozen R2 artifact key + the
+    // source hash + whether it is the entry file. The entry file's `artifactKey`
+    // is what the slug routes to; siblings serve at `<slug>/<path>`.
+    files: v.array(
+      v.object({
+        path: v.string(),
+        artifactKey: v.string(),
+        sourceHash: v.string(),
+        entry: v.boolean(),
+      }),
+    ),
+    // Snapshot of the lockfile (family -> version) used to expand this version.
+    lockfile: v.record(v.string(), v.string()),
+    createdAt: v.number(),
+  })
+    // Resolve a bundle's version history / current head by (account, slug).
+    .index("by_slug", ["accountId", "slug"])
+    // List an account's bundles.
+    .index("by_account", ["accountId"]),
+
   // CLOUD-01: tokenHash/accountId/scopes/label/createdAt/revokedAt/expiresAt —
   // DO NOT ALTER (auth depends on it). Mirrors shared `Token`.
   tokens: defineTable({

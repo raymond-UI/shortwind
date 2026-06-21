@@ -64,6 +64,8 @@ describe("every shared record type maps 1:1 to a table", () => {
     AuditEvent: "auditLog",
     Moderation: "moderation",
     IdempotencyKey: "idempotencyKeys",
+    // CLOUD-50 (additive): linked multi-file bundle deploys.
+    BundleVersion: "bundleVersions",
   };
 
   for (const [record, table] of Object.entries(recordToTable)) {
@@ -72,7 +74,7 @@ describe("every shared record type maps 1:1 to a table", () => {
     });
   }
 
-  it("defines exactly the nine record tables (no extras, none missing)", () => {
+  it("defines exactly the record tables (no extras, none missing)", () => {
     expect(new Set(Object.keys(tables))).toEqual(
       new Set(Object.values(recordToTable)),
     );
@@ -119,6 +121,14 @@ describe("find-query indexes exist (CLOUD-10 spec)", () => {
   it("moderation has by_page and by_state", () => {
     expect(indexFields("moderation", "by_page")).toEqual(["pageId"]);
     expect(indexFields("moderation", "by_state")).toEqual(["state"]);
+  });
+
+  it("bundleVersions has by_slug and by_account (CLOUD-50)", () => {
+    expect(indexFields("bundleVersions", "by_slug")).toEqual([
+      "accountId",
+      "slug",
+    ]);
+    expect(indexFields("bundleVersions", "by_account")).toEqual(["accountId"]);
   });
 
   it("idempotencyKeys has by_key", () => {
