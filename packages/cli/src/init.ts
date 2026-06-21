@@ -24,13 +24,14 @@ import {
 } from "@shortwind/tailwind";
 import { readLockfile, writeLockfile } from "./lockfile.js";
 import {
-  buildThemeSupplement,
   buildToneBlock,
   convertMediaDarkToClass,
   ensureDarkClassVariant,
   findMissingThemeTokens,
+  missingToneThemeTokens,
   scaffoldTheme,
   TONE_MARKER,
+  upsertThemeSupplement,
   type ThemeAction,
 } from "./theme.js";
 import { wireBundler, type BundlerWireAction } from "./bundler-config.js";
@@ -188,11 +189,20 @@ export async function init(options: InitOptions): Promise<InitResult> {
   let supplementedThemeTokens: string[] = [];
   if (theme.action === "skipped" && theme.themePath && skillRegistry) {
     const css = await readFile(theme.themePath, "utf8");
-    missingThemeTokens = findMissingThemeTokens(css, skillRegistry.flattened);
-    const supplement = buildThemeSupplement(missingThemeTokens);
-    if (supplement) {
-      await writeFile(theme.themePath, `${css.replace(/\s*$/, "")}\n\n${supplement}\n`);
-      supplementedThemeTokens = missingThemeTokens;
+    // Recipe-referenced tokens plus the tone table's own theme tokens — init
+    // always writes the tone block, and on a minimal existing theme its
+    // `var(--success)`/`var(--warning)` would resolve to nothing unless those
+    // tokens are supplemented alongside the recipe-referenced ones.
+    missingThemeTokens = [
+      ...new Set([
+        ...findMissingThemeTokens(css, skillRegistry.flattened),
+        ...missingToneThemeTokens(css),
+      ]),
+    ].sort();
+    const { css: next, added } = upsertThemeSupplement(css, missingThemeTokens);
+    if (added.length > 0) {
+      await writeFile(theme.themePath, next);
+      supplementedThemeTokens = added;
       missingThemeTokens = [];
       themeAction = "supplemented";
     }

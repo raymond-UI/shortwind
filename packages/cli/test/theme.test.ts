@@ -197,17 +197,23 @@ describe("buildToneBlock", () => {
     }
     // Each tone sets the two variables @badge reads.
     expect(block).toContain('[data-tone="neutral"] { --tone-bg: var(--muted); --tone-fg: var(--muted-foreground); }');
-    // danger/info resolve through theme tokens (flip in dark for free).
+    // Every tone now resolves through theme tokens (flip in dark for free).
     expect(block).toContain("--tone-fg: var(--destructive);");
     expect(block).toContain("--tone-fg: var(--primary);");
+    expect(block).toContain("--tone-fg: var(--success);");
+    expect(block).toContain("--tone-fg: var(--warning);");
   });
 
-  it("puts success/warning dark overrides under .dark only — class-only (#96)", () => {
+  it("resolves every tone through theme tokens — no literals, no .dark block (#96)", () => {
     const block = buildToneBlock();
-    expect(block).toContain(".dark {");
+    // success/warning now reference --success/--warning (tinted like danger/info)
+    // instead of carrying baked oklch literals…
+    expect(block).toContain("color-mix(in oklab, var(--success) 15%, transparent)");
+    expect(block).toContain("color-mix(in oklab, var(--warning) 15%, transparent)");
+    expect(block).not.toMatch(/oklch\(/);
+    // …so the tokens flip in dark on their own — no per-tone .dark overrides.
+    expect(block).not.toContain(".dark {");
     expect(block).not.toContain("prefers-color-scheme");
-    expect(block).toContain("oklch(0.393 0.095 152.535)"); // success dark bg
-    expect(block).toContain("oklch(0.414 0.112 45.904)"); // warning dark bg
   });
 });
 
@@ -295,6 +301,63 @@ describe("semantic status tokens + appendMissingThemeTokens", () => {
     expect(css).toContain(THEME_SUPPLEMENT_MARKER);
     // idempotent — a second pass finds nothing missing
     expect((await appendMissingThemeTokens(dir, flattened)).added).toEqual([]);
+  });
+
+  it("merges new tokens into the existing supplement block, not a second block", async () => {
+    const dir = await project({
+      tailwind: "^4.0.0",
+      files: {
+        "src/index.css":
+          `@import "tailwindcss";\n@custom-variant dark (&:is(.dark *));\n` +
+          `:root { --background: #fff; --foreground: #111; }\n` +
+          `@theme inline { --color-background: var(--background); --color-foreground: var(--foreground); }\n`,
+      },
+    });
+    dirs.push(dir);
+    // First install references card; second install (later) references popover.
+    await appendMissingThemeTokens(dir, { card: ["bg-card", "text-card-foreground"] });
+    const after = await appendMissingThemeTokens(dir, { sheet: ["bg-popover", "text-popover-foreground"] });
+    expect(after.added).toEqual(["popover", "popover-foreground"]);
+
+    const css = await readFile(path.join(dir, "src/index.css"), "utf8");
+    // exactly one supplement block — the second call merged, did not append
+    const blocks = [...css.matchAll(/shortwind:theme-supplement/g)].length;
+    expect(blocks).toBe(1);
+    // and that single block carries both the original and the new tokens
+    expect(css).toContain("--color-card: var(--card);");
+    expect(css).toContain("--color-popover: var(--popover);");
+    // tokens stay sorted within the merged block (card before popover)
+    expect(css.indexOf("--card:")).toBeLessThan(css.indexOf("--popover:"));
+    // still idempotent after a merge
+    expect((await appendMissingThemeTokens(dir, { sheet: ["bg-popover"] })).added).toEqual([]);
+  });
+
+  it("heals a file that already accumulated two supplement blocks", async () => {
+    // A project supplemented before the merge fix shipped: two separate blocks.
+    const dir = await project({
+      tailwind: "^4.0.0",
+      files: {
+        "src/index.css":
+          `@import "tailwindcss";\n@custom-variant dark (&:is(.dark *));\n` +
+          `:root { --background: #fff; --foreground: #111; }\n\n` +
+          `/* shortwind:theme-supplement — placeholder values for tokens your theme didn't define. Tune them to your palette. */\n` +
+          `:root {\n  --card: oklch(1 0 0);\n}\n` +
+          `@theme inline {\n  --color-card: var(--card);\n}\n` +
+          `/* end shortwind theme-supplement */\n\n` +
+          `/* shortwind:theme-supplement — placeholder values for tokens your theme didn't define. Tune them to your palette. */\n` +
+          `:root {\n  --popover: oklch(1 0 0);\n}\n` +
+          `@theme inline {\n  --color-popover: var(--popover);\n}\n` +
+          `/* end shortwind theme-supplement */\n`,
+      },
+    });
+    dirs.push(dir);
+    // Even with no new tokens to add, the two blocks collapse into one.
+    const res = await appendMissingThemeTokens(dir, { card: ["bg-card"] });
+    expect(res.added).toEqual([]);
+    const css = await readFile(path.join(dir, "src/index.css"), "utf8");
+    expect([...css.matchAll(/shortwind:theme-supplement/g)]).toHaveLength(1);
+    expect(css).toContain("--color-card: var(--card);");
+    expect(css).toContain("--color-popover: var(--popover);");
   });
 
   it("is a no-op when the project has no theme entry CSS", async () => {

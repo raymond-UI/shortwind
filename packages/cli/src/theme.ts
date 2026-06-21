@@ -231,6 +231,45 @@ export function buildThemeSupplement(missing: string[]): string | null {
   return lines.join("\n");
 }
 
+// A whole supplement block, leading blank lines included so removing one leaves
+// no orphaned gap. Global + non-greedy: matches each block independently.
+const SUPPLEMENT_BLOCK_RE_G =
+  /\n*[ \t]*\/\* shortwind:theme-supplement[\s\S]*?\/\* end shortwind theme-supplement \*\//g;
+
+// The bare `--token` names a supplement block already defines (its `:root`
+// entries), ignoring the `--color-*` mappings. Used to fold a new install's
+// tokens into the tokens an earlier install already wrote.
+function supplementTokens(block: string): string[] {
+  const out = new Set<string>();
+  for (const m of block.matchAll(/--([\w-]+)\s*:/g)) {
+    const name = m[1] ?? "";
+    if (THEME_LIGHT_VALUES.has(name)) out.add(name);
+  }
+  return [...out];
+}
+
+// Add `missing` tokens to the theme supplement, merging into the block already
+// there instead of appending a second one (each `add`/`preset` otherwise spawns
+// its own block — repeated `:root`/`.dark`/`@theme inline` scaffolding). Folds
+// every existing block into a single sorted block, so a file that already
+// accumulated duplicates is healed on the next run too. Returns the updated css
+// and the tokens newly added (empty ⇒ nothing changed; leave the file alone).
+export function upsertThemeSupplement(
+  css: string,
+  missing: string[],
+): { css: string; added: string[] } {
+  const fresh = missing.filter((t) => THEME_LIGHT_VALUES.has(t));
+  const blocks = [...css.matchAll(SUPPLEMENT_BLOCK_RE_G)].map((m) => m[0]);
+  const prior = [...new Set(blocks.flatMap(supplementTokens))];
+  const added = fresh.filter((t) => !prior.includes(t));
+  // Nothing new and at most one block → already canonical, don't rewrite.
+  if (added.length === 0 && blocks.length <= 1) return { css, added: [] };
+  const rebuilt = buildThemeSupplement([...new Set([...prior, ...fresh])].sort());
+  if (!rebuilt) return { css, added: [] };
+  const stripped = css.replace(SUPPLEMENT_BLOCK_RE_G, "").replace(/\s*$/, "");
+  return { css: `${stripped}\n\n${rebuilt}\n`, added };
+}
+
 export const DARK_CLASS_VARIANT = "@custom-variant dark (&:is(.dark *));";
 const CUSTOM_VARIANT_RE = /@custom-variant\s+dark\b/;
 
@@ -285,47 +324,65 @@ export const TONE_MARKER = "/* shortwind:tones";
 // apply (`<span class="@badge" data-tone="success">`). Values mirror the
 // static @badge-<tone> recipes so the data-driven and static forms match.
 // Plain CSS the user owns; extend with project tones
-// (`[data-tone="sev1"] { --tone-bg: …; --tone-fg: … }`). neutral/danger/info
-// resolve through theme tokens (they already flip in dark); success/warning
-// carry explicit dark values.
-type Tone = { name: string; bg: string; fg: string; darkBg?: string; darkFg?: string };
+// (`[data-tone="sev1"] { --tone-bg: …; --tone-fg: … }`). Every tone resolves
+// through a theme color token — a 15%-tint surface + the saturated token as
+// foreground — so all five flip in dark for free (the tokens carry `.dark`
+// values) and stay tunable from one place. success/warning lean on the
+// `--success`/`--warning` tokens the default theme defines and that init
+// supplements onto an existing theme (see toneThemeTokens).
+type Tone = { name: string; token: string };
 const TONES: readonly Tone[] = [
-  { name: "neutral", bg: "var(--muted)", fg: "var(--muted-foreground)" },
-  {
-    name: "success",
-    bg: "oklch(0.962 0.044 156.743)",
-    fg: "oklch(0.448 0.119 151.328)",
-    darkBg: "oklch(0.393 0.095 152.535)",
-    darkFg: "oklch(0.925 0.084 155.995)",
-  },
-  {
-    name: "warning",
-    bg: "oklch(0.962 0.059 95.617)",
-    fg: "oklch(0.473 0.137 46.201)",
-    darkBg: "oklch(0.414 0.112 45.904)",
-    darkFg: "oklch(0.924 0.12 95.746)",
-  },
-  { name: "danger", bg: "color-mix(in oklab, var(--destructive) 15%, transparent)", fg: "var(--destructive)" },
-  { name: "info", bg: "color-mix(in oklab, var(--primary) 15%, transparent)", fg: "var(--primary)" },
+  { name: "neutral", token: "muted" },
+  { name: "success", token: "success" },
+  { name: "warning", token: "warning" },
+  { name: "danger", token: "destructive" },
+  { name: "info", token: "primary" },
 ];
 
-// Build the append-only tone block. Dark overrides (success/warning only) go
-// under `.dark` so an in-app toggle drives them (class-only; #96).
+// neutral is the one tone that wants a solid (not tinted) surface and its own
+// foreground token — it's a quiet default, not a status accent.
+function toneValues(t: Tone): { bg: string; fg: string } {
+  if (t.name === "neutral") return { bg: "var(--muted)", fg: "var(--muted-foreground)" };
+  return { bg: `color-mix(in oklab, var(--${t.token}) 15%, transparent)`, fg: `var(--${t.token})` };
+}
+
+// Theme color tokens the default tone table references via var(). Derived from
+// TONES so it can't drift from buildToneBlock. init writes the tone block on
+// every run, so these must exist even on a project whose existing theme never
+// defined them (e.g. --success/--warning) — they're supplemented like any
+// recipe-referenced token (see init's missing-token union).
+export function toneThemeTokens(): string[] {
+  const out = new Set<string>();
+  for (const t of TONES) {
+    for (const expr of Object.values(toneValues(t))) {
+      for (const m of expr.matchAll(/var\(--([\w-]+)/g)) {
+        const name = m[1] ?? "";
+        if (THEME_LIGHT_VALUES.has(name)) out.add(name);
+      }
+    }
+  }
+  return [...out].sort();
+}
+
+// The tone-table theme tokens a given stylesheet doesn't already define — the
+// ones init must supplement so the tone block's var() references resolve.
+export function missingToneThemeTokens(css: string): string[] {
+  return toneThemeTokens().filter((name) => !isThemeTokenDefined(css, name));
+}
+
+// Build the append-only tone block. No `.dark` overrides: every tone resolves
+// through theme tokens that flip in dark on their own (class-only; #96).
 export function buildToneBlock(): string {
-  const rule = (name: string, bg: string, fg: string) =>
-    `[data-tone="${name}"] { --tone-bg: ${bg}; --tone-fg: ${fg}; }`;
-  const lines: string[] = [
+  const rule = (t: Tone) => {
+    const { bg, fg } = toneValues(t);
+    return `[data-tone="${t.name}"] { --tone-bg: ${bg}; --tone-fg: ${fg}; }`;
+  };
+  return [
     `${TONE_MARKER} — semantic tones for tone-aware recipes (@badge, …). Set on an element:`,
     `   <span class="@badge" data-tone="success">. Add your own: [data-tone="sev1"] { --tone-bg: …; --tone-fg: … } */`,
-    ...TONES.map((t) => rule(t.name, t.bg, t.fg)),
-  ];
-  const darkTones = TONES.filter((t) => t.darkBg && t.darkFg);
-  if (darkTones.length > 0) {
-    const darkRules = darkTones.map((t) => "  " + rule(t.name, t.darkBg!, t.darkFg!));
-    lines.push(...darkSection(darkRules));
-  }
-  lines.push("/* end shortwind tones */");
-  return lines.join("\n");
+    ...TONES.map(rule),
+    "/* end shortwind tones */",
+  ].join("\n");
 }
 
 // Utility prefixes that consume a theme color token (`bg-card`,
@@ -361,9 +418,13 @@ export function findMissingThemeTokens(
   css: string,
   flattened: Record<string, string[]>,
 ): string[] {
-  return referencedThemeTokens(flattened).filter(
-    (name) => !new RegExp(`--(?:color-)?${name}\\s*:`).test(css),
-  );
+  return referencedThemeTokens(flattened).filter((name) => !isThemeTokenDefined(css, name));
+}
+
+// A token counts as defined if the CSS declares either its Tailwind v4 theme key
+// (`--color-<name>`) or the bare custom-property indirection (`--<name>`).
+function isThemeTokenDefined(css: string, name: string): boolean {
+  return new RegExp(`--(?:color-)?${name}\\s*:`).test(css);
 }
 
 // Locate the project's theme entry CSS — the Tailwind v4 entry
@@ -409,10 +470,12 @@ export async function appendMissingThemeTokens(
   if (!themePath) return { themePath: null, added: [] };
   const css = await readFile(themePath, "utf8");
   const missing = findMissingThemeTokens(css, flattened);
-  const supplement = buildThemeSupplement(missing);
-  if (!supplement) return { themePath, added: [] };
-  await writeFile(themePath, `${css.replace(/\s*$/, "")}\n\n${supplement}\n`);
-  return { themePath, added: missing };
+  const { css: next, added } = upsertThemeSupplement(css, missing);
+  // Write when the file actually changed — covers both new tokens and the
+  // collapse-only case (duplicate blocks folded with nothing new to add).
+  if (next === css) return { themePath, added: [] };
+  await writeFile(themePath, next);
+  return { themePath, added };
 }
 
 function isTailwindV4(cwd: string): boolean {

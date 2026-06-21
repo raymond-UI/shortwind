@@ -274,8 +274,15 @@ describe("init", () => {
     const css = readFileSync(globals, "utf8");
     expect(css).toContain("shortwind:tones");
     expect(css).toContain('[data-tone="success"]');
-    // Tone dark overrides are class-only; the project's @media block was
-    // converted to .dark (#96), so no prefers-color-scheme remains.
+    // The tone table resolves success/warning through theme tokens, so those
+    // tokens must be supplemented even though no recipe references bg-success —
+    // otherwise the var() would resolve to nothing on this minimal theme.
+    expect(css).toContain('--tone-fg: var(--success);');
+    expect(css).toContain('--tone-fg: var(--warning);');
+    expect(css).toContain("--color-success: var(--success);");
+    expect(css).toContain("--color-warning: var(--warning);");
+    // The project's @media block was converted to .dark (#96), so a .dark block
+    // exists (from dark-promote, not from the tones) and no @media remains.
     expect(css).toContain(".dark {");
     expect(css).not.toContain("prefers-color-scheme");
 
