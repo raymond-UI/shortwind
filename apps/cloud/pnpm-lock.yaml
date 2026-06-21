@@ -13,7 +13,7 @@ importers:
     dependencies:
       '@convex-dev/better-auth':
         specifier: 0.11.4
-        version: 0.11.4(@standard-schema/spec@1.1.0)(better-auth@1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(vite@8.0.16(esbuild@0.28.1))))(convex@1.31.6(react@19.2.7))(hono@4.12.23)(react@19.2.7)(typescript@5.7.3)
+        version: 0.11.4(@standard-schema/spec@1.1.0)(better-auth@1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1))))(convex@1.31.6(react@19.2.7))(hono@4.12.23)(react@19.2.7)(typescript@5.7.3)
       '@convex-dev/rate-limiter':
         specifier: 0.3.2
         version: 0.3.2(convex@1.31.6(react@19.2.7))(react@19.2.7)
@@ -22,7 +22,7 @@ importers:
         version: 0.1.0-beta.19
       better-auth:
         specifier: 1.5.3
-        version: 1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(vite@8.0.16(esbuild@0.28.1)))
+        version: 1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1)))
       cac:
         specifier: 6.7.14
         version: 6.7.14
@@ -35,16 +35,22 @@ importers:
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: 0.16.18
-        version: 0.16.18(@cloudflare/workers-types@4.20251115.0)(@vitest/runner@4.1.4)(@vitest/snapshot@4.1.4)(vitest@4.1.4(vite@8.0.16(esbuild@0.28.1)))
+        version: 0.16.18(@cloudflare/workers-types@4.20251115.0)(@vitest/runner@4.1.4)(@vitest/snapshot@4.1.4)(vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1)))
       '@cloudflare/workers-types':
         specifier: 4.20251115.0
         version: 4.20251115.0
+      '@edge-runtime/vm':
+        specifier: 5.0.0
+        version: 5.0.0
+      convex-test:
+        specifier: 0.0.41
+        version: 0.0.41(convex@1.31.6(react@19.2.7))
       typescript:
         specifier: 5.7.3
         version: 5.7.3
       vitest:
         specifier: 4.1.4
-        version: 4.1.4(vite@8.0.16(esbuild@0.28.1))
+        version: 4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1))
       wrangler:
         specifier: 4.90.1
         version: 4.90.1(@cloudflare/workers-types@4.20251115.0)
@@ -194,6 +200,14 @@ packages:
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
+
+  '@edge-runtime/primitives@6.0.0':
+    resolution: {integrity: sha512-FqoxaBT+prPBHBwE1WXS1ocnu/VLTQyZ6NMUBAdbP7N2hsFTTxMC/jMu2D/8GAlMQfxeuppcPuCUk/HO3fpIvA==}
+    engines: {node: '>=18'}
+
+  '@edge-runtime/vm@5.0.0':
+    resolution: {integrity: sha512-NKBGBSIKUG584qrS1tyxVpX/AKJKQw5HgjYEnPLC0QsTw79JrGn+qUr8CXFb955Iy7GUdiiUv1rJ6JBGvaKb6w==}
+    engines: {node: '>=18'}
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -1142,6 +1156,11 @@ packages:
       zod:
         optional: true
 
+  convex-test@0.0.41:
+    resolution: {integrity: sha512-GPHeYFOi70n7UtW0eCEQFVhzl/+m8PvbWkDCbKpHLybI1MrScf4sVpGeM0cC2qmtxiduxa2nLPbehPalhh9oyQ==}
+    peerDependencies:
+      convex: ^1.16.4
+
   convex@1.31.6:
     resolution: {integrity: sha512-9cIsOzepa3s9DURRF+fZHxbNuzLgilg9XGQCc45v0Xx4FemqeIezpPFSJF9WHC9ckk43TDUUXLecvLVt9djPkw==}
     engines: {node: '>=18.0.0', npm: '>=7.0.0'}
@@ -1641,14 +1660,14 @@ snapshots:
     optionalDependencies:
       workerd: 1.20260617.1
 
-  '@cloudflare/vitest-pool-workers@0.16.18(@cloudflare/workers-types@4.20251115.0)(@vitest/runner@4.1.4)(@vitest/snapshot@4.1.4)(vitest@4.1.4(vite@8.0.16(esbuild@0.28.1)))':
+  '@cloudflare/vitest-pool-workers@0.16.18(@cloudflare/workers-types@4.20251115.0)(@vitest/runner@4.1.4)(@vitest/snapshot@4.1.4)(vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1)))':
     dependencies:
       '@vitest/runner': 4.1.4
       '@vitest/snapshot': 4.1.4
       cjs-module-lexer: 1.2.3
       esbuild: 0.28.1
       miniflare: 4.20260617.1
-      vitest: 4.1.4(vite@8.0.16(esbuild@0.28.1))
+      vitest: 4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1))
       wrangler: 4.103.0(@cloudflare/workers-types@4.20251115.0)
       zod: 3.25.76
     transitivePeerDependencies:
@@ -1688,10 +1707,10 @@ snapshots:
 
   '@cloudflare/workers-types@4.20251115.0': {}
 
-  '@convex-dev/better-auth@0.11.4(@standard-schema/spec@1.1.0)(better-auth@1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(vite@8.0.16(esbuild@0.28.1))))(convex@1.31.6(react@19.2.7))(hono@4.12.23)(react@19.2.7)(typescript@5.7.3)':
+  '@convex-dev/better-auth@0.11.4(@standard-schema/spec@1.1.0)(better-auth@1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1))))(convex@1.31.6(react@19.2.7))(hono@4.12.23)(react@19.2.7)(typescript@5.7.3)':
     dependencies:
       '@better-fetch/fetch': 1.3.1
-      better-auth: 1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(vite@8.0.16(esbuild@0.28.1)))
+      better-auth: 1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1)))
       common-tags: 1.8.2
       convex: 1.31.6(react@19.2.7)
       convex-helpers: 0.1.119(@standard-schema/spec@1.1.0)(convex@1.31.6(react@19.2.7))(hono@4.12.23)(react@19.2.7)(typescript@5.7.3)(zod@4.4.3)
@@ -1715,6 +1734,12 @@ snapshots:
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
+
+  '@edge-runtime/primitives@6.0.0': {}
+
+  '@edge-runtime/vm@5.0.0':
+    dependencies:
+      '@edge-runtime/primitives': 6.0.0
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -2219,7 +2244,7 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  better-auth@1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(vite@8.0.16(esbuild@0.28.1))):
+  better-auth@1.5.3(@cloudflare/workers-types@4.20251115.0)(react@19.2.7)(vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1))):
     dependencies:
       '@better-auth/core': 1.5.3(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20251115.0)(better-call@1.3.2(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0)
       '@better-auth/kysely-adapter': 1.5.3(@better-auth/core@1.5.3(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20251115.0)(better-call@1.3.2(zod@4.4.3))(jose@6.2.3)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.3.1)(kysely@0.28.17)
@@ -2237,7 +2262,7 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       react: 19.2.7
-      vitest: 4.1.4(vite@8.0.16(esbuild@0.28.1))
+      vitest: 4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1))
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
 
@@ -2271,6 +2296,10 @@ snapshots:
       react: 19.2.7
       typescript: 5.7.3
       zod: 4.4.3
+
+  convex-test@0.0.41(convex@1.31.6(react@19.2.7)):
+    dependencies:
+      convex: 1.31.6(react@19.2.7)
 
   convex@1.31.6(react@19.2.7):
     dependencies:
@@ -2607,7 +2636,7 @@ snapshots:
       esbuild: 0.28.1
       fsevents: 2.3.3
 
-  vitest@4.1.4(vite@8.0.16(esbuild@0.28.1)):
+  vitest@4.1.4(@edge-runtime/vm@5.0.0)(vite@8.0.16(esbuild@0.28.1)):
     dependencies:
       '@vitest/expect': 4.1.4
       '@vitest/mocker': 4.1.4(vite@8.0.16(esbuild@0.28.1))
@@ -2629,6 +2658,8 @@ snapshots:
       tinyrainbow: 3.1.0
       vite: 8.0.16(esbuild@0.28.1)
       why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@edge-runtime/vm': 5.0.0
     transitivePeerDependencies:
       - msw
 

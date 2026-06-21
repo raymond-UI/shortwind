@@ -19,8 +19,22 @@ import { authComponent, createAuth } from "./auth";
  *   - `GET /v1/pages/{id}`   → `api.pages.get`   (metadata + version history)
  * Both read the bearer from the `Authorization: Bearer …` header and translate
  * the auth-guard `ConvexError` payload to 401 (`UNAUTHORIZED`) / 403
- * (`FORBIDDEN`). The mutating page verbs (publish/update/delete/visibility/
- * bind-domain) land on their own routes in later waves.
+ * (`FORBIDDEN`).
+ *
+ * CLOUD-30a adds the page WRITE REST surface ADDITIVELY (the CLI api-client's two
+ * mutating calls):
+ *   - `POST  /v1/pages`      → `api.pages.publish` (create from HTML + lockfile +
+ *                              touched recipe bodies). On the slug-collision
+ *                              outcome the action returns `{ ok:false, 409,
+ *                              existingId }`; this is surfaced as a 409 with a
+ *                              TOP-LEVEL `existingId` field, which the api-client
+ *                              parses to drive the "use update" hint.
+ *   - `PATCH /v1/pages/{id}` → `api.pages.update`  (republish a new version,
+ *                              same URL). The `{id}` rides in the path.
+ * Both carry the JSON body the api-client sends (html / lockfile / recipes /
+ * flags) and the bearer in the Authorization header, mapping the auth-guard
+ * `ConvexError` to 401/403 the same way the read routes do. The remaining
+ * mutating verbs (delete / visibility / bind-domain) land in later waves.
  */
 const http = httpRouter();
 
@@ -98,11 +112,105 @@ const getHandler = httpAction(async (ctx, request) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// CLOUD-30a — page WRITE REST surface (publish / update).
+// ---------------------------------------------------------------------------
+
+/** Parse a request's JSON body, tolerating an empty/garbage body as `{}`. */
+async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
+  try {
+    const parsed = (await request.json()) as unknown;
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * POST /v1/pages → create a page (publish). The body is the api-client's
+ * `PublishPayload` (html / lockfile / recipes / slug / tags / visibility /
+ * idempotencyKey / css); the bearer rides in the Authorization header. The
+ * publish action's slug-collision outcome (`{ ok:false, status:409, existingId }`)
+ * becomes a 409 with a TOP-LEVEL `existingId` so the client surfaces the
+ * "use update" hint.
+ */
+const publishHandler = httpAction(async (ctx, request) => {
+  const bearer = bearerFromRequest(request);
+  const body = await readJsonBody(request);
+  try {
+    const outcome = await ctx.runAction(api.pages.publish, {
+      bearer,
+      html: body["html"] as string,
+      slug: body["slug"] as string | undefined,
+      title: body["title"] as string | undefined,
+      recipes: (body["recipes"] ?? []) as { family: string; source: string }[],
+      lockfile: body["lockfile"] as never,
+      tags: body["tags"] as string[] | undefined,
+      visibility: body["visibility"] as never,
+      idempotencyKey: body["idempotencyKey"] as string | undefined,
+      css: body["css"] as string | undefined,
+    });
+    if (!outcome.ok) {
+      // Slug taken — 409 with the existing id at the top level (CLOUD-23 shape).
+      return json({ existingId: outcome.existingId }, outcome.status);
+    }
+    return json(
+      { id: outcome.id, url: outcome.url, version: outcome.version },
+      200,
+    );
+  } catch (err) {
+    return errorResponse(err);
+  }
+});
+
+/**
+ * PATCH /v1/pages/{id} → republish a new version (update). The `{id}` rides in
+ * the path; the body is the api-client's `UpdatePayload` (no `slug` — the URL is
+ * fixed to the page). Returns `{ id, url, version }`.
+ */
+const updateHandler = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const id = url.pathname.split("/").filter(Boolean).pop() ?? "";
+  const bearer = bearerFromRequest(request);
+  const body = await readJsonBody(request);
+  try {
+    const outcome = await ctx.runAction(api.pages.update, {
+      bearer,
+      pageId: id as Id<"pages">,
+      html: body["html"] as string,
+      recipes: (body["recipes"] ?? []) as { family: string; source: string }[],
+      lockfile: body["lockfile"] as never,
+      tags: body["tags"] as string[] | undefined,
+      visibility: body["visibility"] as never,
+      idempotencyKey: body["idempotencyKey"] as string | undefined,
+      css: body["css"] as string | undefined,
+    });
+    if (!outcome.ok) {
+      // update has no slug collision; treat any non-ok defensively as a 409.
+      return json({ existingId: outcome.existingId }, outcome.status);
+    }
+    return json(
+      { id: outcome.id, url: outcome.url, version: outcome.version },
+      200,
+    );
+  } catch (err) {
+    return errorResponse(err);
+  }
+});
+
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });
+http.route({ path: "/v1/pages", method: "POST", handler: publishHandler });
 http.route({
   pathPrefix: "/v1/pages/",
   method: "GET",
   handler: getHandler,
+});
+http.route({
+  pathPrefix: "/v1/pages/",
+  method: "PATCH",
+  handler: updateHandler,
 });
 
 export default http;
