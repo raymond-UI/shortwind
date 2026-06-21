@@ -1,0 +1,17 @@
+{
+  // Shortwind Cloud oversight dashboard — TanStack Start on Cloudflare Workers.
+  // `main` is the virtual server entry the TanStack Start Vite plugin emits; the
+  // Cloudflare Vite plugin wires the SSR Worker + serves the client bundle from
+  // the build's assets dir. Deploy with: `pnpm build && wrangler deploy`.
+  "name": "shortwind-cloud-dashboard",
+  "account_id": "31d65fe8d35768972de29c4199b648ee",
+  "main": "@tanstack/react-start/server-entry",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    // Client + SSR read these via import.meta.env / process.env. The Convex
+    // deployment + its Better Auth (convex.site) origin.
+    "VITE_CONVEX_URL": "https://rare-toad-197.convex.cloud",
+    "VITE_CONVEX_SITE_URL": "https://rare-toad-197.convex.site"
+  }
+}

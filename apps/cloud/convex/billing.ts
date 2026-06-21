@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import { requireRead } from "./lib/auth_guard.js";
+import { requireReadOperator } from "./lib/operator_auth.js";
 
 /**
  * Metered billing usage (CLOUD-43, PRD §6.4 / §11).
@@ -106,10 +106,10 @@ export function artifactBytes(version: {
  * invariant, asserted in billing.test.ts).
  */
 export const getUsage = query({
-  args: { bearer: v.string() },
+  args: { bearer: v.optional(v.string()) },
   returns: usageValidator,
   handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
+    const auth = await requireReadOperator(ctx, args.bearer);
 
     // publishes + storageBytes — derived from the account's frozen versions.
     // `pageVersions` carries `accountId` on every row but is indexed only

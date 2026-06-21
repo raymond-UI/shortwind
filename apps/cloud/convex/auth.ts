@@ -78,9 +78,21 @@ export const createAuthOptions = (
   ctx: GenericCtx<DataModel>,
 ): BetterAuthOptions => {
   const siteUrl = process.env.SITE_URL ?? "http://localhost:3000";
+  // The operator dashboard is a SEPARATE origin (a TanStack Start app on
+  // Cloudflare) that proxies `/api/auth/*` to this Convex Better Auth origin.
+  // Its requests carry an `Origin` header of the dashboard host, so that origin
+  // must be trusted or Better Auth rejects the web sign-in with "Invalid
+  // origin". `DASHBOARD_URL` (Convex env) is that origin; comma-separated extras
+  // are allowed for preview deployments. Falls back to the localhost dev origin.
+  const dashboardOrigins = (
+    process.env.DASHBOARD_URL ?? "http://localhost:5179"
+  )
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
   return {
     baseURL: siteUrl,
-    trustedOrigins: [siteUrl],
+    trustedOrigins: [siteUrl, ...dashboardOrigins],
     database: authComponent.adapter(ctx),
     // The device flow issues short-lived access tokens plus refresh tokens; a
     // generous-but-bounded session keeps a CLI authenticated between polls.
@@ -88,9 +100,12 @@ export const createAuthOptions = (
       expiresIn: 60 * 60 * 24 * 7,
       updateAge: 60 * 60 * 24,
     },
-    // Shortwind Cloud has no password/email primary auth — identity is
-    // established entirely through the device-authorization grant below.
-    emailAndPassword: { enabled: false },
+    // Human OPERATORS sign in to the oversight dashboard with email + password
+    // (the simplest working web login — no external email/OAuth creds needed).
+    // Agents still authenticate entirely through the device-authorization grant
+    // below; the two paths coexist. `requireEmailVerification` stays off so a
+    // freshly-created operator can sign in immediately (no SMTP configured).
+    emailAndPassword: { enabled: true, requireEmailVerification: false },
     plugins: [
       convex({ authConfig }),
       // RFC 8628 device authorization grant. The CLI is a public client (no

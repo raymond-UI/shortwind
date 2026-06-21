@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import { requireRead } from "./lib/auth_guard.js";
+import { requireReadOperator } from "./lib/operator_auth.js";
+import { authComponent } from "./auth.js";
 
 /**
  * Dashboard oversight queries (CLOUD-35, PRD §3 / §5.4 / §6.3 / §8).
@@ -21,10 +22,12 @@ import { requireRead } from "./lib/auth_guard.js";
  *   - `getAccountPolicy`     — operator policy toggles (read).
  *   - `setAccountPolicy`     — the ONE mutation: persist a policy toggle.
  *
- * Auth + scoping: every function routes through `requireRead` (the dashboard
- * holds a read-scoped operator bearer) and is scoped to the resolved
- * `auth.accountId`. No cross-account leakage — the same invariant `pages.find`
- * relies on.
+ * Auth + scoping: every function routes through `requireReadOperator`, which
+ * accepts EITHER a read-scoped operator bearer (agents / REST / fixtures) OR the
+ * logged-in Better Auth web session (the human operator on the dashboard), and
+ * scopes to the resolved `auth.accountId`. No cross-account leakage — the same
+ * invariant `pages.find` relies on. `ensureAccount` (below) provisions the
+ * operator's account on first dashboard load so the session path can resolve it.
  *
  * Reactivity: these are plain Convex queries, so the dashboard re-renders the
  * instant any of these tables change (PRD §6.3). No polling.
@@ -158,7 +161,7 @@ function defaultPolicy(): { customDomainNeedsApproval: boolean } {
  * "list + version history per page" without an N+1 round trip.
  */
 export const listPages = query({
-  args: { bearer: v.string() },
+  args: { bearer: v.optional(v.string()) },
   returns: v.array(
     v.object({
       page: pageRowValidator,
@@ -166,7 +169,7 @@ export const listPages = query({
     }),
   ),
   handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
+    const auth = await requireReadOperator(ctx, args.bearer);
     const pages = await ctx.db
       .query("pages")
       .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
@@ -217,10 +220,10 @@ export const listPages = query({
  * `limit` caps the page size (default 200) — the dashboard tails the head.
  */
 export const listAuditLog = query({
-  args: { bearer: v.string(), limit: v.optional(v.number()) },
+  args: { bearer: v.optional(v.string()), limit: v.optional(v.number()) },
   returns: v.array(auditRowValidator),
   handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
+    const auth = await requireReadOperator(ctx, args.bearer);
     const limit = Math.max(1, Math.min(args.limit ?? 200, 1000));
     const rows = await ctx.db
       .query("auditLog")
@@ -246,10 +249,10 @@ export const listAuditLog = query({
  * separate from a page edit, so they can notice and roll back.
  */
 export const listRecipeEditEvents = query({
-  args: { bearer: v.string(), limit: v.optional(v.number()) },
+  args: { bearer: v.optional(v.string()), limit: v.optional(v.number()) },
   returns: v.array(recipeEditRowValidator),
   handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
+    const auth = await requireReadOperator(ctx, args.bearer);
     const limit = Math.max(1, Math.min(args.limit ?? 200, 1000));
     const rows = await ctx.db
       .query("recipeEditEvents")
@@ -288,10 +291,10 @@ export const listRecipeEditEvents = query({
  * objects are handled (and preserved, not deleted).
  */
 export const listModeration = query({
-  args: { bearer: v.string() },
+  args: { bearer: v.optional(v.string()) },
   returns: v.array(moderationRowValidator),
   handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
+    const auth = await requireReadOperator(ctx, args.bearer);
     // The moderation table is indexed by page/state, not account; scope by the
     // resolved account in app code (each case carries `accountId`).
     const all = await ctx.db.query("moderation").collect();
@@ -319,10 +322,10 @@ export const listModeration = query({
  * exists, returns the safe defaults.
  */
 export const getAccountPolicy = query({
-  args: { bearer: v.string() },
+  args: { bearer: v.optional(v.string()) },
   returns: policyValidator,
   handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
+    const auth = await requireReadOperator(ctx, args.bearer);
     const rows = await ctx.db
       .query("auditLog")
       .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
@@ -354,12 +357,12 @@ export const getAccountPolicy = query({
  */
 export const setAccountPolicy = mutation({
   args: {
-    bearer: v.string(),
+    bearer: v.optional(v.string()),
     customDomainNeedsApproval: v.optional(v.boolean()),
   },
   returns: policyValidator,
   handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
+    const auth = await requireReadOperator(ctx, args.bearer);
 
     // Merge over the current effective policy so a partial toggle leaves the
     // other fields untouched.
@@ -395,5 +398,61 @@ export const setAccountPolicy = mutation({
       customDomainNeedsApproval: merged.customDomainNeedsApproval,
       updatedAt: inserted?._creationTime ?? Date.now(),
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Operator provisioning (CLOUD-30b) — first-load account upsert.
+// ---------------------------------------------------------------------------
+
+/**
+ * ensureAccount: idempotently provision the logged-in operator's `accounts`
+ * row. The dashboard calls this once on first load AFTER a Better Auth web
+ * sign-in: it reads the session identity (`safeGetAuthUser`), then upserts the
+ * account keyed by `authUserId` (the `by_authUserId` index). Name/email are
+ * taken from the session.
+ *
+ * Idempotent: a returning operator already has a row, so we refresh its
+ * name/email (cheap, keeps the account in sync with the auth profile) and return
+ * the existing id. A first-time operator gets a fresh row. Either way the
+ * session-scoped `requireReadOperator` path can then resolve their account, so
+ * the oversight queries become non-empty for that operator.
+ *
+ * Returns `null` when no session is present (the caller is logged out); the
+ * dashboard only calls this from inside the authed gate, so that branch is just
+ * defensive.
+ */
+export const ensureAccount = mutation({
+  args: {},
+  returns: v.union(v.id("accounts"), v.null()),
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) return null;
+
+    const authUserId = user._id as string;
+    const name = (user.name as string | undefined) ?? authUserId;
+    const email = (user.email as string | undefined) ?? null;
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("accounts")
+      .withIndex("by_authUserId", (q) => q.eq("authUserId", authUserId))
+      .unique();
+
+    if (existing) {
+      // Keep the account profile in sync with the auth identity.
+      if (existing.name !== name || existing.email !== email) {
+        await ctx.db.patch(existing._id, { name, email, updatedAt: now });
+      }
+      return existing._id;
+    }
+
+    return await ctx.db.insert("accounts", {
+      authUserId,
+      name,
+      email,
+      createdAt: now,
+      updatedAt: now,
+    });
   },
 });

@@ -1,36 +1,56 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { DashboardDataProvider } from "../lib/data";
 import type { DashboardData } from "../lib/types";
 
 /**
- * Live Convex data provider (CLOUD-35).
+ * Live Convex data provider (CLOUD-30b rebuild).
  *
- * Fills the `DashboardData` seam from `useQuery(api.dashboard.*)` — five
- * reactive queries + the one policy mutation. Because every dashboard query is a
- * plain Convex query, the whole UI re-renders the instant any underlying table
- * changes (PRD §6.3 reactivity). No polling.
+ * Fills the `DashboardData` seam from the reactive oversight queries
+ * (`api.dashboard.*` + `api.billing.getUsage`) — five reads + the policy
+ * mutation. Every query is a plain Convex query, so the UI re-renders the
+ * instant any underlying table changes (PRD §6.3). No polling.
  *
- * Bearer note (finalized in CLOUD-30b): the `api.dashboard.*` queries are guarded
- * by `requireRead`, which validates a read-scoped `swc_…` operator bearer from
- * the `tokens` table (NOT the Better Auth session directly). The dashboard reads
- * that operator bearer from `VITE_DASHBOARD_BEARER` for local/dev; CLOUD-30b
- * wires the deployed flow that mints a short-lived read bearer for the
- * authenticated operator from their Better Auth session. Until a Convex URL +
- * bearer are present, the queries simply stay in their loading state (the views
- * render their "Loading…" branch) — the build + component tests don't depend on
- * a live deployment.
+ * Auth: queries now authenticate with the logged-in Better Auth SESSION, not a
+ * baked bearer. `requireReadOperator` resolves the operator's account from the
+ * session. So:
+ *   1. Wait for `useConvexAuth().isAuthenticated` (the Convex client has the
+ *      session JWT).
+ *   2. Call `ensureAccount` once — provisions the operator's `accounts` row on
+ *      first sign-in (idempotent). Until it resolves, the session has no account
+ *      and the guard would 401, so we `skip` the reads.
+ *   3. Fire the reads with EMPTY args (the bearer is omitted → session path).
  */
-const BEARER = (import.meta.env.VITE_DASHBOARD_BEARER as string | undefined) ?? "";
-
 export function ConvexDataProvider({ children }: { children: ReactNode }) {
-  const args = { bearer: BEARER };
+  const { isAuthenticated } = useConvexAuth();
+  const ensureAccount = useMutation(api.dashboard.ensureAccount);
+  const [accountReady, setAccountReady] = useState(false);
 
-  // `skip` until a bearer is present — avoids firing guarded queries that would
-  // 401 with no credential (e.g. an offline preview build).
-  const skip = BEARER === "";
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAccountReady(false);
+      return;
+    }
+    let cancelled = false;
+    void ensureAccount({})
+      .then(() => {
+        if (!cancelled) setAccountReady(true);
+      })
+      .catch(() => {
+        // Leave the dashboard in its loading branch on a provisioning failure;
+        // a router invalidate / reload retries.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, ensureAccount]);
+
+  // Skip the guarded reads until the operator is authenticated AND their account
+  // is provisioned (otherwise the session path 401s with `no_account`).
+  const skip = !isAuthenticated || !accountReady;
+  const args = {};
 
   const pages = useQuery(api.dashboard.listPages, skip ? "skip" : args);
   const auditLog = useQuery(api.dashboard.listAuditLog, skip ? "skip" : args);
@@ -43,7 +63,6 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
     skip ? "skip" : args,
   );
   const policy = useQuery(api.dashboard.getAccountPolicy, skip ? "skip" : args);
-  // CLOUD-43: the metered-billing usage query (additive module, api.billing.*).
   const usage = useQuery(api.billing.getUsage, skip ? "skip" : args);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
 
@@ -56,7 +75,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       policy,
       usage,
       setPolicy: async (next) => {
-        await setPolicyMutation({ bearer: BEARER, ...next });
+        await setPolicyMutation(next);
       },
     }),
     [pages, auditLog, recipeEdits, moderation, policy, usage, setPolicyMutation],

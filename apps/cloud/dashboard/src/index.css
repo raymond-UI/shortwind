@@ -1,3 +1,11 @@
+@import "tailwindcss";
+
+/*
+ * Shortwind Cloud oversight dashboard — dark mono "index" aesthetic.
+ * Ported verbatim from the prior SPA's styles.css (the `.recipe-edit` distinct
+ * styling is load-bearing per PRD §5.4 and asserted by the view tests).
+ */
+
 :root {
   color-scheme: dark;
   --bg: #0a0a0a;
@@ -56,6 +64,10 @@ a {
 .masthead .sub {
   color: var(--muted);
   font-size: 12px;
+}
+
+.masthead .spacer {
+  flex: 1;
 }
 
 .tabs {
@@ -186,4 +198,110 @@ a {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+/* ── Auth (login / signup) ─────────────────────────────────────────────── */
+
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 28px 24px;
+}
+
+.auth-card h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  letter-spacing: 0.02em;
+}
+
+.auth-card .sub {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 20px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  font: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 8px 10px;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn {
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+  background: var(--fg);
+  color: var(--bg);
+  border: 1px solid var(--fg);
+  padding: 9px 12px;
+  font-weight: 600;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  font-weight: 400;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.auth-error {
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  background: var(--danger-bg);
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.auth-foot {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.auth-foot a {
+  color: var(--fg);
+  text-decoration: underline;
 }

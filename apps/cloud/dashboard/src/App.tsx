@@ -27,7 +27,13 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-export function App({ initialTab = "pages" }: { initialTab?: TabId }) {
+export function App({
+  initialTab = "pages",
+  onSignOut,
+}: {
+  initialTab?: TabId;
+  onSignOut?: () => void;
+}) {
   const [tab, setTab] = useState<TabId>(initialTab);
   const active = TABS.find((t) => t.id === tab) ?? TABS[0];
 
@@ -36,6 +42,14 @@ export function App({ initialTab = "pages" }: { initialTab?: TabId }) {
       <header className="masthead">
         <h1>Shortwind Cloud</h1>
         <span className="sub">human oversight</span>
+        {onSignOut ? (
+          <>
+            <span className="spacer" />
+            <button className="btn-ghost" onClick={onSignOut}>
+              Sign out
+            </button>
+          </>
+        ) : null}
       </header>
       <nav className="tabs" aria-label="Oversight views">
         {TABS.map((t) => (
