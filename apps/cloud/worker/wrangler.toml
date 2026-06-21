@@ -13,3 +13,20 @@
 name = "shortwind-cloud-expand-spike"
 main = "src/expand-edge.ts"
 compatibility_date = "2025-06-01"
+
+# --- CLOUD-21: serve-path storage bindings ----------------------------------
+# These declare the R2 bucket + KV namespace the hot path (CLOUD-22 router) and
+# the publish/delete mutations bind. Under @cloudflare/vitest-pool-workers /
+# miniflare these resolve to LOCAL in-memory stores — no live Cloudflare creds.
+#
+# CLOUD-30 wires the LIVE resources: replace `bucket_name` with the real R2
+# bucket and fill `id` with the real KV namespace id (and add `preview_id`).
+# Leave these as placeholders until then.
+
+[[r2_buckets]]
+binding = "ARTIFACTS"                      # env.ARTIFACTS — frozen HTML artifacts
+bucket_name = "shortwind-artifacts-local"  # CLOUD-30: real bucket name
+
+[[kv_namespaces]]
+binding = "ROUTES"              # env.ROUTES — hostname/path -> route hot cache
+id = "shortwind-routes-local"   # CLOUD-30: real KV namespace id (+ preview_id)
