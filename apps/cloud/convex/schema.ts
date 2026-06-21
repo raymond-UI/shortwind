@@ -185,7 +185,12 @@ export default defineSchema({
     reporterContact: v.union(v.string(), v.null()),
     // NCMEC CyberTipline report id, set when a report is filed.
     ncmecReportId: v.union(v.string(), v.null()),
-    // When legally-required preservation expires (e.g. 60-day window).
+    // CLOUD-32: the sealed-store R2 key the killed object was preserved at. The
+    // public route is gone, but THIS key retains the material (preserve-not-
+    // delete, PRD §8.2). Null until a kill seals the object. (CLOUD-31 recorded
+    // the sealed key only on auditLog.metadata; CLOUD-32 persists it here too.)
+    preservedR2Key: v.union(v.string(), v.null()),
+    // When legally-required preservation expires (e.g. 60-day NCMEC window).
     preservationExpiresAt: v.union(v.number(), v.null()),
     createdAt: v.number(),
     updatedAt: v.number(),

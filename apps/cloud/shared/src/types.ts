@@ -228,7 +228,13 @@ export interface Moderation {
   reporterContact: string | null;
   /** NCMEC CyberTipline report id, set when a report is filed. */
   ncmecReportId: string | null;
-  /** When legally-required preservation expires (e.g. 60-day window). */
+  /**
+   * The sealed-store R2 key the killed object was preserved at. The public route
+   * is gone, but this key retains the material (preserve-not-delete, PRD §8.2).
+   * Null until a kill seals the object.
+   */
+  preservedR2Key: string | null;
+  /** When legally-required preservation expires (e.g. 60-day NCMEC window). */
   preservationExpiresAt: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
