@@ -319,10 +319,61 @@ const abuseHandler = httpAction(async (ctx, request) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// CLOUD-40 — custom-domain bind (POST /v1/pages/{id}/domain). ADDITIVE: the
+// publish POST stays on the EXACT `/v1/pages` path; this binds on the
+// `/v1/pages/` PREFIX (a sub-path), so it never shadows publish.
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /v1/pages/{id}/domain → bind a custom hostname to a page (bindDomain).
+ * Body: `{ hostname }`; the bearer rides in Authorization. Requires the
+ * `domains:bind` scope — a token without it maps to 403 (the auth guard throws
+ * `FORBIDDEN`, translated by {@link errorResponse}). Returns the bind
+ * {@link DomainBindResult} (state machine: pending-human / queued / pending-cert
+ * / active / failed).
+ */
+const bindDomainHandler = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const segments = pagesPathSegments(url.pathname); // [id, "domain"]
+  const id = segments[0] ?? "";
+  const bearer = bearerFromRequest(request);
+  const body = await readJsonBody(request);
+  const hostname = body["hostname"];
+  if (typeof hostname !== "string" || !hostname.trim()) {
+    return json(
+      { error: { code: "BAD_REQUEST", message: "`hostname` is required" } },
+      400,
+    );
+  }
+  try {
+    const result = await ctx.runAction(api.domains.bindDomain, {
+      bearer,
+      pageId: id as Id<"pages">,
+      hostname,
+    });
+    return json(result, 200);
+  } catch (err) {
+    if (err instanceof ConvexError) {
+      const data = err.data as { code?: string } | undefined;
+      if (data?.code === "NOT_FOUND") return json({ error: data }, 404);
+    }
+    return errorResponse(err);
+  }
+});
+
 http.route({ path: "/v1/abuse", method: "POST", handler: abuseHandler });
 
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });
 http.route({ path: "/v1/pages", method: "POST", handler: publishHandler });
+// CLOUD-40: POST on the `/v1/pages/` PREFIX is the bind-domain sub-route
+// (`/v1/pages/{id}/domain`). The publish POST above is the EXACT `/v1/pages`
+// path, so the two never collide.
+http.route({
+  pathPrefix: "/v1/pages/",
+  method: "POST",
+  handler: bindDomainHandler,
+});
 http.route({
   pathPrefix: "/v1/pages/",
   method: "GET",

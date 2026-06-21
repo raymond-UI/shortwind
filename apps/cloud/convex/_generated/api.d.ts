@@ -28,6 +28,11 @@ import type * as tokens from "../tokens.js";
 // references must typecheck without a live `convex dev`. A real `convex dev`
 // (CLOUD-30b) regenerates this file and supersedes the edit.
 import type * as dashboard from "../dashboard.js";
+// CLOUD-40 (manual, additive): the custom-domain bind module. Declared by hand
+// for the same offline-codegen reason — `domains.bindDomain`/`internal.domains.*`
+// references must typecheck without a live `convex dev`. A real `convex dev`
+// (CLOUD-30b) regenerates this file and supersedes the edit.
+import type * as domains from "../domains.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -45,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   recipes: typeof recipes;
   tokens: typeof tokens;
   dashboard: typeof dashboard;
+  domains: typeof domains;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,
