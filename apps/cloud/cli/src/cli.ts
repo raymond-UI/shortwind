@@ -34,20 +34,34 @@ const BIN = "shortwind-cloud";
 export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC {
   const cli = cac(BIN);
 
+  // login + init-global are REAL (CLOUD-11): they own the global home + device
+  // flow. The remaining verbs stay stubs until their wave. Their async actions
+  // are awaited by run()'s runMatchedCommand().
   cli
     .command("login", "Authenticate via the OAuth device flow and store a token")
     .option("--scope <scope>", "Request a scope (repeatable; e.g. domains:bind for step-up)")
     .option("--endpoint <url>", "Cloud API origin")
-    .action((opts: { scope?: string | string[]; endpoint?: string }) => {
-      onStub(login(opts));
+    .action(async (opts: { scope?: string | string[]; endpoint?: string }) => {
+      const result = await login(opts);
+      if (result.ok) {
+        process.stderr.write(
+          `logged in as ${result.account.label} (active account: ${result.account.id})\n`,
+        );
+      } else {
+        process.stderr.write(`login ${result.reason}\n`);
+        process.exitCode = 1;
+      }
     });
 
   cli
-    .command("init-global", "Write the global Cloud config (endpoint + credentials)")
+    .command("init-global", "Create the global Shortwind home (~/.shortwind/)")
     .option("--endpoint <url>", "Cloud API origin")
-    .option("--force", "Overwrite an existing global config")
-    .action((opts: { endpoint?: string; force?: boolean }) => {
-      onStub(initGlobal(opts));
+    .option("--force", "Overwrite an existing global home")
+    .action(async (opts: { endpoint?: string; force?: boolean }) => {
+      const result = await initGlobal(opts);
+      process.stderr.write(
+        `${result.created ? "created" : "already initialized"} Shortwind home at ${result.home}\n`,
+      );
     });
 
   cli

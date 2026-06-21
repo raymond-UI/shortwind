@@ -35,19 +35,9 @@ describe("command registration", () => {
 });
 
 describe("argument parsing", () => {
-  it("login collects repeatable scopes and endpoint", () => {
-    const r = parse(["login", "--scope", "pages:write", "--scope", "domains:bind", "--endpoint", "https://api.example.com"]);
-    expect(r.verb).toBe("login");
-    expect(r.parsed.scopes).toEqual(["pages:write", "domains:bind"]);
-    expect(r.parsed.endpoint).toBe("https://api.example.com");
-  });
-
-  it("init-global parses force", () => {
-    const r = parse(["init-global", "--force"]);
-    expect(r.verb).toBe("init-global");
-    expect(r.parsed.force).toBe(true);
-  });
-
+  // login + init-global are now real handlers (CLOUD-11), not stubs — their own
+  // command tests cover behavior. Here they only need to register (asserted in
+  // "command registration") and stay off the stub path.
   it("publish parses file, tags, domain, visibility, idempotency", () => {
     const r = parse([
       "publish",
@@ -116,10 +106,10 @@ describe("argument parsing", () => {
     expect(r.parsed.hostname).toBe("status.acme.com");
   });
 
-  it("every verb resolves to a stub tagged with a CLOUD issue", () => {
+  it("every still-stubbed verb resolves to a stub tagged with a CLOUD issue", () => {
+    // login + init-global are real (CLOUD-11) and no longer route through the
+    // stub reporter; the remaining seven verbs are stubs pending their waves.
     const samples: Record<string, string[]> = {
-      login: ["login"],
-      "init-global": ["init-global"],
       publish: ["publish", "./p.html"],
       update: ["update", "pg_1", "./p.html"],
       find: ["find"],
