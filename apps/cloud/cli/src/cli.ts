@@ -1,13 +1,15 @@
 import { cac, type CAC } from "cac";
 import { login } from "./commands/login.js";
 import { initGlobal } from "./commands/init-global.js";
-import { publish } from "./commands/publish.js";
-import { update } from "./commands/update.js";
-import { find } from "./commands/find.js";
-import { get } from "./commands/get.js";
+import { publish, publishFromFile } from "./commands/publish.js";
+import { update, updateFromFile } from "./commands/update.js";
+import { find, runFind } from "./commands/find.js";
+import { get, runGet } from "./commands/get.js";
 import { deletePage } from "./commands/delete.js";
 import { visibility } from "./commands/visibility.js";
 import { bindDomain } from "./commands/bind-domain.js";
+import { ApiError, createApiClient, resolveBaseUrl } from "./api-client.js";
+import { resolveHome, readActiveAccount } from "./home.js";
 import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
 
 /**
@@ -18,8 +20,17 @@ import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
  * async action's rejection flows back to the caller's catch instead of a raw
  * unhandled-rejection dump.
  *
- * CLOUD-04 ships every verb as a STUB: each parses its real PRD-§4 args/flags
- * and prints "not implemented", exiting cleanly. No network.
+ * Wiring history:
+ *   - CLOUD-04 shipped every verb as a parse STUB (args/flags only, no IO).
+ *   - CLOUD-11 made `login` / `init-global` REAL.
+ *   - CLOUD-30a wires the four page verbs (`publish` / `update` / `find` /
+ *     `get`) to their REAL, unit-tested handlers (`publishFromFile`,
+ *     `updateFromFile`, `runFind`, `runGet`) via the REST api-client.
+ *
+ * `buildCli()` still builds the PARSE-ONLY program (the four page verbs route
+ * through the injected `onStub` reporter) so the parse-shape tests in
+ * `cli.test.ts` stay byte-stable. The production entrypoint `run()` builds the
+ * REAL program via {@link buildRealCli}, which calls the actual handlers.
  */
 
 // The `bin` name an end user types. The verbs (publish, find, …) are spoken
@@ -31,12 +42,13 @@ const BIN = "shortwind-cloud";
  * stub handler and reports the result. Exported (separately from {@link run})
  * so tests can assert the registered verbs without parsing argv.
  */
-export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC {
-  const cli = cac(BIN);
-
-  // login + init-global are REAL (CLOUD-11): they own the global home + device
-  // flow. The remaining verbs stay stubs until their wave. Their async actions
-  // are awaited by run()'s runMatchedCommand().
+/**
+ * Register the REAL `login` + `init-global` verbs (CLOUD-11). Shared by both the
+ * parse-only {@link buildCli} and the production {@link buildRealCli}: these two
+ * have owned real handlers since CLOUD-11 and never routed through the stub
+ * reporter.
+ */
+function registerAuthVerbs(cli: CAC): void {
   cli
     .command("login", "Authenticate via the OAuth device flow and store a token")
     .option("--scope <scope>", "Request a scope (repeatable; e.g. domains:bind for step-up)")
@@ -63,6 +75,12 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
         `${result.created ? "created" : "already initialized"} Shortwind home at ${result.home}\n`,
       );
     });
+}
+
+export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC {
+  const cli = cac(BIN);
+
+  registerAuthVerbs(cli);
 
   cli
     .command("publish <file>", "Create a page from an HTML file (POST /v1/pages)")
@@ -154,8 +172,176 @@ export function registeredVerbs(cli: CAC): string[] {
 
 export { VERBS };
 
+/**
+ * Translate an {@link ApiError} into a single actionable stderr line + a
+ * non-zero exit code. Keeps the four page verbs' failure surface uniform: the
+ * 401/403/404 the REST edge returns become a human reason, not a stack dump.
+ * Non-ApiErrors (e.g. "not logged in", missing file) re-throw to `run().catch`.
+ */
+function reportApiError(err: unknown): void {
+  if (err instanceof ApiError) {
+    process.stderr.write(`error: ${err.message} (${err.kind})\n`);
+    process.exitCode = 1;
+    return;
+  }
+  throw err;
+}
+
+/**
+ * Build the PRODUCTION cac program: the four page verbs (`publish` / `update` /
+ * `find` / `get`) call their REAL handlers through the REST api-client, instead
+ * of the parse stubs. `delete` / `visibility` / `bind-domain` remain stubs until
+ * their own waves. The base URL is resolved from `SHORTWIND_CLOUD_API` (or the
+ * default) inside each handler's `*FromFile` shell; `--endpoint` is honored where
+ * the handler accepts a `baseUrl`.
+ */
+export function buildRealCli(): CAC {
+  const cli = cac(BIN);
+
+  registerAuthVerbs(cli);
+
+  cli
+    .command("publish <file>", "Create a page from an HTML file (POST /v1/pages)")
+    .option("--domain <slug>", "Desired subdomain/slug")
+    .option("--tag <tag>", "Attach a tag (repeatable)")
+    .option("--visibility <level>", "public | unlisted | private")
+    .option("--idempotency-key <key>", "Idempotency key for safe retries")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--json", "Emit machine-readable JSON")
+    .action(
+      async (
+        file: string,
+        opts: {
+          domain?: string;
+          tag?: string | string[];
+          visibility?: string;
+          idempotencyKey?: string;
+          endpoint?: string;
+          json?: boolean;
+        },
+      ) => {
+        try {
+          const run = await publishFromFile(file, opts, {
+            baseUrl: resolveBaseUrl(opts.endpoint),
+          });
+          process.stdout.write(run.output + "\n");
+          if (!run.ok) process.exitCode = 1;
+        } catch (err) {
+          reportApiError(err);
+        }
+      },
+    );
+
+  cli
+    .command("update <id> <file>", "Republish HTML to the same URL (PATCH /v1/pages/{id})")
+    .option("--idempotency-key <key>", "Idempotency key for safe retries")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--json", "Emit machine-readable JSON")
+    .action(
+      async (
+        id: string,
+        file: string,
+        opts: { idempotencyKey?: string; endpoint?: string; json?: boolean },
+      ) => {
+        try {
+          const { output } = await updateFromFile(id, file, opts, {
+            baseUrl: resolveBaseUrl(opts.endpoint),
+          });
+          process.stdout.write(output + "\n");
+        } catch (err) {
+          reportApiError(err);
+        }
+      },
+    );
+
+  cli
+    .command("find", "Locate existing pages (GET /v1/pages?q=&domain=&tag=)")
+    .option("--q <query>", "Free-text query")
+    .option("--domain <domain>", "Filter by bound domain")
+    .option("--tag <tag>", "Filter by tag (repeatable)")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--json", "Emit machine-readable JSON")
+    .action(
+      async (opts: {
+        q?: string;
+        domain?: string;
+        tag?: string | string[];
+        endpoint?: string;
+        json?: boolean;
+      }) => {
+        try {
+          const output = await runFind(makeClient(opts.endpoint), opts);
+          process.stdout.write(output + "\n");
+        } catch (err) {
+          reportApiError(err);
+        }
+      },
+    );
+
+  cli
+    .command("get <id>", "Fetch page metadata + version list (GET /v1/pages/{id})")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--json", "Emit machine-readable JSON")
+    .action(async (id: string, opts: { endpoint?: string; json?: boolean }) => {
+      try {
+        const output = await runGet(makeClient(opts.endpoint), id, opts);
+        process.stdout.write(output + "\n");
+      } catch (err) {
+        reportApiError(err);
+      }
+    });
+
+  cli
+    .command("delete <id>", "Remove a page (DELETE /v1/pages/{id} — tombstone)")
+    .option("-y, --yes", "Skip the confirmation prompt")
+    .option("--json", "Emit machine-readable JSON")
+    .action((id: string, opts: { yes?: boolean; json?: boolean }) => {
+      reportStub(deletePage(id, opts));
+    });
+
+  cli
+    .command("visibility <id> <level>", "Set page visibility: public | unlisted | private")
+    .option("--json", "Emit machine-readable JSON")
+    .action((id: string, level: string, opts: { json?: boolean }) => {
+      reportStub(visibility(id, level, opts));
+    });
+
+  cli
+    .command(
+      "bind-domain <id> <hostname>",
+      "Bind a custom hostname (POST /v1/pages/{id}/domain — requires domains:bind)",
+    )
+    .option("--json", "Emit machine-readable JSON")
+    .action((id: string, hostname: string, opts: { json?: boolean }) => {
+      reportStub(bindDomain(id, hostname, opts));
+    });
+
+  cli.help();
+  cli.version("0.0.0");
+  return cli;
+}
+
+/**
+ * Build the read-path api-client for `find` / `get` from the active account's
+ * token. `publish` / `update` build their own client inside `*FromFile` (they
+ * also need the home palette), so this is the read-verb seam only.
+ */
+function makeClient(endpoint?: string) {
+  const home = resolveHome();
+  const account = readActiveAccount(home.root);
+  if (!account) {
+    throw new Error(
+      "not logged in — run `shortwind-cloud login` (no active account in the Shortwind home)",
+    );
+  }
+  return createApiClient({
+    baseUrl: resolveBaseUrl(endpoint),
+    token: account.token.accessToken,
+  });
+}
+
 export async function run(argv: string[] = process.argv): Promise<void> {
-  const cli = buildCli();
+  const cli = buildRealCli();
   // cac's parse() invokes the matched action but does NOT await it; parse
   // without running, then await the matched command so an async rejection
   // flows back to bin.ts's `run().catch` instead of escaping as an unhandled

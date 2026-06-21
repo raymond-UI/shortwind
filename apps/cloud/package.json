@@ -25,6 +25,8 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.16.18",
     "@cloudflare/workers-types": "4.20251115.0",
+    "@edge-runtime/vm": "5.0.0",
+    "convex-test": "0.0.41",
     "typescript": "5.7.3",
     "vitest": "4.1.4",
     "wrangler": "4.90.1"
