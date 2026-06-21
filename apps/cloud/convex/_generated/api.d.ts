@@ -23,6 +23,11 @@ import type * as moderation from "../moderation.js";
 import type * as pages from "../pages.js";
 import type * as recipes from "../recipes.js";
 import type * as tokens from "../tokens.js";
+// CLOUD-35 (manual, additive): the oversight-dashboard query module. Declared by
+// hand for the same offline-codegen reason — the dashboard's `api.dashboard.*`
+// references must typecheck without a live `convex dev`. A real `convex dev`
+// (CLOUD-30b) regenerates this file and supersedes the edit.
+import type * as dashboard from "../dashboard.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -39,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   pages: typeof pages;
   recipes: typeof recipes;
   tokens: typeof tokens;
+  dashboard: typeof dashboard;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,
