@@ -6,7 +6,7 @@ import {
   type AuthErrorPayload,
   decideAuth,
   requireAuth,
-} from "./auth-guard.js";
+} from "./auth_guard.js";
 import {
   SCOPE_DOMAINS_BIND,
   SCOPE_PAGES_READ,

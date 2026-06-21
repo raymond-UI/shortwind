@@ -1,7 +1,7 @@
 import { v, ConvexError } from "convex/values";
 import { mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireWrite } from "./lib/auth-guard.js";
+import { requireWrite } from "./lib/auth_guard.js";
 
 /**
  * CLOUD-32 — abuse intake + fast global kill + CSAM/NCMEC preservation (PRD §8).

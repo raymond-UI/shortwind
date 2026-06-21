@@ -7,7 +7,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireDomainsBind, requireRead } from "./lib/auth-guard.js";
+import { requireDomainsBind, requireRead } from "./lib/auth_guard.js";
 
 /**
  * Custom-domain bind — Cloudflare for SaaS, human-gated (CLOUD-40, PRD §6.1/§7.2/§9).

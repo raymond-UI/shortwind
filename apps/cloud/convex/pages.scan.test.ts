@@ -14,8 +14,8 @@ import {
   __setPublishLimiter,
   __resetPublishLimiter,
   inMemoryPublishLimiter,
-} from "./lib/rate-limit.js";
-import { digestArtifact, makeHashList } from "./lib/content-scan.js";
+} from "./lib/rate_limit.js";
+import { digestArtifact, makeHashList } from "./lib/content_scan.js";
 import { computeBodySha } from "../shared/src/fingerprint.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
 

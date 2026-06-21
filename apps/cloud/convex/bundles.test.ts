@@ -13,7 +13,7 @@ import {
   type NewBundleVersion,
   type PublishBundleInput,
 } from "./bundles.js";
-import type { StoragePort } from "./lib/publish-core.js";
+import type { StoragePort } from "./lib/publish_core.js";
 
 /**
  * CLOUD-50 bundle pipeline tests — drive the PURE link-rewrite + `runPublishBundle`

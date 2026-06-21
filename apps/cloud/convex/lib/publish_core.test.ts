@@ -17,7 +17,7 @@ import {
   type RecipeVersionWrite,
   type StoragePort,
   type StoredRecipeVersion,
-} from "./publish-core.js";
+} from "./publish_core.js";
 import { computeBodySha } from "../../shared/src/fingerprint.js";
 import type { Lockfile } from "../../shared/src/lockfile-diff.js";
 

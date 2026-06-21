@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   inMemoryPublishLimiter,
   PUBLISH_BURST,
-} from "./rate-limit.js";
+} from "./rate_limit.js";
 
 /**
  * CLOUD-33 — the in-memory token-bucket limiter that backs the OFFLINE publish

@@ -2,14 +2,14 @@ import { v, ConvexError } from "convex/values";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireWrite } from "./lib/auth-guard.js";
+import { requireWrite } from "./lib/auth_guard.js";
 import { deriveSlug, validateSlug } from "../shared/src/slug.js";
 import {
   assembleArtifact,
   pageUrl,
   type Actor,
   type StoragePort,
-} from "./lib/publish-core.js";
+} from "./lib/publish_core.js";
 import { expandPage, type RecipeSource } from "./expand.js";
 
 /**
@@ -32,7 +32,7 @@ import { expandPage, type RecipeSource } from "./expand.js";
  * is appended per publish, the prior version is retained (frozen) for rollback,
  * and the bundle record re-points at the new version.
  *
- * As with `lib/publish-core`, ALL business logic is a PURE function over plain
+ * As with `lib/publish_core`, ALL business logic is a PURE function over plain
  * serializable data with IO behind injected ports; the Convex action below is
  * the thin adapter that builds the real ports over `ctx`. The pure core is
  * unit/golden tested with in-memory ports (no Convex harness).

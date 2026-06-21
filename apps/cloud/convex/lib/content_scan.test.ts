@@ -11,7 +11,7 @@ import {
   makeHashList,
   normalizeDomain,
   type ClassifyHeuristic,
-} from "./content-scan.js";
+} from "./content_scan.js";
 
 /**
  * CLOUD-33 — pure publish-time content-scan primitives (PRD §8.2/§8.4).

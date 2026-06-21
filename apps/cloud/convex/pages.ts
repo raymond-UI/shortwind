@@ -8,7 +8,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireRead, requireWrite } from "./lib/auth-guard.js";
+import { requireRead, requireWrite } from "./lib/auth_guard.js";
 import { applyLifecycle } from "./moderation.js";
 import {
   classifyContent,
@@ -17,12 +17,12 @@ import {
   type ClassifyResult,
   type HashMatchResult,
   type KnownHashList,
-} from "./lib/content-scan.js";
+} from "./lib/content_scan.js";
 import {
   checkPublishLimit,
   type PublishLimitResult,
   type RateLimitRunCtx,
-} from "./lib/rate-limit.js";
+} from "./lib/rate_limit.js";
 import {
   runPublish,
   runUpdate,
@@ -31,13 +31,13 @@ import {
   type PublishDeps,
   type PublishOutcome,
   type StoragePort,
-} from "./lib/publish-core.js";
+} from "./lib/publish_core.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
 
 /**
  * Page publish + update — the thick path (CLOUD-23, PRD §6.2).
  *
- * ALL business logic lives in the pure `lib/publish-core` (`runPublish` /
+ * ALL business logic lives in the pure `lib/publish_core` (`runPublish` /
  * `runUpdate`); this module is the thin Convex adapter that builds the real
  * IO ports over the action `ctx` and exposes the two public verbs.
  *
@@ -533,24 +533,24 @@ export function __resetLifecycleEdgePort(): void {
 // action, after auth and BEFORE `runPublish`. It is deliberately self-contained
 // and additive — it does NOT touch the core publish/update/find/get pipeline:
 //
-//   1. rate limit  — per-account publish token bucket (lib/rate-limit). A trip
+//   1. rate limit  — per-account publish token bucket (lib/rate_limit). A trip
 //                    throws `RATE_LIMITED` carrying `retryAfter` (the action
 //                    never reaches `runPublish`).
 //   2. hash match  — proactive known-CSAM hash-list match over the artifact
-//                    (lib/content-scan). A hit BLOCKS publish and opens a
+//                    (lib/content_scan). A hit BLOCKS publish and opens a
 //                    moderation case via the CLOUD-32 kill seam
 //                    (`applyLifecycle('quarantine', csam)`): the page is
 //                    materialized only to be sealed + quarantined in the same
 //                    action (preserve-not-delete, NCMEC 60-day clock) and is
 //                    NEVER public (excluded from `find`). The action returns a
 //                    `blocked` outcome.
-//   3. classifier  — phishing/malware/abuse scoring (lib/content-scan). A
+//   3. classifier  — phishing/malware/abuse scoring (lib/content_scan). A
 //                    `block` verdict rejects + opens a `reported` case; a
 //                    `review` verdict ALLOWS the publish but flags it (a
 //                    `reported` case + audit) for human follow-up.
 //
 // The known-CSAM hash list and the domain-reputation provider are INJECTABLE
-// (lib/content-scan): offline + in tests they are in-memory; the real NCMEC /
+// (lib/content_scan): offline + in tests they are in-memory; the real NCMEC /
 // industry list + reputation feed are wired at deploy (CLOUD-30b). The hook reads
 // them through `scanSources` so a test can supply a list with a known hash.
 // ===========================================================================

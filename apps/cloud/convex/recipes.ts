@@ -12,7 +12,7 @@ import type { Doc } from "./_generated/dataModel";
  * "agent modified @card (0.4.0 → 0.5.0)" and roll back if they care.
  *
  * These are thin Convex adapters over `ctx.db`. The DECISION of which recipes
- * are touched and what the next version is lives in the pure `lib/publish-core`
+ * are touched and what the next version is lives in the pure `lib/publish_core`
  * pipeline (driven by the shared `selectTouchedRecipes` fingerprint rule); this
  * module only persists the rows that the pipeline decides on. They are
  * `internal*` because the only caller is the publish action's data port — never

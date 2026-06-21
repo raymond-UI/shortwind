@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import { requireRead } from "./lib/auth-guard.js";
+import { requireRead } from "./lib/auth_guard.js";
 
 /**
  * Metered billing usage (CLOUD-43, PRD §6.4 / §11).
