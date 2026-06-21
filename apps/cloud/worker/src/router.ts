@@ -42,6 +42,7 @@
 import type { Env } from "./env.js";
 import {
   resolveRouteWithFallback,
+  putRoute,
   type CachedRoute,
   type ColdRouteSource,
 } from "./kv.js";
@@ -58,12 +59,29 @@ export type TokenValidator = (
   route: CachedRoute,
 ) => Promise<boolean>;
 
-/** The two cold-source functions the router injects (see module header). */
+/**
+ * Resolve an incoming CUSTOM HOSTNAME (a bound `pages.customDomain`) to its page
+ * route (CLOUD-40). Injected like {@link ColdRouteSource} so the router keeps
+ * zero Convex dependency; the live impl reads `by_customDomain` from the cold
+ * source (Convex) and is wired at deploy (CLOUD-30b). Returns `null` when no page
+ * binds the hostname.
+ */
+export type ColdCustomHostnameSource = (
+  host: string,
+) => Promise<CachedRoute | null>;
+
+/** The cold-source functions the router injects (see module header). */
 export interface RouterDeps {
   /** Resolve a route from the cold source (Convex) on a KV miss. */
   coldRoute: ColdRouteSource;
   /** Validate a bearer token for a private page (Convex check). */
   validateToken: TokenValidator;
+  /**
+   * Resolve a bound custom hostname → its page route (CLOUD-40). Optional: when
+   * absent, the custom-hostname branch is skipped and the router behaves exactly
+   * as before (host/path resolution only).
+   */
+  coldCustomHostname?: ColdCustomHostnameSource;
 }
 
 /** Minimal text/html response with no body — used for refusals (4xx/410/451). */
@@ -99,7 +117,24 @@ export async function handleRequest(
 
   // 1. Resolve host/path → route. KV hot, Convex cold (injected). A KV hit does
   //    NOT call the cold source (asserted by tests + kv.ts contract).
-  const route = await resolveRouteWithFallback(env, host, path, deps.coldRoute);
+  let route = await resolveRouteWithFallback(env, host, path, deps.coldRoute);
+
+  // 1b. CLOUD-40 (ADDITIVE): a custom hostname bound to a page (pages.customDomain)
+  //     resolves here. Tried ONLY on a host/path miss, so the existing hot-path
+  //     resolution + KV-hit discipline above is untouched: a normal route never
+  //     reaches this branch. The bound page serves at the hostname root; a deeper
+  //     path under a custom hostname is not a separate route and falls through to
+  //     404 below. The result is cached under (host, path) like any cold hit so a
+  //     repeat view is a KV hit (no Convex call). When no resolver is injected the
+  //     branch is skipped and behavior is identical to before.
+  if (route === null && deps.coldCustomHostname !== undefined) {
+    const custom = await deps.coldCustomHostname(host);
+    if (custom !== null) {
+      await putRoute(env, host, path, custom);
+      route = custom;
+    }
+  }
+
   if (route === null) return refuse(404, "Not Found");
 
   // 2. Enforce lifecycle BEFORE serving (§8.2 takedown states).
