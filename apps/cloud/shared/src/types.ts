@@ -241,6 +241,47 @@ export interface Moderation {
 }
 
 // ---------------------------------------------------------------------------
+// Bundles (CLOUD-50, additive)
+// ---------------------------------------------------------------------------
+
+/** One served file inside a published bundle version. */
+export interface BundleFile {
+  /** The authored bundle-relative POSIX path, e.g. "index.html" or "docs/x.html". */
+  path: string;
+  /** R2 key for this file's frozen Tailwind HTML artifact. */
+  artifactKey: string;
+  /** Hash of the shorthand source that produced this file's artifact. */
+  sourceHash: Sha;
+  /** True for the entry file — the one the bundle slug routes to. */
+  entry: boolean;
+}
+
+/**
+ * An immutable published snapshot of a BUNDLE — a linked multi-file deploy under
+ * ONE entry point (PRD §10 Phase 3). Forward-only like `PageVersion` (PRD §5.6):
+ * a publish appends a new version; the prior is retained (frozen) for rollback.
+ * A bundle is identified by its account-scoped `slug` (the entry handle); its
+ * CURRENT version is the highest-`version` row for that (accountId, slug).
+ */
+export interface BundleVersion {
+  id: Id<"bundleVersions">;
+  accountId: Id<"accounts">;
+  /** Stable URL handle of the entry point. Unique per account at the head version. */
+  slug: string;
+  /** Optional `pages` reference when the entry is also tracked as a page; else null. */
+  entryPageId: Id<"pages"> | null;
+  /** The bundle-relative path of the entry file (the one the slug routes to). */
+  entryPath: string;
+  /** Monotonic version counter for this (accountId, slug) bundle. */
+  version: number;
+  /** The served files: each authored path → its frozen artifact + source hash. */
+  files: BundleFile[];
+  /** Snapshot of the lockfile (family -> version) used to expand this version. */
+  lockfile: Record<string, string>;
+  createdAt: Timestamp;
+}
+
+// ---------------------------------------------------------------------------
 // Idempotency
 // ---------------------------------------------------------------------------
 

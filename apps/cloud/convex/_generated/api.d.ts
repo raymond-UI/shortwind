@@ -21,6 +21,11 @@ import type * as http from "../http.js";
 // A real `convex dev` (CLOUD-30) regenerates this file and supersedes the edit.
 import type * as moderation from "../moderation.js";
 import type * as pages from "../pages.js";
+// CLOUD-50 (manual, additive): the bundle publish module. Declared by hand for
+// the same offline-codegen reason as `pages`/`recipes` — `internal.bundles.*`
+// references in bundles.ts must typecheck without a live `convex dev`. A real
+// `convex dev` (CLOUD-30b) regenerates this file and supersedes the edit.
+import type * as bundles from "../bundles.js";
 import type * as recipes from "../recipes.js";
 import type * as tokens from "../tokens.js";
 // CLOUD-35 (manual, additive): the oversight-dashboard query module. Declared by
@@ -42,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   moderation: typeof moderation;
   pages: typeof pages;
+  bundles: typeof bundles;
   recipes: typeof recipes;
   tokens: typeof tokens;
   dashboard: typeof dashboard;
