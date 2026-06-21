@@ -160,13 +160,39 @@ export interface FindQuery {
   tags?: string[] | undefined;
 }
 
-/** The four verbs the CLI handlers call. Injected as a fake in tests. */
+/**
+ * The verbs the CLI handlers call. Injected as a fake in tests.
+ *
+ * `deletePage` / `setVisibility` (CLOUD-34) are declared OPTIONAL so the many
+ * existing four-verb test mocks (`publish`/`update`/`get`) that build a full
+ * `ApiClient` literal keep typechecking untouched — `createApiClient` always
+ * returns them, and the delete/visibility handlers narrow to the capability
+ * sub-types ({@link DeleteCapableClient} / {@link VisibilityCapableClient}) so
+ * the methods are still statically guaranteed present where they are used.
+ */
 export interface ApiClient {
   findPages(query: FindQuery): Promise<FindResult>;
   getPage(id: string): Promise<GetResult>;
   publishPage(payload: PublishPayload): Promise<PublishResult>;
   updatePage(id: string, payload: UpdatePayload): Promise<PublishResult>;
+  /** `DELETE /v1/pages/{id}` — tombstone the page (CLOUD-31/34). */
+  deletePage?(id: string): Promise<void>;
+  /** `PATCH /v1/pages/{id}/visibility` — set the access level (CLOUD-31/34). */
+  setVisibility?(id: string, level: VisibilityLevel): Promise<PageSummary>;
 }
+
+/** The three page access levels (PRD §4 — mirrors the server contract). */
+export type VisibilityLevel = "public" | "unlisted" | "private";
+
+/** An {@link ApiClient} known to carry `deletePage` (the delete handler's seam). */
+export type DeleteCapableClient = ApiClient & {
+  deletePage(id: string): Promise<void>;
+};
+
+/** An {@link ApiClient} known to carry `setVisibility` (the visibility seam). */
+export type VisibilityCapableClient = ApiClient & {
+  setVisibility(id: string, level: VisibilityLevel): Promise<PageSummary>;
+};
 
 /** The `fetch` signature the client depends on (global `fetch` satisfies it). */
 export type FetchLike = (
@@ -329,6 +355,22 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
         "PATCH",
         `/v1/pages/${encodeURIComponent(id)}`,
         payload,
+      );
+    },
+
+    async deletePage(id: string): Promise<void> {
+      // DELETE /v1/pages/{id} — the server tombstones and returns no body
+      // (204/empty). `request` already normalizes an empty body to `{}`;
+      // discard it. 401/403/404 flow through the shared `toApiError` mapping.
+      await request<unknown>("DELETE", `/v1/pages/${encodeURIComponent(id)}`);
+    },
+
+    setVisibility(id: string, level: VisibilityLevel): Promise<PageSummary> {
+      // PATCH /v1/pages/{id}/visibility { visibility } → the updated summary.
+      return request<PageSummary>(
+        "PATCH",
+        `/v1/pages/${encodeURIComponent(id)}/visibility`,
+        { visibility: level },
       );
     },
   };
