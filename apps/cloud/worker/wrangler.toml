@@ -1,0 +1,15 @@
+# CLOUD-02 Phase-0 spike stub. NOT the production Worker config.
+#
+# This exists only so `expand-edge.ts` is a deployable Worker entrypoint and so
+# the @cloudflare/vitest-pool-workers runtime can boot workerd against the same
+# settings. The production Worker (serve path) is wired in a later wave and does
+# NOT expand — expansion happens server-side at publish via the Convex action
+# (CLOUD-20).
+#
+# Hypothesis under test: @shortwind/core needs NO Node built-ins, so this config
+# carries NO `compatibility_flags = ["nodejs_compat"]`. If the spike test fails
+# to boot/run without it, add the flag here and in worker/vitest.config.ts and
+# record that in SPIKE.md. Outcome: see worker/SPIKE.md.
+name = "shortwind-cloud-expand-spike"
+main = "src/expand-edge.ts"
+compatibility_date = "2025-06-01"

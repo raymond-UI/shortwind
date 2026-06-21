@@ -1,2 +1,0 @@
-# Cloudflare Worker serve router (hot path) + edge bindings (R2/KV/cache).
-# Filled in by CLOUD-02 (expand spike), CLOUD-21 (R2/KV), CLOUD-22 (router).
