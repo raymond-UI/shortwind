@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
 import { api } from "./_generated/api.js";
-import { __setScanSources, __resetScanSources } from "./pages.js";
+import {
+  __setScanSources,
+  __resetScanSources,
+  __setLifecycleEdgePort,
+  __resetLifecycleEdgePort,
+  type LifecycleEdgePort,
+} from "./pages.js";
 import {
   __setPublishLimiter,
   __resetPublishLimiter,
@@ -100,7 +106,30 @@ async function benignRecipes() {
 afterEach(() => {
   __resetScanSources();
   __resetPublishLimiter();
+  __resetLifecycleEdgePort();
 });
+
+/** A recording lifecycle edge port so a test can assert evict/invalidate fired. */
+function recordingEdgePort(): {
+  port: LifecycleEdgePort;
+  invalidated: string[];
+  evicted: { pageId: string; slug: string }[];
+} {
+  const invalidated: string[] = [];
+  const evicted: { pageId: string; slug: string }[] = [];
+  return {
+    invalidated,
+    evicted,
+    port: {
+      invalidate: async (url) => {
+        invalidated.push(url);
+      },
+      evictRoute: async (route) => {
+        evicted.push(route);
+      },
+    },
+  };
+}
 
 describe("publish-time CSAM hash-match (PRD §8.2 proactive hash-matching)", () => {
   it("blocks publish AND opens a CSAM moderation case via the CLOUD-32 seam", async () => {
@@ -145,6 +174,35 @@ describe("publish-time CSAM hash-match (PRD §8.2 proactive hash-matching)", () 
     expect(found).toHaveLength(0);
   });
 
+  it("EVICTS the edge route + purges the cache on a CSAM block (stops serving now, not after TTL)", async () => {
+    // PR #143 BLOCKER: `runPublish` publishes an active KV route before the block;
+    // the block MUST evict it so a CSAM artifact stops serving immediately. Assert
+    // the lifecycle edge port (the same seam delete/kill drive) was fired.
+    const t = convexTest(schema, modules);
+    __setPublishLimiter(inMemoryPublishLimiter({ capacity: 100, now: () => 0 }));
+    const edge = recordingEdgePort();
+    __setLifecycleEdgePort(edge.port);
+    const { bearer } = await seedAuth(t);
+
+    const badHtml = '<div class="@card">contraband</div>';
+    const knownHash = await digestArtifact(badHtml);
+    __setScanSources({ hashList: makeHashList("ncmec-test", [knownHash]) });
+
+    await expect(
+      t.action(api.pages.publish, {
+        bearer,
+        ...publishArgs(badHtml, "contraband-evict"),
+        recipes: await benignRecipes(),
+      }),
+    ).rejects.toThrow();
+
+    // The KV route the publish just put up was evicted + the cache purged.
+    expect(edge.evicted).toHaveLength(1);
+    expect(edge.evicted[0]!.slug).toBe("contraband-evict");
+    expect(edge.invalidated).toHaveLength(1);
+    expect(edge.invalidated[0]).toContain("contraband-evict");
+  });
+
   it("passes a clean artifact (unknown hash → publish succeeds, no case)", async () => {
     const t = convexTest(schema, modules);
     __setPublishLimiter(inMemoryPublishLimiter({ capacity: 100, now: () => 0 }));
@@ -169,9 +227,14 @@ describe("publish-time CSAM hash-match (PRD §8.2 proactive hash-matching)", () 
 });
 
 describe("publish-time classifier (PRD §8.4)", () => {
-  it("BLOCKS a high-score page + opens a `reported` case", async () => {
+  it("BLOCKS a high-score page → quarantines it (NOT public), opens a case, and EVICTS the edge route", async () => {
+    // PR #143 review: a classifier `block` is a HARD reject — it must NOT leave a
+    // findable/served page. Assert the page is quarantined (excluded from `find`)
+    // and the edge route is evicted, mirroring the CSAM path.
     const t = convexTest(schema, modules);
     __setPublishLimiter(inMemoryPublishLimiter({ capacity: 100, now: () => 0 }));
+    const edge = recordingEdgePort();
+    __setLifecycleEdgePort(edge.port);
     const { bearer } = await seedAuth(t);
 
     const phishing =
@@ -187,11 +250,26 @@ describe("publish-time classifier (PRD §8.4)", () => {
     ).rejects.toThrow();
 
     await t.run(async (ctx) => {
+      // The page is QUARANTINED — a classifier block does not leave it public.
+      const pages = await ctx.db.query("pages").collect();
+      expect(pages).toHaveLength(1);
+      expect(pages[0]!.lifecycle).toBe("quarantined");
+
       const cases = await ctx.db.query("moderation").collect();
       expect(cases).toHaveLength(1);
-      expect(cases[0]!.state).toBe("reported");
+      // The quarantine case state (the page is pulled, not merely reported).
+      expect(cases[0]!.state).toBe("quarantined");
       expect(cases[0]!.reason).toContain("classifier-block");
     });
+
+    // The KV route the publish put up was evicted + the cache purged.
+    expect(edge.evicted).toHaveLength(1);
+    expect(edge.evicted[0]!.slug).toBe("phish");
+    expect(edge.invalidated).toHaveLength(1);
+
+    // Not public: excluded from `find`.
+    const found = await t.query(api.pages.find, { bearer });
+    expect(found).toHaveLength(0);
   });
 
   it("ALLOWS a `review`-score page but FLAGS it (reported case, still public)", async () => {
@@ -226,6 +304,60 @@ describe("publish-time classifier (PRD §8.4)", () => {
     // A flagged page is still public/findable (the classifier is uncertain).
     const found = await t.query(api.pages.find, { bearer });
     expect(found.map((p) => p.id)).toContain(out.ok ? out.id : "");
+  });
+});
+
+describe("blocked-publish idempotency (PR #143 review nit)", () => {
+  it("a retried CSAM-block with the SAME idempotencyKey RE-BLOCKS (no cached success replay, no INVALID_TRANSITION)", async () => {
+    const t = convexTest(schema, modules);
+    __setPublishLimiter(inMemoryPublishLimiter({ capacity: 100, now: () => 0 }));
+    const edge = recordingEdgePort();
+    __setLifecycleEdgePort(edge.port);
+    const { bearer } = await seedAuth(t);
+
+    const badHtml = '<div class="@card">contraband</div>';
+    const knownHash = await digestArtifact(badHtml);
+    __setScanSources({ hashList: makeHashList("ncmec-test", [knownHash]) });
+
+    const reqArgs = {
+      bearer,
+      ...publishArgs(badHtml, "contraband-idem"),
+      recipes: await benignRecipes(),
+      idempotencyKey: "retry-key-1",
+    };
+
+    // First attempt: blocked (thrown), page quarantined, route evicted.
+    await expect(t.action(api.pages.publish, reqArgs)).rejects.toThrow();
+
+    // The blocked outcome must NOT have left a cached `{ok:true}` idempotency row.
+    await t.run(async (ctx) => {
+      const keys = await ctx.db.query("idempotencyKeys").collect();
+      expect(keys).toHaveLength(0);
+    });
+
+    // Retry with the SAME key: must RE-BLOCK (not replay success) and surface
+    // CSAM_BLOCKED — NOT INVALID_TRANSITION (the page is already quarantined).
+    let err: unknown;
+    try {
+      await t.action(api.pages.publish, reqArgs);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeDefined();
+    expect(errData(err).code).toBe("CSAM_BLOCKED");
+
+    // Still exactly one page, still quarantined; the re-block re-evicted the route.
+    await t.run(async (ctx) => {
+      const pages = await ctx.db.query("pages").collect();
+      expect(pages).toHaveLength(1);
+      expect(pages[0]!.lifecycle).toBe("quarantined");
+    });
+    // evictRoute fired on BOTH the first block and the idempotent re-block.
+    expect(edge.evicted.length).toBeGreaterThanOrEqual(2);
+
+    // Not public on either attempt.
+    const found = await t.query(api.pages.find, { bearer });
+    expect(found).toHaveLength(0);
   });
 });
 

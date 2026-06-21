@@ -471,14 +471,21 @@ export interface LifecycleEdgePort {
   evictRoute(args: { pageId: string; slug: string }): Promise<void>;
 }
 
-let lifecycleEdgePort: LifecycleEdgePort = {
+const defaultLifecycleEdgePort: LifecycleEdgePort = {
   invalidate: (url) => invalidateEdge(url),
   evictRoute: (route) => deleteEdgeRoute(route),
 };
 
+let lifecycleEdgePort: LifecycleEdgePort = defaultLifecycleEdgePort;
+
 /** Test-only: override the lifecycle edge port to assert it was driven. */
 export function __setLifecycleEdgePort(port: LifecycleEdgePort): void {
   lifecycleEdgePort = port;
+}
+
+/** Test-only: restore the production (no-op placeholder) lifecycle edge port. */
+export function __resetLifecycleEdgePort(): void {
+  lifecycleEdgePort = defaultLifecycleEdgePort;
 }
 
 // ===========================================================================
@@ -642,12 +649,31 @@ export async function runPublishScan(
 }
 
 /**
- * Internal mutation: open a moderation case for a scan-blocked publish via the
- * CLOUD-32 seam. A CSAM hash match drives `applyLifecycle('quarantine', csam)`
- * (seal the artifact, open the case, stamp the 60-day NCMEC clock — the page is
- * pulled, never public). A classifier block opens a `reported` case (a human /
- * the kill verb actions it). Either way the page already exists (materialized by
- * the publish), so the seam has a pageId + sealed artifact to preserve.
+ * Internal mutation: BLOCK a scan-flagged publish — pull the page so it is never
+ * public AND evict the edge route it was just published on, then open/advance the
+ * moderation case. Both block kinds quarantine through the CLOUD-32 seam so the
+ * page stops serving (lifecycle → quarantined, excluded from `find`):
+ *
+ *   - `csam`       — `applyLifecycle('quarantine', csam)`: seal the artifact, open
+ *                    the CSAM case, stamp the 60-day NCMEC clock (preserve-not-
+ *                    delete). The CSAM case reason carries the matched list id.
+ *   - `classifier` — `applyLifecycle('quarantine')` too: a `block` verdict is a
+ *                    HARD reject, so the page must NOT stay public/findable while a
+ *                    human actions it. The case reason marks it `classifier-block`.
+ *
+ * THE LEGAL-CRITICAL STEP (PR #143 review BLOCKER): `runPublish` already published
+ * an `active` KV route (`edge.putRoute`) for this page before this mutation runs,
+ * so flipping the DB row to `quarantined` is NOT enough — the artifact would keep
+ * serving a live 200 from the KV/edge cache for up to the 1h route TTL. We MUST
+ * evict the route + purge the edge cache the same way `deletePage`/`killPage` do
+ * (`lifecycleEdgePort.invalidate` + `evictRoute`) so it stops serving immediately.
+ *
+ * IDEMPOTENT BLOCK (review nit): a publish retried with an idempotencyKey re-scans
+ * and re-blocks; the page is then ALREADY `quarantined`, so the pure transition
+ * (`active → quarantined` only) would reject with `INVALID_TRANSITION`. We guard
+ * that: an already-quarantined page is treated as a successful (idempotent) block —
+ * we skip the transition but still evict the edge route, so the action surfaces
+ * `CSAM_BLOCKED`/`CONTENT_BLOCKED`, never the confusing `INVALID_TRANSITION`.
  */
 export const commitScanBlock = internalMutation({
   args: {
@@ -660,47 +686,75 @@ export const commitScanBlock = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (args.kind === "csam") {
-      // Hard block: quarantine (seal + open the CSAM case + 60-day clock) through
-      // the CLOUD-32 kill seam. The page never serves (lifecycle → quarantined,
-      // excluded from `find`); the artifact is preserved, never hard-deleted.
+    const page = await ctx.db.get(args.pageId);
+    if (!page || page.accountId !== args.accountId) {
+      // The page was just materialized by this same action — absence is a bug.
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+    }
+
+    // Quarantine (pull) the page UNLESS it is already quarantined (an idempotent
+    // re-block of a prior block). `active → quarantined` is the only legal source,
+    // so re-entering applyLifecycle on a quarantined page would throw
+    // INVALID_TRANSITION; treat the already-quarantined state as block-success.
+    if (page.lifecycle === "active") {
       const now = Date.now();
+      const isCsam = args.kind === "csam";
       await applyLifecycle(ctx, {
         pageId: args.pageId,
         accountId: args.accountId,
         tokenId: args.actorTokenId,
         transition: "quarantine",
-        reason: `[csam] proactive hash-match (${args.listId ?? "unknown"})`,
-        caseFields: {
-          // NCMEC 60-day preservation clock (matches moderation.killPage csam path).
-          ncmecReportId: null,
-          preservationExpiresAt: now + 60 * 24 * 60 * 60 * 1000,
-        },
+        reason: isCsam
+          ? `[csam] proactive hash-match (${args.listId ?? "unknown"})`
+          : `[classifier-block] ${args.reason}`,
+        caseFields: isCsam
+          ? {
+              // NCMEC 60-day preservation clock (matches moderation.killPage csam).
+              ncmecReportId: null,
+              preservationExpiresAt: now + 60 * 24 * 60 * 60 * 1000,
+            }
+          : undefined,
       });
-      return null;
+      await ctx.db.insert("auditLog", {
+        accountId: args.accountId,
+        action: "page.scan.block",
+        targetId: args.pageId,
+        actorTokenId: args.actorTokenId,
+        metadata: { kind: args.kind, reason: args.reason },
+        createdAt: now,
+      });
     }
-    // Classifier block: open a `reported` case (does not seal/quarantine here —
-    // an operator/the kill verb drives the pull) + audit. Mirrors reportAbuse.
-    await ctx.db.insert("moderation", {
-      pageId: args.pageId,
-      accountId: args.accountId,
-      state: "reported",
-      reason: `[classifier-block] ${args.reason}`,
-      reporterContact: null,
-      ncmecReportId: null,
-      preservedR2Key: null,
-      preservationExpiresAt: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    await ctx.db.insert("auditLog", {
-      accountId: args.accountId,
-      action: "page.scan.block",
-      targetId: args.pageId,
-      actorTokenId: args.actorTokenId,
-      metadata: { reason: args.reason },
-      createdAt: Date.now(),
-    });
+
+    // LEGAL-CRITICAL: evict the KV route + purge the edge cache the publish just
+    // put up, so the blocked artifact stops serving immediately (not after TTL).
+    // Mirrors deletePage/killPage. Driven on EVERY block (incl. idempotent re-block)
+    // so a retry re-asserts the eviction.
+    const url = summaryUrl(pageBaseUrl(), page.slug);
+    await lifecycleEdgePort.invalidate(url);
+    await lifecycleEdgePort.evictRoute({ pageId: args.pageId, slug: page.slug });
+
+    return null;
+  },
+});
+
+/**
+ * Internal mutation: drop a cached idempotency result for a blocked publish. The
+ * core `runPublish` caches `{ok:true}` keyed by `idempotencyKey` BEFORE this hook
+ * quarantines+throws, so a naive retry would replay that cached success instead of
+ * re-blocking. We delete the cached row on a block so a retry re-scans → re-blocks
+ * (the re-block is idempotent — see `commitScanBlock`).
+ */
+export const dropIdempotency = internalMutation({
+  args: { accountId: v.id("accounts"), key: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("idempotencyKeys")
+      .withIndex("by_key", (q) =>
+        q.eq("accountId", args.accountId).eq("key", args.key),
+      )
+      .unique();
+    if (row) await ctx.db.delete(row._id);
     return null;
   },
 });
@@ -836,17 +890,40 @@ export const publish = action({
 
     // --- CLOUD-33 post-materialize scan disposition ---------------------------
     // The scan ran on the artifact above. The CLOUD-32 kill seam / case open needs
-    // the materialized pageId, so a BLOCK acts here once the publish succeeded,
-    // then THROWS so the action never returns a success for blocked content (the
-    // page is quarantined/cased, never public). A `review` flag rides along and is
-    // recorded but the publish still succeeds. A 409 collision created no new page.
-    if (outcome.ok && !gate.proceed) {
-      const pageId = outcome.result.id as Id<"pages">;
+    // a pageId, so a BLOCK acts here once the publish landed, then THROWS so the
+    // action never returns a success for blocked content (the page is quarantined +
+    // its edge route evicted, never public). A `review` flag rides along and is
+    // recorded but the publish still succeeds.
+    //
+    // A blocked publish has TWO materialize shapes that both resolve to a page id:
+    //   - `outcome.ok`        → the page we just created (first attempt);
+    //   - 409 collision       → an idempotency RETRY whose slug now resolves to the
+    //                           page the FIRST attempt quarantined. `runPublish`
+    //                           returns a 409 (the slug is taken) instead of
+    //                           re-creating, so we re-block that SAME page (the
+    //                           re-block is idempotent — already-quarantined ⇒
+    //                           block-success) and re-surface CSAM_BLOCKED/
+    //                           CONTENT_BLOCKED, never a confusing 409 for content
+    //                           that must never publish.
+    if (!gate.proceed) {
+      const blockedPageId: Id<"pages"> = outcome.ok
+        ? (outcome.result.id as Id<"pages">)
+        : (outcome.collision.existingId as Id<"pages">);
+      // A blocked publish must NOT leave a cached `{ok:true}` idempotency result
+      // (`runPublish` writes one before we block): a retry must re-scan + re-block,
+      // not replay a success that was never honored. Drop it before we throw.
+      if (args.idempotencyKey !== undefined) {
+        await ctx.runMutation(internal.pages.dropIdempotency, {
+          accountId: auth.accountId as Id<"accounts">,
+          key: args.idempotencyKey,
+        });
+      }
       if (gate.rejection.code === "BLOCKED_CSAM") {
         // Proactive CSAM hash match → quarantine via the CLOUD-32 kill seam + open
-        // the CSAM case (preserve-not-delete, 60-day clock). The page is pulled.
+        // the CSAM case (preserve-not-delete, 60-day clock) + EVICT the edge route
+        // the publish just put up (the page is pulled and stops serving at once).
         await ctx.runMutation(internal.pages.commitScanBlock, {
-          pageId,
+          pageId: blockedPageId,
           accountId: auth.accountId as Id<"accounts">,
           actorTokenId: auth.tokenId as Id<"tokens">,
           kind: "csam",
@@ -859,9 +936,10 @@ export const publish = action({
         });
       }
       if (gate.rejection.code === "BLOCKED_CONTENT") {
-        // Classifier block → open a `reported` case; the page is not surfaced.
+        // Classifier block → quarantine (a `block` verdict is a hard reject — the
+        // page is NOT left public) + open the case + EVICT the edge route.
         await ctx.runMutation(internal.pages.commitScanBlock, {
-          pageId,
+          pageId: blockedPageId,
           accountId: auth.accountId as Id<"accounts">,
           actorTokenId: auth.tokenId as Id<"tokens">,
           kind: "classifier",
