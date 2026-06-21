@@ -1,0 +1,35 @@
+{
+  "name": "@shortwind/cloud-dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shortwind Cloud — human oversight dashboard (Convex-reactive: pages, audit log, recipe-edit visibility, moderation, operator policy). Never published.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@convex-dev/better-auth": "0.11.4",
+    "@tanstack/react-router": "^1.154.8",
+    "better-auth": "1.5.3",
+    "convex": "1.31.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "jsdom": "^25.0.1",
+    "typescript": "5.7.3",
+    "vite": "^7.3.1",
+    "vitest": "4.1.4"
+  }
+}

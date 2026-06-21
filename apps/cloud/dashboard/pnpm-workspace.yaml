@@ -1,0 +1,9 @@
+# Makes `apps/cloud/dashboard/` its OWN pnpm workspace root, decoupled from the
+# `apps/cloud/` workspace above it (which has `packages: []` and therefore does
+# not adopt this nested package). Mirrors the apps/cloud ← repo-root precedent.
+# The dashboard carries its own React/Vite/TanStack/vitest deps here (CLOUD-35)
+# without touching the convex-side `apps/cloud/package.json`. Never published.
+packages: []
+
+allowBuilds:
+  esbuild: true

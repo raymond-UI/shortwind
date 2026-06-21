@@ -15,6 +15,7 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["shared", "convex", "worker", "cli", "dashboard"],
-  "exclude": ["node_modules", "**/_generated", "dist"]
+  "include": ["shared", "convex", "worker", "cli"],
+  "comment:dashboard": "CLOUD-35: the dashboard is its OWN sub-package (apps/cloud/dashboard) with its own tsconfig (jsx: react-jsx, DOM/React types) + build/typecheck. The convex-side tsc here must NOT compile its .tsx — that needs jsx + browser types this config deliberately lacks. So `dashboard` is dropped from `include` and excluded below; it is typechecked by `pnpm -C apps/cloud/dashboard typecheck`.",
+  "exclude": ["node_modules", "**/_generated", "dist", "dashboard"]
 }
