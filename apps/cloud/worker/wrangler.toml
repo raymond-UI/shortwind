@@ -15,6 +15,10 @@ name = "shortwind-cloud-serve"
 main = "src/router.ts"
 compatibility_date = "2025-06-01"
 
+# CLOUD-30b: live Cloudflare account. The serve Worker deploys to
+# shortwind-cloud-serve.mzed-studio.workers.dev under this account.
+account_id = "31d65fe8d35768972de29c4199b648ee"
+
 # --- routes (custom hostnames) ----------------------------------------------
 # Placeholder. The live serve hostnames — including the Cloudflare-for-SaaS
 # custom-hostname fallback that fronts bind-domain pages (PRD §6.1) — are wired
@@ -34,17 +38,18 @@ compatibility_date = "2025-06-01"
 # Leave these as placeholders until then.
 
 [[r2_buckets]]
-binding = "ARTIFACTS"                      # env.ARTIFACTS — frozen HTML artifacts
-bucket_name = "shortwind-artifacts-local"  # CLOUD-30: real bucket name
+binding = "ARTIFACTS"                 # env.ARTIFACTS — frozen HTML artifacts
+bucket_name = "shortwind-artifacts"   # CLOUD-30b: live R2 bucket
 
 [[kv_namespaces]]
-binding = "ROUTES"              # env.ROUTES — hostname/path -> route hot cache
-id = "shortwind-routes-local"   # CLOUD-30: real KV namespace id (+ preview_id)
+binding = "ROUTES"                            # env.ROUTES — hostname/path -> route hot cache
+id = "7baeea10fb4041a095005bc4aaabb6cd"       # CLOUD-30b: live KV namespace (ROUTES)
 
 # --- live cold source (Convex) ----------------------------------------------
 # The router's cold-source resolution + private-token validation hit Convex on a
-# KV miss. The live Convex HTTP URL is a deferred placeholder (CLOUD-30 wires the
-# real value + injects the live RouterDeps); until then the worker's default deps
-# are closed-by-default (every cold miss → 404, every token → 401).
+# KV miss. CLOUD-30b wires the live Convex HTTP origin; the router's defaultDeps
+# fetch the route resolver at `${CONVEX_HTTP_URL}/internal/resolve` and validate
+# private bearers at `${CONVEX_HTTP_URL}/internal/validate-token`. An empty value
+# keeps the worker closed-by-default (every cold miss → 404, every token → 401).
 [vars]
-CONVEX_HTTP_URL = ""  # CLOUD-30: live Convex HTTP route base URL
+CONVEX_HTTP_URL = "https://rare-toad-197.convex.site"  # CLOUD-30b: live Convex HTTP origin

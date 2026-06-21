@@ -184,19 +184,93 @@ export async function handleRequest(
 }
 
 /**
- * Default cold-source deps for an un-provisioned worker.
- *
- * Until CLOUD-30 wires the live Convex query + token check, the worker resolves
- * NOTHING from cold (every KV miss → 404) and trusts NO token (every private
- * page → 401). Closed-by-default: a worker without its Convex wiring cannot
- * accidentally serve private content or invent routes. The live URL/credentials
- * live in env placeholders (see wrangler.toml) and replace these in CLOUD-30.
+ * The route projection the Convex `/internal/resolve` endpoint returns. It is a
+ * `CachedRoute` (the Worker JSON-parses it straight into one) or `null`. Declared
+ * locally so the router keeps zero Convex dependency (CLAUDE.md).
  */
-function defaultDeps(_env: Env): RouterDeps {
-  return {
-    coldRoute: async () => null,
-    validateToken: async () => false,
+type ResolvedRoute = CachedRoute | null;
+
+/** Narrow an unknown JSON value to a CachedRoute (defensive against a malformed
+ * cold-source response — anything off-shape resolves to a 404, never a serve). */
+function asCachedRoute(value: unknown): CachedRoute | null {
+  if (value === null || typeof value !== "object") return null;
+  const r = value as Record<string, unknown>;
+  if (
+    typeof r.pageId === "string" &&
+    typeof r.accountId === "string" &&
+    typeof r.version === "number" &&
+    typeof r.artifactKey === "string" &&
+    (r.lifecycle === "active" ||
+      r.lifecycle === "quarantined" ||
+      r.lifecycle === "tombstoned") &&
+    (r.visibility === "public" ||
+      r.visibility === "unlisted" ||
+      r.visibility === "private")
+  ) {
+    return value as unknown as CachedRoute;
+  }
+  return null;
+}
+
+/**
+ * Live cold-source deps for a provisioned worker (CLOUD-30b).
+ *
+ * When `env.CONVEX_HTTP_URL` is set, the worker resolves a KV miss against the
+ * Convex system of record and validates private-page bearers there:
+ *   - `coldRoute(host, path)`  → GET `${CONVEX_HTTP_URL}/internal/resolve`
+ *   - `validateToken(tok,rte)` → GET `${CONVEX_HTTP_URL}/internal/validate-token`
+ *
+ * Closed-by-default fallback: when `CONVEX_HTTP_URL` is EMPTY (an un-provisioned
+ * worker) the worker resolves NOTHING from cold (every KV miss → 404) and trusts
+ * NO token (every private page → 401), so it can never accidentally serve private
+ * content or invent routes. A cold-source error (network/5xx) also resolves to
+ * "no route" / "token invalid" — fail closed, never fail open.
+ *
+ * The hot-path discipline is preserved: these are only ever invoked by
+ * `resolveRouteWithFallback` on a KV MISS (a KV hit never calls cold), and a cold
+ * hit is written back to KV by that helper, so a repeat view is a pure KV serve.
+ */
+function defaultDeps(env: Env): RouterDeps {
+  const base = (env.CONVEX_HTTP_URL ?? "").replace(/\/+$/, "");
+  if (base === "") {
+    // Un-provisioned: closed-by-default.
+    return {
+      coldRoute: async () => null,
+      validateToken: async () => false,
+    };
+  }
+
+  const coldRoute: ColdRouteSource = async (host, path) => {
+    try {
+      const url = `${base}/internal/resolve?host=${encodeURIComponent(
+        host,
+      )}&path=${encodeURIComponent(path)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const body = (await res.json()) as ResolvedRoute;
+      return asCachedRoute(body);
+    } catch {
+      // Fail closed: a cold-source error must not serve or invent a route.
+      return null;
+    }
   };
+
+  const validateToken: TokenValidator = async (token, route) => {
+    try {
+      const url = `${base}/internal/validate-token?bearer=${encodeURIComponent(
+        token,
+      )}&pageId=${encodeURIComponent(route.pageId)}`;
+      const res = await fetch(url);
+      if (!res.ok) return false;
+      const body = (await res.json()) as { ok?: unknown };
+      return body.ok === true;
+    } catch {
+      // Fail closed: a validation error denies access.
+      return false;
+    }
+  };
+
+  return { coldRoute, validateToken };
 }
 
 /**

@@ -21,4 +21,12 @@ export interface Env {
   ARTIFACTS: R2Bucket;
   /** KV namespace: hostname/path → route record hot cache. Binding: `ROUTES`. */
   ROUTES: KVNamespace;
+  /**
+   * CLOUD-30b: the live Convex HTTP origin (e.g. `https://rare-toad-197.convex.site`),
+   * injected as a `[vars]` value in `wrangler.toml`. The router's cold source
+   * fetches the route resolver (`/internal/resolve`) and the private-token
+   * validator (`/internal/validate-token`) under this origin on a KV miss. An
+   * empty string keeps the worker closed-by-default (cold miss → 404, token → 401).
+   */
+  CONVEX_HTTP_URL: string;
 }

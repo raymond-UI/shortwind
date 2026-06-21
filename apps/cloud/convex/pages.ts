@@ -451,19 +451,79 @@ function makeEdgePort(): EdgePort {
 // the publish path is exercisable end-to-end before the infra lands.
 // ---------------------------------------------------------------------------
 
+/**
+ * CLOUD-30b: minimal `process.env` accessor. This workspace types against
+ * `@cloudflare/workers-types` (no Node `process`), so we declare the slice we
+ * read — the R2 S3 credentials the publish action signs requests with. These are
+ * set on the Convex deployment via `npx convex env set` (see the doc comment on
+ * {@link writeArtifactToR2}); absent in dev/test ⇒ the write is skipped.
+ */
+declare const process: { env: Record<string, string | undefined> };
+
+/**
+ * PUT a frozen artifact to R2 via its S3-compatible API, SigV4-signed with
+ * `aws4fetch` (no `@aws-sdk` — lightweight, one fetch). The object is written
+ * with `Content-Type: text/html; charset=utf-8` and the same custom metadata the
+ * Worker's `r2.ts` reads back (`x-amz-meta-{expandedhash,version,accountid,pageid}`).
+ *
+ * Env (set on the Convex deployment with `npx convex env set <NAME> <value>`):
+ *   - `R2_S3_ENDPOINT`       — `https://<accountid>.r2.cloudflarestorage.com`
+ *   - `R2_ACCESS_KEY_ID`     — R2 S3 access key id
+ *   - `R2_SECRET_ACCESS_KEY` — R2 S3 secret access key
+ *   - `R2_BUCKET_NAME`       — bucket name (defaults to `shortwind-artifacts`)
+ *
+ * These R2 S3 keys are PENDING from the user at the time of this wave; until they
+ * are set on the Convex deployment this function SKIPS the write (so the pipeline
+ * still runs end-to-end in dev/test without R2 creds, exactly as the prior no-op
+ * did). It does NOT fake a success — when creds ARE present it performs the real
+ * signed PUT and throws on a non-2xx so a failed write surfaces (publish fails
+ * loudly rather than silently dropping the artifact).
+ */
 async function writeArtifactToR2(
   key: string,
   html: string,
   meta: { expandedHash: string; version: number; accountId: string; pageId: string },
 ): Promise<void> {
-  // CLOUD-30: PUT to the R2 bucket via its S3-compatible API using `R2_ENDPOINT`,
-  // `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. Content-Type
-  // text/html; charset=utf-8; customMetadata mirrors worker/src/r2.ts ArtifactMeta
-  // (expandedHash, version, accountId, pageId). Until then this is a no-op so the
-  // pipeline runs in dev/test deployments without R2 creds.
-  void key;
-  void html;
-  void meta;
+  const endpoint = process.env.R2_S3_ENDPOINT;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const bucket = process.env.R2_BUCKET_NAME ?? "shortwind-artifacts";
+
+  // Creds not yet provisioned (PENDING): skip the write so the publish pipeline
+  // still runs in dev/test. Wired live once `npx convex env set R2_*` is run.
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
+    return;
+  }
+
+  // Lazy import so the dependency is only pulled when a real write happens.
+  const { AwsClient } = await import("aws4fetch");
+  const client = new AwsClient({
+    accessKeyId,
+    secretAccessKey,
+    service: "s3",
+    region: "auto", // R2 uses the fixed "auto" region for SigV4.
+  });
+
+  const objectUrl = `${endpoint.replace(/\/+$/, "")}/${bucket}/${key}`;
+  const res = await client.fetch(objectUrl, {
+    method: "PUT",
+    body: html,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      // Mirror worker/src/r2.ts ArtifactMeta. S3 custom metadata rides as
+      // `x-amz-meta-*`; R2 surfaces these as the object's customMetadata.
+      "x-amz-meta-expandedhash": meta.expandedHash,
+      "x-amz-meta-version": String(meta.version),
+      "x-amz-meta-accountid": meta.accountId,
+      "x-amz-meta-pageid": meta.pageId,
+    },
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `R2 artifact PUT failed (${res.status}) for ${key}: ${detail.slice(0, 200)}`,
+    );
+  }
 }
 
 async function invalidateEdge(url: string): Promise<void> {

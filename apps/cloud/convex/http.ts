@@ -411,6 +411,55 @@ http.route({
   handler: apiCatalogHandler,
 });
 
+// ---------------------------------------------------------------------------
+// CLOUD-30b — Worker serve-path COLD SOURCE. The serve Worker
+// (worker/src/router.ts) falls back to these on a KV miss. PUBLIC, no app auth
+// on `/internal/resolve` (it returns only the route projection the Worker needs;
+// the Worker enforces lifecycle/visibility). `/internal/validate-token` does the
+// private-page bearer check via the standard read guard.
+// ---------------------------------------------------------------------------
+
+/** GET /internal/resolve?host=&path= → the Worker route record (or null). */
+const resolveRouteHandler = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const route = await ctx.runQuery(api.serve.resolveRoute, {
+    host: url.searchParams.get("host") ?? "",
+    path: url.searchParams.get("path") ?? "",
+  });
+  // The Worker JSON-parses this directly into a CachedRoute (or null → 404).
+  return json(route, 200);
+});
+
+/**
+ * GET /internal/validate-token?bearer=&pageId= → `{ ok }`. Validates a bearer
+ * for a PRIVATE page. The underlying query throws on an invalid/insufficient
+ * token (auth guard); we translate any throw to `{ ok: false }` so the Worker
+ * gets a uniform boolean and 401s a bad token.
+ */
+const validateTokenHandler = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  try {
+    const result = await ctx.runQuery(api.serve.validateRouteToken, {
+      bearer: url.searchParams.get("bearer") ?? "",
+      pageId: url.searchParams.get("pageId") ?? "",
+    });
+    return json(result, 200);
+  } catch {
+    return json({ ok: false }, 200);
+  }
+});
+
+http.route({
+  path: "/internal/resolve",
+  method: "GET",
+  handler: resolveRouteHandler,
+});
+http.route({
+  path: "/internal/validate-token",
+  method: "GET",
+  handler: validateTokenHandler,
+});
+
 http.route({ path: "/v1/abuse", method: "POST", handler: abuseHandler });
 
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });

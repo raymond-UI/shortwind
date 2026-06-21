@@ -23,6 +23,7 @@ import type * as lib_rate_limit from "../lib/rate_limit.js";
 import type * as moderation from "../moderation.js";
 import type * as pages from "../pages.js";
 import type * as recipes from "../recipes.js";
+import type * as serve from "../serve.js";
 import type * as tokens from "../tokens.js";
 import type * as wellknown from "../wellknown.js";
 
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   moderation: typeof moderation;
   pages: typeof pages;
   recipes: typeof recipes;
+  serve: typeof serve;
   tokens: typeof tokens;
   wellknown: typeof wellknown;
 }>;
