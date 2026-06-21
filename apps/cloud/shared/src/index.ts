@@ -1,4 +1,6 @@
-// Barrel for the shared plain-data layer. Later waves add lockfile-diff, slug,
-// and fingerprint helpers (CLOUD-03).
+// Barrel for the shared plain-data layer.
 export * from "./types.js";
 export * from "./scopes.js";
+export * from "./lockfile-diff.js";
+export * from "./slug.js";
+export * from "./fingerprint.js";
