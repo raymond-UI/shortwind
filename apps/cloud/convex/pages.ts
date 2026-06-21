@@ -33,6 +33,7 @@ import {
   type StoragePort,
 } from "./lib/publish_core.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
+import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
 
 /**
  * Page publish + update — the thick path (CLOUD-23, PRD §6.2).
@@ -542,15 +543,24 @@ async function putEdgeRoute(route: {
   void route;
 }
 
-async function deleteEdgeRoute(route: {
-  pageId: string;
-  slug: string;
-}): Promise<void> {
-  // CLOUD-30: evict the hostname+path → page-version route from the Worker KV
-  // namespace (the edge side is worker/src/kv.ts `deleteRoute`). Driven here via
-  // the edge port so a tombstoned/quarantined page stops resolving on the hot
-  // path. No worker code is imported into Convex (CLAUDE.md dependency direction).
-  void route;
+async function deleteEdgeRoute(
+  route: { pageId: string; slug: string },
+  ctx?: SchedulerCtx,
+): Promise<void> {
+  // CLOUD-30b: evict the hostname+path → page-version route from the Worker KV
+  // namespace (the edge side is worker/src/kv.ts `deleteRoute`) so a tombstoned/
+  // quarantined/expired page stops resolving on the hot path "in seconds" rather
+  // than after the 1h route TTL.
+  //
+  // The KV delete is an HTTP `fetch`, which Convex forbids inside a MUTATION (and
+  // deletePage/sweepExpired/commitScanBlock are all mutations). So we SCHEDULE the
+  // eviction to run in an action the instant the mutation commits, via the
+  // mutation's `ctx.scheduler`. Fail-safe: the scheduled action swallows + logs any
+  // Cloudflare error so the DB tombstone (the source of truth) is never broken.
+  // No worker code is imported into Convex (CLAUDE.md dependency direction);
+  // `lib/edge_kv` re-derives the route key to match worker/src/kv.ts.
+  if (ctx === undefined) return; // No scheduler (shouldn't happen in prod) → skip.
+  await scheduleRouteEviction(ctx, route.slug);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,13 +575,21 @@ async function deleteEdgeRoute(route: {
 export interface LifecycleEdgePort {
   /** Purge the edge cache for the page URL (visibility + delete both affect it). */
   invalidate(url: string): Promise<void>;
-  /** Evict the KV route so a deleted/pulled page stops resolving on the edge. */
-  evictRoute(args: { pageId: string; slug: string }): Promise<void>;
+  /**
+   * Evict the KV route so a deleted/pulled page stops resolving on the edge. The
+   * optional `ctx` carries the calling mutation's scheduler — the production port
+   * schedules the KV `fetch` to run in an action (a mutation cannot fetch). The
+   * test ports ignore it (a 1-arg `evictRoute(route)` is assignable here).
+   */
+  evictRoute(
+    args: { pageId: string; slug: string },
+    ctx?: SchedulerCtx,
+  ): Promise<void>;
 }
 
 const defaultLifecycleEdgePort: LifecycleEdgePort = {
   invalidate: (url) => invalidateEdge(url),
-  evictRoute: (route) => deleteEdgeRoute(route),
+  evictRoute: (route, ctx) => deleteEdgeRoute(route, ctx),
 };
 
 let lifecycleEdgePort: LifecycleEdgePort = defaultLifecycleEdgePort;
@@ -829,7 +847,10 @@ export const commitScanBlock = internalMutation({
     // so a retry re-asserts the eviction.
     const url = summaryUrl(pageBaseUrl(), page.slug);
     await lifecycleEdgePort.invalidate(url);
-    await lifecycleEdgePort.evictRoute({ pageId: args.pageId, slug: page.slug });
+    await lifecycleEdgePort.evictRoute(
+      { pageId: args.pageId, slug: page.slug },
+      ctx,
+    );
 
     return null;
   },
@@ -1658,7 +1679,10 @@ export const sweepExpired = internalMutation({
       // Same edge eviction as deletePage so the expired page stops serving now.
       const url = summaryUrl(pageBaseUrl(), page.slug);
       await lifecycleEdgePort.invalidate(url);
-      await lifecycleEdgePort.evictRoute({ pageId: page._id, slug: page.slug });
+      await lifecycleEdgePort.evictRoute(
+        { pageId: page._id, slug: page.slug },
+        ctx,
+      );
       tombstoned += 1;
     }
     return { tombstoned };
@@ -1696,7 +1720,10 @@ export const deletePage = mutation({
     // Edge: purge the cache + evict the KV route so the dead page stops serving.
     const url = summaryUrl(pageBaseUrl(), page.slug);
     await lifecycleEdgePort.invalidate(url);
-    await lifecycleEdgePort.evictRoute({ pageId: args.id, slug: page.slug });
+    await lifecycleEdgePort.evictRoute(
+      { pageId: args.id, slug: page.slug },
+      ctx,
+    );
 
     return outcome;
   },

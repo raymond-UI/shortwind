@@ -2,6 +2,7 @@ import { v, ConvexError } from "convex/values";
 import { mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireWrite } from "./lib/auth_guard.js";
+import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
 
 /**
  * CLOUD-32 — abuse intake + fast global kill + CSAM/NCMEC preservation (PRD §8).
@@ -523,14 +524,39 @@ const abuseCategoryValidator = v.union(
 export interface KillEdgePort {
   /** Purge the edge cache for the page URL so the artifact stops being served. */
   invalidate(url: string): Promise<void>;
-  /** Evict the KV route so the killed page stops resolving on the edge. */
-  evictRoute(args: { pageId: string; slug: string }): Promise<void>;
+  /**
+   * Evict the KV route so the killed page stops resolving on the edge. The
+   * optional `ctx` carries the kill mutation's scheduler — the production port
+   * schedules the KV `fetch` to run in an action (a mutation cannot fetch). The
+   * test port ignores it (a 1-arg `evictRoute(route)` is assignable here).
+   */
+  evictRoute(
+    args: { pageId: string; slug: string },
+    ctx?: SchedulerCtx,
+  ): Promise<void>;
 }
 
-/** The production no-op port (real Cloudflare wiring lands in CLOUD-30b). */
+/**
+ * The production kill edge port (CLOUD-30b). `evictRoute` deletes the ROUTES KV
+ * entry the page serves under, via the Cloudflare KV REST API, so a killed page
+ * stops resolving on the hot path "in seconds" (PRD §8.2) rather than after the
+ * 1h route TTL. Fail-safe: a KV error is logged + swallowed inside
+ * `evictRouteForSlug`, so a Cloudflare failure never breaks the DB-level kill
+ * (the quarantine + find-exclusion remain the source of truth). `invalidate`
+ * (edge-cache purge) is left a no-op for now — the KV eviction is the critical
+ * path since serve resolves via KV → cold source, and a cold re-resolve already
+ * reflects the new lifecycle. The shared `lib/edge_kv` re-derives the route key
+ * to match worker/src/kv.ts (Convex never imports the Worker — CLAUDE.md).
+ */
 const defaultKillEdgePort: KillEdgePort = {
   invalidate: async () => {},
-  evictRoute: async () => {},
+  evictRoute: async ({ slug }, ctx) => {
+    // A mutation cannot `fetch`; schedule the KV REST delete to run in an action
+    // the instant `killPage` commits. No scheduler (shouldn't happen in prod) →
+    // skip. Fail-safe: the scheduled action swallows + logs any Cloudflare error.
+    if (ctx === undefined) return;
+    await scheduleRouteEviction(ctx, slug);
+  },
 };
 
 let killEdgePort: KillEdgePort = defaultKillEdgePort;
@@ -671,7 +697,7 @@ export const killPage = mutation({
     // Fast global kill: purge the edge cache + evict the KV route so the pulled
     // page stops resolving on the hot path. One object, one cache key (PRD §8.2).
     await killEdgePort.invalidate(publicUrl(page.slug));
-    await killEdgePort.evictRoute({ pageId: args.pageId, slug: page.slug });
+    await killEdgePort.evictRoute({ pageId: args.pageId, slug: page.slug }, ctx);
 
     return {
       lifecycle: outcome.lifecycle,

@@ -18,6 +18,7 @@ import type * as expand from "../expand.js";
 import type * as http from "../http.js";
 import type * as lib_auth_guard from "../lib/auth_guard.js";
 import type * as lib_content_scan from "../lib/content_scan.js";
+import type * as lib_edge_kv from "../lib/edge_kv.js";
 import type * as lib_publish_core from "../lib/publish_core.js";
 import type * as lib_rate_limit from "../lib/rate_limit.js";
 import type * as moderation from "../moderation.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/auth_guard": typeof lib_auth_guard;
   "lib/content_scan": typeof lib_content_scan;
+  "lib/edge_kv": typeof lib_edge_kv;
   "lib/publish_core": typeof lib_publish_core;
   "lib/rate_limit": typeof lib_rate_limit;
   moderation: typeof moderation;
