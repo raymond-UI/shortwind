@@ -4,10 +4,13 @@ import { AuditView } from "./views/AuditView";
 import { RecipeEditsView } from "./views/RecipeEditsView";
 import { ModerationView } from "./views/ModerationView";
 import { PolicyView } from "./views/PolicyView";
+import { UsageView } from "./views/UsageView";
 
 /**
- * Dashboard shell (CLOUD-35). Five oversight views behind a tab switcher:
- * Pages, Audit log, Recipe edits (the distinct §5.4 feed), Moderation, Policy.
+ * Dashboard shell (CLOUD-35, +CLOUD-43 Usage). Oversight views behind a tab
+ * switcher: Pages, Audit log, Recipe edits (the distinct §5.4 feed), Moderation,
+ * Policy — plus Usage (the CLOUD-43 metered-billing surface, distinct from the
+ * oversight feeds).
  *
  * Data flows in through the `DashboardDataProvider` (wired by `main.tsx` to
  * Convex, or by tests to fixtures), so this shell is pure presentation and
@@ -19,6 +22,7 @@ const TABS = [
   { id: "recipes", label: "Recipe edits", render: () => <RecipeEditsView /> },
   { id: "moderation", label: "Moderation", render: () => <ModerationView /> },
   { id: "policy", label: "Policy", render: () => <PolicyView /> },
+  { id: "usage", label: "Usage", render: () => <UsageView /> },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];

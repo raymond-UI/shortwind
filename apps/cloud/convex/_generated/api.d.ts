@@ -38,6 +38,12 @@ import type * as dashboard from "../dashboard.js";
 // references must typecheck without a live `convex dev`. A real `convex dev`
 // (CLOUD-30b) regenerates this file and supersedes the edit.
 import type * as domains from "../domains.js";
+// CLOUD-43 (manual, additive): the metered-billing usage module. Declared by
+// hand for the same offline-codegen reason — the dashboard's `api.billing.*`
+// references (and the billing convex-test) must typecheck without a live
+// `convex dev`. A real `convex dev` (CLOUD-30b) regenerates this file and
+// supersedes the edit.
+import type * as billing from "../billing.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -57,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   tokens: typeof tokens;
   dashboard: typeof dashboard;
   domains: typeof domains;
+  billing: typeof billing;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

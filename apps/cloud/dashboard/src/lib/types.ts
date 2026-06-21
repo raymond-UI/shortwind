@@ -83,6 +83,20 @@ export interface AccountPolicy {
 }
 
 /**
+ * The metered-billing usage the dashboard renders (CLOUD-43). Mirrors the
+ * `getUsage` `returns` validator in `convex/billing.ts` exactly. The three
+ * meters track what COSTS money per PRD §6.4 — publishes, custom domains,
+ * storage — not page views (a viral page adds zero).
+ */
+export interface UsageMeters {
+  publishes: number;
+  customDomains: number;
+  storageBytes: number;
+  periodStart: number | null;
+  periodEnd: number;
+}
+
+/**
  * The full oversight dataset the dashboard consumes. The real provider fills
  * each field from a `useQuery(api.dashboard.*)`; tests fill it with fixtures.
  * `undefined` means "still loading" (Convex's loading sentinel).
@@ -93,6 +107,8 @@ export interface DashboardData {
   recipeEdits: RecipeEditRow[] | undefined;
   moderation: ModerationRow[] | undefined;
   policy: AccountPolicy | undefined;
+  /** Metered billing usage (CLOUD-43): the three cost-aligned meters. */
+  usage: UsageMeters | undefined;
   /** Persist a policy toggle. Resolves to the new policy. */
   setPolicy: (next: { customDomainNeedsApproval?: boolean }) => Promise<void>;
 }

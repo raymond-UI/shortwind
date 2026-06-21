@@ -45,4 +45,14 @@ describe("App (integration smoke)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Policy" }));
     expect(screen.getByTestId("policy-view")).toBeInTheDocument();
   });
+
+  it("navigates to the CLOUD-43 Usage (metered-billing) view", () => {
+    renderWithData(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Usage" }));
+    expect(screen.getByTestId("usage-view")).toBeInTheDocument();
+    // The three cost-aligned meters are present.
+    expect(screen.getByTestId("usage-meter-publishes")).toBeInTheDocument();
+    expect(screen.getByTestId("usage-meter-customDomains")).toBeInTheDocument();
+    expect(screen.getByTestId("usage-meter-storage")).toBeInTheDocument();
+  });
 });
