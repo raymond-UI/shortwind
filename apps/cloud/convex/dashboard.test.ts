@@ -61,6 +61,9 @@ describe("dashboard.listPages", () => {
         lifecycle: "active",
         tags: ["ops"],
         currentVersionId: null,
+        // CLOUD-51 (additive): the pages table now requires these fields.
+        expiresAt: null,
+        projectGroup: null,
         currentVersion: 2,
         createdAt: now,
         updatedAt: now + 1000,
@@ -110,6 +113,9 @@ describe("dashboard.listPages", () => {
         lifecycle: "active",
         tags: [],
         currentVersionId: null,
+        // CLOUD-51 (additive): the pages table now requires these fields.
+        expiresAt: null,
+        projectGroup: null,
         currentVersion: 1,
         createdAt: now,
         updatedAt: now,
@@ -143,6 +149,9 @@ describe("dashboard.listRecipeEditEvents (PRD §5.4 distinct feed)", () => {
           lifecycle,
           tags: [],
           currentVersionId: null,
+        // CLOUD-51 (additive): the pages table now requires these fields.
+        expiresAt: null,
+        projectGroup: null,
           currentVersion: 1,
           createdAt: now,
           updatedAt: now,
@@ -228,6 +237,9 @@ describe("dashboard.listAuditLog & listModeration", () => {
         lifecycle: "quarantined",
         tags: [],
         currentVersionId: null,
+        // CLOUD-51 (additive): the pages table now requires these fields.
+        expiresAt: null,
+        projectGroup: null,
         currentVersion: 1,
         createdAt: now,
         updatedAt: now,
@@ -253,6 +265,9 @@ describe("dashboard.listAuditLog & listModeration", () => {
         lifecycle: "quarantined",
         tags: [],
         currentVersionId: null,
+        // CLOUD-51 (additive): the pages table now requires these fields.
+        expiresAt: null,
+        projectGroup: null,
         currentVersion: 1,
         createdAt: now,
         updatedAt: now,

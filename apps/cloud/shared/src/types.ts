@@ -98,6 +98,18 @@ export interface Page {
   currentVersionId: Id<"pageVersions"> | null;
   /** Monotonic version counter; bumps on every publish/update. */
   currentVersion: number;
+  /**
+   * CLOUD-51 (additive, PRD §10 Phase 3 optional). Optional hard expiry (epoch
+   * ms); null means no expiry. A scheduled job tombstones an active page once
+   * `expiresAt <= now` (the same tombstone path as a user delete — preserve, not
+   * hard-delete).
+   */
+  expiresAt: Timestamp | null;
+  /**
+   * CLOUD-51 (additive). Optional project-grouping handle so an account can
+   * bucket its pages; null when ungrouped. Drives the `find` `group` filter.
+   */
+  projectGroup: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

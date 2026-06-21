@@ -37,6 +37,9 @@ function row(over: Partial<PageRowLike>): PageRowLike {
     customDomain: null,
     currentVersion: 3,
     tags: ["ops"],
+    // CLOUD-51 (additive): defaults for the new fields.
+    expiresAt: null,
+    projectGroup: null,
     updatedAt: 1000,
     ...over,
   };
@@ -46,7 +49,12 @@ describe("normalizeFindFilters", () => {
   it("trims values and drops blank / whitespace-only ones", () => {
     expect(
       normalizeFindFilters({ q: "  status ", domain: "", tag: "   " }),
-    ).toEqual({ q: "status", domain: undefined, tag: undefined });
+    ).toEqual({
+      q: "status",
+      domain: undefined,
+      tag: undefined,
+      group: undefined,
+    });
   });
 
   it("treats missing/null params as absent", () => {
@@ -54,11 +62,13 @@ describe("normalizeFindFilters", () => {
       q: undefined,
       domain: undefined,
       tag: undefined,
+      group: undefined,
     });
     expect(normalizeFindFilters({ q: null, domain: null, tag: null })).toEqual({
       q: undefined,
       domain: undefined,
       tag: undefined,
+      group: undefined,
     });
   });
 });
@@ -141,6 +151,8 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
           customDomain: "status.acme.com",
           currentVersion: 7,
           tags: ["ops", "prod"],
+          expiresAt: 9999,
+          projectGroup: "marketing",
           updatedAt: 4242,
         }),
         BASE,
@@ -154,6 +166,8 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
       customDomain: "status.acme.com",
       currentVersion: 7,
       tags: ["ops", "prod"],
+      expiresAt: 9999,
+      projectGroup: "marketing",
       updatedAt: 4242,
     });
   });
@@ -173,8 +187,10 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
       [
         "currentVersion",
         "customDomain",
+        "expiresAt",
         "id",
         "lifecycle",
+        "projectGroup",
         "slug",
         "tags",
         "updatedAt",

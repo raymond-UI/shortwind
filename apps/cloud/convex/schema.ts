@@ -61,6 +61,16 @@ export default defineSchema({
     currentVersionId: v.union(v.id("pageVersions"), v.null()),
     // Monotonic version counter; bumps on every publish/update.
     currentVersion: v.number(),
+    // CLOUD-51 (ADDITIVE, PRD §10 Phase 3 optional). Optional hard expiry (epoch
+    // ms); null means the page never expires. A scheduled cron (crons.ts)
+    // tombstones any active page whose `expiresAt <= now` via the SAME
+    // `applyLifecycle('delete')` path as a user delete (tombstone, NOT a hard
+    // delete — the record + versions are retained, PRD §8.2).
+    expiresAt: v.union(v.number(), v.null()),
+    // CLOUD-51 (ADDITIVE). Optional project-grouping handle so an account can
+    // bucket its pages (e.g. "marketing-site"); null when ungrouped. Backed by
+    // `by_project` for an account-scoped group `find` filter.
+    projectGroup: v.union(v.string(), v.null()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -71,7 +81,9 @@ export default defineSchema({
     // Custom-domain serve path resolves host -> page.
     .index("by_customDomain", ["customDomain"])
     // Discovery: enumerate pages by tag (array index fans out per element).
-    .index("by_tag", ["tags"]),
+    .index("by_tag", ["tags"])
+    // CLOUD-51: enumerate an account's pages within a project group.
+    .index("by_project", ["accountId", "projectGroup"]),
 
   // Mirrors shared `PageVersion`. An immutable published snapshot — old
   // versions are frozen and never rebuilt (PRD 5.6).

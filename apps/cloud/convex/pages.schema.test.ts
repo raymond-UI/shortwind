@@ -26,7 +26,8 @@ function fields(table: string): string[] {
 describe("publish/update adapters write fields the schema declares", () => {
   it("commitNewPage writes every pages field", () => {
     // commitNewPage inserts: accountId, slug, customDomain, visibility,
-    // lifecycle, tags, currentVersionId, currentVersion, createdAt, updatedAt.
+    // lifecycle, tags, currentVersionId, currentVersion, createdAt, updatedAt,
+    // plus the CLOUD-51 additive expiresAt / projectGroup (default null).
     expect(new Set(fields("pages"))).toEqual(
       new Set([
         "accountId",
@@ -37,6 +38,9 @@ describe("publish/update adapters write fields the schema declares", () => {
         "tags",
         "currentVersionId",
         "currentVersion",
+        // CLOUD-51 (additive).
+        "expiresAt",
+        "projectGroup",
         "createdAt",
         "updatedAt",
       ]),

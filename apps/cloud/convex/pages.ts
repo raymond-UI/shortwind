@@ -179,9 +179,47 @@ export const commitNewPage = internalMutation({
       tags: args.tags,
       currentVersionId: null,
       currentVersion: 0,
+      // CLOUD-51 (additive): new pages default to no expiry / no group. The
+      // publish action patches them via `commitPageGrouping` when the additive
+      // `expiresAt`/`projectGroup` args are supplied (keeps the core pipeline
+      // unchanged — it never sees these fields).
+      expiresAt: null,
+      projectGroup: null,
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/**
+ * CLOUD-51 (ADDITIVE): set a page's optional expiry + project group. Called by
+ * the publish/update actions AFTER the core pipeline lands, ONLY when the new
+ * args are supplied — so the core publish/update logic is untouched and the
+ * existing behavior is identical when they are absent. `undefined` leaves a
+ * field as-is; an explicit value (including `null`) is written.
+ */
+export const commitPageGrouping = internalMutation({
+  args: {
+    pageId: v.id("pages"),
+    accountId: v.id("accounts"),
+    expiresAt: v.optional(v.union(v.number(), v.null())),
+    projectGroup: v.optional(v.union(v.string(), v.null())),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.get(args.pageId);
+    // The page was just materialized by the same action — absence is a bug.
+    if (!page || page.accountId !== args.accountId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+    }
+    const patch: Record<string, unknown> = {};
+    if (args.expiresAt !== undefined) patch.expiresAt = args.expiresAt;
+    if (args.projectGroup !== undefined) patch.projectGroup = args.projectGroup;
+    if (Object.keys(patch).length > 0) {
+      patch.updatedAt = Date.now();
+      await ctx.db.patch(args.pageId, patch);
+    }
+    return null;
   },
 });
 
@@ -845,6 +883,10 @@ export const publish = action({
     ),
     idempotencyKey: v.optional(v.string()),
     css: v.optional(v.string()),
+    // CLOUD-51 (additive): optional hard expiry (epoch ms; null = no expiry) and
+    // project-grouping handle. When absent the publish behaves exactly as before.
+    expiresAt: v.optional(v.union(v.number(), v.null())),
+    projectGroup: v.optional(v.union(v.string(), v.null())),
   },
   returns: outcomeValidator,
   handler: async (ctx, args) => {
@@ -964,6 +1006,21 @@ export const publish = action({
     }
     // --------------------------------------------------------------------------
 
+    // CLOUD-51 (additive): apply expiry/group AFTER the core publish landed, only
+    // when supplied — the core pipeline never sees these fields. A 409 collision
+    // returns an existing page we did not create, so we DON'T touch it.
+    if (
+      outcome.ok &&
+      (args.expiresAt !== undefined || args.projectGroup !== undefined)
+    ) {
+      await ctx.runMutation(internal.pages.commitPageGrouping, {
+        pageId: outcome.result.id as Id<"pages">,
+        accountId: auth.accountId as Id<"accounts">,
+        expiresAt: args.expiresAt,
+        projectGroup: args.projectGroup,
+      });
+    }
+
     return flattenOutcome(outcome);
   },
 });
@@ -985,6 +1042,9 @@ export const update = action({
     ),
     idempotencyKey: v.optional(v.string()),
     css: v.optional(v.string()),
+    // CLOUD-51 (additive): re-set expiry / project group on update (null clears).
+    expiresAt: v.optional(v.union(v.number(), v.null())),
+    projectGroup: v.optional(v.union(v.string(), v.null())),
   },
   returns: outcomeValidator,
   handler: async (ctx, args) => {
@@ -1006,6 +1066,21 @@ export const update = action({
       },
       deps,
     );
+
+    // CLOUD-51 (additive): apply expiry/group after the core update, only when
+    // supplied — the core update pipeline is untouched.
+    if (
+      outcome.ok &&
+      (args.expiresAt !== undefined || args.projectGroup !== undefined)
+    ) {
+      await ctx.runMutation(internal.pages.commitPageGrouping, {
+        pageId: outcome.result.id as Id<"pages">,
+        accountId: auth.accountId as Id<"accounts">,
+        expiresAt: args.expiresAt,
+        projectGroup: args.projectGroup,
+      });
+    }
+
     return flattenOutcome(outcome);
   },
 });
@@ -1104,6 +1179,10 @@ export interface PageSummary {
   customDomain: string | null;
   currentVersion: number;
   tags: string[];
+  /** CLOUD-51 (additive): optional hard expiry (epoch ms); null = no expiry. */
+  expiresAt: number | null;
+  /** CLOUD-51 (additive): optional project-grouping handle; null = ungrouped. */
+  projectGroup: string | null;
   updatedAt: number;
 }
 
@@ -1116,6 +1195,9 @@ export interface PageRowLike {
   customDomain: string | null;
   currentVersion: number;
   tags: string[];
+  // CLOUD-51 (additive): mirror the new pages fields.
+  expiresAt: number | null;
+  projectGroup: string | null;
   updatedAt: number;
 }
 
@@ -1124,6 +1206,8 @@ export interface FindFilters {
   q?: string;
   domain?: string;
   tag?: string;
+  // CLOUD-51 (additive): restrict to a single project group.
+  group?: string;
 }
 
 /** A version entry in the `get` history (newest first). */
@@ -1152,6 +1236,9 @@ export function toPageSummary(row: PageRowLike, baseUrl: string): PageSummary {
     customDomain: row.customDomain,
     currentVersion: row.currentVersion,
     tags: row.tags,
+    // CLOUD-51 (additive): surface expiry + group on the summary.
+    expiresAt: row.expiresAt,
+    projectGroup: row.projectGroup,
     updatedAt: row.updatedAt,
   };
 }
@@ -1183,11 +1270,14 @@ export function normalizeFindFilters(raw: {
   q?: string | null;
   domain?: string | null;
   tag?: string | null;
+  group?: string | null;
 }): FindFilters {
   return {
     q: normalizeFilter(raw.q),
     domain: normalizeFilter(raw.domain),
     tag: normalizeFilter(raw.tag),
+    // CLOUD-51 (additive): the optional project-group filter.
+    group: normalizeFilter(raw.group),
   };
 }
 
@@ -1216,10 +1306,9 @@ export function matchesTag(row: { tags: string[] }, tag: string): boolean {
  *     {@link planFindIndex}). A schema migration to a fan-out tag table would
  *     let this move onto an index, but the schema is owned elsewhere (CLOUD-00).
  */
-export function applyResidualFilters<T extends { slug: string; tags: string[] }>(
-  rows: T[],
-  filters: FindFilters,
-): T[] {
+export function applyResidualFilters<
+  T extends { slug: string; tags: string[]; projectGroup?: string | null },
+>(rows: T[], filters: FindFilters): T[] {
   let out = rows;
   if (filters.q !== undefined) {
     const q = filters.q;
@@ -1228,6 +1317,13 @@ export function applyResidualFilters<T extends { slug: string; tags: string[] }>
   if (filters.tag !== undefined) {
     const tag = filters.tag;
     out = out.filter((r) => matchesTag(r, tag));
+  }
+  // CLOUD-51 (additive): the project-group filter. When `by_project` drove the
+  // scan this is already satisfied; applying it residually is a cheap no-op then
+  // and the correct narrowing when another index (e.g. by_customDomain) drove it.
+  if (filters.group !== undefined) {
+    const group = filters.group;
+    out = out.filter((r) => r.projectGroup === group);
   }
   return out;
 }
@@ -1245,11 +1341,18 @@ export function applyResidualFilters<T extends { slug: string; tags: string[] }>
  */
 export type FindIndexPlan =
   | { index: "by_customDomain"; domain: string }
+  | { index: "by_project"; group: string }
   | { index: "by_account" };
 
 export function planFindIndex(filters: FindFilters): FindIndexPlan {
   if (filters.domain !== undefined) {
     return { index: "by_customDomain", domain: filters.domain };
+  }
+  // CLOUD-51 (additive): a `group`-scoped find drives the `by_project`
+  // (accountId, projectGroup) equality index — account-scoped + group-narrowed,
+  // so it never scans the whole account or the whole table.
+  if (filters.group !== undefined) {
+    return { index: "by_project", group: filters.group };
   }
   return { index: "by_account" };
 }
@@ -1278,6 +1381,9 @@ const summaryValidator = v.object({
   customDomain: v.union(v.string(), v.null()),
   currentVersion: v.number(),
   tags: v.array(v.string()),
+  // CLOUD-51 (additive): expiry + project group on the summary.
+  expiresAt: v.union(v.number(), v.null()),
+  projectGroup: v.union(v.string(), v.null()),
   updatedAt: v.number(),
 });
 
@@ -1301,6 +1407,8 @@ export const find = query({
     q: v.optional(v.string()),
     domain: v.optional(v.string()),
     tag: v.optional(v.string()),
+    // CLOUD-51 (additive): restrict the find to a single project group.
+    group: v.optional(v.string()),
   },
   returns: v.array(summaryValidator),
   handler: async (ctx, args) => {
@@ -1309,6 +1417,7 @@ export const find = query({
       q: args.q,
       domain: args.domain,
       tag: args.tag,
+      group: args.group,
     });
     const plan = planFindIndex(filters);
 
@@ -1323,6 +1432,15 @@ export const find = query({
         .withIndex("by_customDomain", (q) => q.eq("customDomain", domain))
         .collect();
       candidates = candidates.filter((p) => p.accountId === auth.accountId);
+    } else if (plan.index === "by_project") {
+      // CLOUD-51: account-scoped + group-narrowed via the by_project index.
+      const group = plan.group;
+      candidates = await ctx.db
+        .query("pages")
+        .withIndex("by_project", (q) =>
+          q.eq("accountId", auth.accountId).eq("projectGroup", group),
+        )
+        .collect();
     } else {
       candidates = await ctx.db
         .query("pages")
@@ -1345,6 +1463,8 @@ export const find = query({
           customDomain: row.customDomain,
           currentVersion: row.currentVersion,
           tags: row.tags,
+          expiresAt: row.expiresAt,
+          projectGroup: row.projectGroup,
           updatedAt: row.updatedAt,
         },
         baseUrl,
@@ -1400,6 +1520,8 @@ export const get = query({
           customDomain: page.customDomain,
           currentVersion: page.currentVersion,
           tags: page.tags,
+          expiresAt: page.expiresAt,
+          projectGroup: page.projectGroup,
           updatedAt: page.updatedAt,
         },
         pageBaseUrl(),
@@ -1425,6 +1547,62 @@ const lifecycleResultValidator = v.object({
     v.literal("tombstoned"),
   ),
   sealedKey: v.union(v.string(), v.null()),
+});
+
+// ===========================================================================
+// CLOUD-51 — scheduled expiry sweep (PRD §10 Phase 3 optional).
+//
+// `sweepExpired` is the internalMutation a cron (crons.ts) ticks. It tombstones
+// every page whose `expiresAt <= now` that is still `active`, reusing the SAME
+// CLOUD-31/32 `applyLifecycle('delete')` path a user delete uses — so an expired
+// page is TOMBSTONED, never hard-deleted (the record + every version row are
+// retained, PRD §8.2). It then evicts the KV route + purges the edge cache via
+// the same `lifecycleEdgePort` seam as `deletePage`, so the expired page stops
+// serving on the hot path. A quarantined/preserved/tombstoned page is skipped
+// (only `active` pages tombstone — applyLifecycle's `delete` transition rejects
+// the rest, and a live abuse case must not be silently tombstoned over).
+// ===========================================================================
+
+/** Pull `expiresAt`-due active pages and tombstone them. Returns the count. */
+export const sweepExpired = internalMutation({
+  args: { now: v.optional(v.number()) },
+  returns: v.object({ tombstoned: v.number() }),
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    // Scan active pages with a non-null expiry that is due. The set is small in
+    // practice (only pages that opted into an expiry); the filter keeps the
+    // tombstone path off non-expiring pages.
+    const due = await ctx.db
+      .query("pages")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("lifecycle"), "active"),
+          q.neq(q.field("expiresAt"), null),
+          q.lte(q.field("expiresAt"), now),
+        ),
+      )
+      .collect();
+
+    let tombstoned = 0;
+    for (const page of due) {
+      // Reuse the user-delete tombstone path: active → tombstoned (+ audit), the
+      // page record + versions retained (preserve-not-delete, PRD §8.2). The
+      // sweep is system-driven, so there is no actor token.
+      await applyLifecycle(ctx, {
+        pageId: page._id,
+        accountId: page.accountId,
+        tokenId: null,
+        transition: "delete",
+        reason: "expired",
+      });
+      // Same edge eviction as deletePage so the expired page stops serving now.
+      const url = summaryUrl(pageBaseUrl(), page.slug);
+      await lifecycleEdgePort.invalidate(url);
+      await lifecycleEdgePort.evictRoute({ pageId: page._id, slug: page.slug });
+      tombstoned += 1;
+    }
+    return { tombstoned };
+  },
 });
 
 /**
