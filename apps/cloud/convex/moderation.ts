@@ -571,11 +571,14 @@ export function __resetKillEdgePort(): void {
   killEdgePort = defaultKillEdgePort;
 }
 
+/** Minimal ambient `process` — this workspace types against workers-types. */
+declare const process: { env: Record<string, string | undefined> };
+
 /** The platform origin pages serve under (mirrors pages.ts `pageBaseUrl`). */
 function killBaseUrl(): string {
   // CLOUD-30b reads the public origin from env; the fallback keeps the purge URL
   // well-formed in dev/test.
-  return "https://shortwind.app";
+  return process.env.PAGES_BASE_URL ?? "https://c.shortwind.dev";
 }
 
 /** The public URL the kill purges from the edge cache. */

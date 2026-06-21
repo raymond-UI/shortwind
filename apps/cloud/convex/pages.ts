@@ -1199,7 +1199,7 @@ function makeDeps(ctx: RunnerCtx, tokenId: TokenId): PublishDeps {
 function pageBaseUrl(): string {
   // CLOUD-30: read the public origin from env (`PAGES_BASE_URL`). Fallback keeps
   // URLs well-formed in dev/test deployments.
-  return "https://shortwind.app";
+  return process.env.PAGES_BASE_URL ?? "https://c.shortwind.dev";
 }
 
 function flattenOutcome(outcome: PublishOutcome) {
