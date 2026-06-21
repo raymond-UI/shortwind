@@ -7,7 +7,13 @@ import { find, runFind } from "./commands/find.js";
 import { get, runGet } from "./commands/get.js";
 import { deletePage, runDelete, type Confirm } from "./commands/delete.js";
 import { visibility, runVisibility, InvalidVisibilityError } from "./commands/visibility.js";
-import { bindDomain } from "./commands/bind-domain.js";
+import {
+  bindDomain,
+  runBindDomain,
+  StepUpDeniedError,
+  BIND_SCOPE,
+  type StepUpOutcome,
+} from "./commands/bind-domain.js";
 import { runSkill } from "./commands/skill.js";
 import {
   ApiError,
@@ -15,6 +21,7 @@ import {
   resolveBaseUrl,
   type DeleteCapableClient,
   type VisibilityCapableClient,
+  type DomainCapableClient,
 } from "./api-client.js";
 import { resolveHome, readActiveAccount } from "./home.js";
 import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
@@ -338,9 +345,25 @@ export function buildRealCli(): CAC {
       "bind-domain <id> <hostname>",
       "Bind a custom hostname (POST /v1/pages/{id}/domain — requires domains:bind)",
     )
+    .option("--endpoint <url>", "Cloud API origin")
     .option("--json", "Emit machine-readable JSON")
-    .action((id: string, hostname: string, opts: { json?: boolean }) => {
-      reportStub(bindDomain(id, hostname, opts));
+    .action(async (id: string, hostname: string, opts: { endpoint?: string; json?: boolean }) => {
+      try {
+        const client = makeClient(opts.endpoint) as DomainCapableClient;
+        const output = await runBindDomain(id, hostname, opts, {
+          client,
+          readScopes: () => activeScopes(),
+          stepUp: () => stepUpBindScope(opts.endpoint),
+        });
+        process.stdout.write(output + "\n");
+      } catch (err) {
+        if (err instanceof StepUpDeniedError) {
+          process.stderr.write(`error: ${err.message}\n`);
+          process.exitCode = 1;
+          return;
+        }
+        reportApiError(err);
+      }
     });
 
   cli
@@ -394,6 +417,33 @@ function makeClient(endpoint?: string) {
     baseUrl: resolveBaseUrl(endpoint),
     token: account.token.accessToken,
   });
+}
+
+/**
+ * The scopes the active account currently holds (empty when no account / no
+ * recorded scopes). Drives the bind-domain pre-flight step-up decision.
+ */
+function activeScopes(): readonly string[] {
+  const home = resolveHome();
+  const account = readActiveAccount(home.root);
+  return account?.scopes ?? [];
+}
+
+/**
+ * The bind-domain step-up grant (PRD §7.2): re-run the device flow (`login`)
+ * requesting the active account's existing scopes PLUS `domains:bind`, so the
+ * human approves the privileged grant. On success the re-auth rewrites the
+ * active account's stored scopes; we read them back for the handler's retry.
+ */
+async function stepUpBindScope(endpoint?: string): Promise<StepUpOutcome> {
+  process.stderr.write(
+    `binding a custom domain needs the ${BIND_SCOPE} scope — re-authorizing (PRD §7.2)\n`,
+  );
+  const existing = activeScopes();
+  const scope = Array.from(new Set([...existing, BIND_SCOPE]));
+  const result = await login({ scope, ...(endpoint ? { endpoint } : {}) });
+  if (!result.ok) return { ok: false, reason: result.reason };
+  return { ok: true, scopes: activeScopes() };
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {

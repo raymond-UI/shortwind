@@ -150,6 +150,40 @@ export interface BundleResult {
   files: BundleFileResult[];
 }
 
+/**
+ * Lifecycle state of a custom-hostname bind, mirroring the CLOUD-40 server
+ * contract (`convex/domains.ts` `DomainBindState`). A `pending-human` bind is
+ * parked behind the operator-approval policy and creates NO Cloudflare hostname
+ * yet; the rest track the cert-issuance dance:
+ *
+ *   pending-human ──approve──► (queued ⇄ pending-cert) ──► active
+ *                                    └──────────────────► failed
+ *
+ * Redeclared here (not imported) because the CLI must not depend on `convex/`
+ * (CLAUDE.md dependency direction; the constraint forbids touching convex/).
+ */
+export type DomainBindState =
+  | "pending-human"
+  | "queued"
+  | "pending-cert"
+  | "active"
+  | "failed";
+
+/**
+ * The `POST /v1/pages/{id}/domain` response (CLOUD-40 `DomainBindResult`) — the
+ * bind state handed back to the CLI as plain data.
+ */
+export interface DomainBindResult {
+  state: DomainBindState;
+  hostname: string;
+  /** Cloudflare's hostname id once created; null while `pending-human`. */
+  cloudflareHostnameId: string | null;
+  /** The page the hostname is (being) bound to. */
+  pageId: string;
+  /** Present on `failed` (cert failed / retries exhausted) to explain why. */
+  reason?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Typed errors — non-2xx responses become these so callers branch on `kind`.
 // ---------------------------------------------------------------------------
@@ -221,6 +255,12 @@ export interface ApiClient {
   deletePage?(id: string): Promise<void>;
   /** `PATCH /v1/pages/{id}/visibility` — set the access level (CLOUD-31/34). */
   setVisibility?(id: string, level: VisibilityLevel): Promise<PageSummary>;
+  /**
+   * `POST /v1/pages/{id}/domain` — bind a custom hostname (CLOUD-40/41).
+   * Requires the `domains:bind` scope; a token without it yields a `forbidden`
+   * {@link ApiError} the caller maps to the step-up grant path.
+   */
+  bindDomain?(id: string, hostname: string): Promise<DomainBindResult>;
 }
 
 /** The three page access levels (PRD §4 — mirrors the server contract). */
@@ -234,6 +274,11 @@ export type DeleteCapableClient = ApiClient & {
 /** An {@link ApiClient} known to carry `setVisibility` (the visibility seam). */
 export type VisibilityCapableClient = ApiClient & {
   setVisibility(id: string, level: VisibilityLevel): Promise<PageSummary>;
+};
+
+/** An {@link ApiClient} known to carry `bindDomain` (the bind-domain seam). */
+export type DomainCapableClient = ApiClient & {
+  bindDomain(id: string, hostname: string): Promise<DomainBindResult>;
 };
 
 /** The `fetch` signature the client depends on (global `fetch` satisfies it). */
@@ -417,6 +462,18 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
         "PATCH",
         `/v1/pages/${encodeURIComponent(id)}/visibility`,
         { visibility: level },
+      );
+    },
+
+    bindDomain(id: string, hostname: string): Promise<DomainBindResult> {
+      // POST /v1/pages/{id}/domain { hostname } → the bind state (CLOUD-40).
+      // A token lacking `domains:bind` returns 403, which `toApiError` maps to a
+      // `forbidden` ApiError — the bind-domain handler reads that as the signal
+      // to drive the step-up grant flow (PRD §7.2) instead of failing flatly.
+      return request<DomainBindResult>(
+        "POST",
+        `/v1/pages/${encodeURIComponent(id)}/domain`,
+        { hostname },
       );
     },
   };
