@@ -8,67 +8,71 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
+import type * as billing from "../billing.js";
+import type * as bundles from "../bundles.js";
+import type * as crons from "../crons.js";
+import type * as dashboard from "../dashboard.js";
+import type * as domains from "../domains.js";
+import type * as expand from "../expand.js";
+import type * as http from "../http.js";
+import type * as lib_auth_guard from "../lib/auth_guard.js";
+import type * as lib_content_scan from "../lib/content_scan.js";
+import type * as lib_publish_core from "../lib/publish_core.js";
+import type * as lib_rate_limit from "../lib/rate_limit.js";
+import type * as moderation from "../moderation.js";
+import type * as pages from "../pages.js";
+import type * as recipes from "../recipes.js";
+import type * as tokens from "../tokens.js";
+import type * as wellknown from "../wellknown.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
 } from "convex/server";
-import type * as auth from "../auth.js";
-import type * as http from "../http.js";
-// CLOUD-23 (manual, additive): `convex dev` could not be run offline (no
-// CONVEX_DEPLOYMENT) so these two modules are declared by hand below so
-// `internal.pages.*` / `internal.recipes.*` references in pages.ts typecheck.
-// A real `convex dev` (CLOUD-30) regenerates this file and supersedes the edit.
-import type * as moderation from "../moderation.js";
-import type * as pages from "../pages.js";
-// CLOUD-50 (manual, additive): the bundle publish module. Declared by hand for
-// the same offline-codegen reason as `pages`/`recipes` — `internal.bundles.*`
-// references in bundles.ts must typecheck without a live `convex dev`. A real
-// `convex dev` (CLOUD-30b) regenerates this file and supersedes the edit.
-import type * as bundles from "../bundles.js";
-import type * as recipes from "../recipes.js";
-import type * as tokens from "../tokens.js";
-// CLOUD-35 (manual, additive): the oversight-dashboard query module. Declared by
-// hand for the same offline-codegen reason — the dashboard's `api.dashboard.*`
-// references must typecheck without a live `convex dev`. A real `convex dev`
-// (CLOUD-30b) regenerates this file and supersedes the edit.
-import type * as dashboard from "../dashboard.js";
-// CLOUD-40 (manual, additive): the custom-domain bind module. Declared by hand
-// for the same offline-codegen reason — `domains.bindDomain`/`internal.domains.*`
-// references must typecheck without a live `convex dev`. A real `convex dev`
-// (CLOUD-30b) regenerates this file and supersedes the edit.
-import type * as domains from "../domains.js";
-// CLOUD-43 (manual, additive): the metered-billing usage module. Declared by
-// hand for the same offline-codegen reason — the dashboard's `api.billing.*`
-// references (and the billing convex-test) must typecheck without a live
-// `convex dev`. A real `convex dev` (CLOUD-30b) regenerates this file and
-// supersedes the edit.
-import type * as billing from "../billing.js";
+
+declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
+  billing: typeof billing;
+  bundles: typeof bundles;
+  crons: typeof crons;
+  dashboard: typeof dashboard;
+  domains: typeof domains;
+  expand: typeof expand;
+  http: typeof http;
+  "lib/auth_guard": typeof lib_auth_guard;
+  "lib/content_scan": typeof lib_content_scan;
+  "lib/publish_core": typeof lib_publish_core;
+  "lib/rate_limit": typeof lib_rate_limit;
+  moderation: typeof moderation;
+  pages: typeof pages;
+  recipes: typeof recipes;
+  tokens: typeof tokens;
+  wellknown: typeof wellknown;
+}>;
 
 /**
- * A utility for referencing Convex functions in your app's API.
+ * A utility for referencing Convex functions in your app's public API.
  *
  * Usage:
  * ```js
  * const myFunctionReference = api.myModule.myFunction;
  * ```
  */
-declare const fullApi: ApiFromModules<{
-  auth: typeof auth;
-  http: typeof http;
-  moderation: typeof moderation;
-  pages: typeof pages;
-  bundles: typeof bundles;
-  recipes: typeof recipes;
-  tokens: typeof tokens;
-  dashboard: typeof dashboard;
-  domains: typeof domains;
-  billing: typeof billing;
-}>;
 export declare const api: FilterApi<
   typeof fullApi,
   FunctionReference<any, "public">
 >;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
 export declare const internal: FilterApi<
   typeof fullApi,
   FunctionReference<any, "internal">
@@ -76,9 +80,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
-  // CLOUD-33 (manual, additive): the rate-limiter component registered in
-  // convex.config.ts. Declared by hand because `convex dev` can't run offline
-  // (no CONVEX_DEPLOYMENT); a real `convex dev` (CLOUD-30) regenerates this and
-  // supersedes the edit. Consumed by `lib/rate-limit.ts` (`components.rateLimiter`).
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
 };

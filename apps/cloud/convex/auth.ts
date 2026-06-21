@@ -102,6 +102,12 @@ export const createAuthOptions = (
         interval: DEVICE_CODE_POLL_INTERVAL,
         userCodeLength: USER_CODE_LENGTH,
         validateClient: () => true,
+        // better-auth@1.5.3 declares `schema` as a non-optional field in the
+        // plugin's Zod options validator (device-authorization/index.mjs:29 has
+        // no `.optional()`), so omitting it throws a ZodError during Convex's
+        // module analysis. `mergeSchema(schema, {})` is a no-op, so passing an
+        // empty object satisfies the validator without altering the schema.
+        schema: {},
       }),
       // Lets a minted bearer token authenticate subsequent API requests.
       bearer(),
