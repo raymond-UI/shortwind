@@ -165,13 +165,29 @@ const publishHandler = httpAction(async (ctx, request) => {
   }
 });
 
+/** Split a `/v1/pages/...` path into its trailing segments after `pages`. */
+function pagesPathSegments(pathname: string): string[] {
+  const parts = pathname.split("/").filter(Boolean); // ["v1","pages",id,...]
+  return parts.slice(2);
+}
+
 /**
  * PATCH /v1/pages/{id} → republish a new version (update). The `{id}` rides in
  * the path; the body is the api-client's `UpdatePayload` (no `slug` — the URL is
  * fixed to the page). Returns `{ id, url, version }`.
+ *
+ * CLOUD-31: the same PATCH prefix also serves `/v1/pages/{id}/visibility`; this
+ * handler dispatches the `/visibility` sub-route to `setVisibility` and falls
+ * through to `update` otherwise (Convex routes by prefix, so the disambiguation
+ * happens here rather than via two overlapping prefixes).
  */
 const updateHandler = httpAction(async (ctx, request) => {
   const url = new URL(request.url);
+  const segments = pagesPathSegments(url.pathname);
+  // /v1/pages/{id}/visibility → the visibility sub-route.
+  if (segments.length >= 2 && segments[1] === "visibility") {
+    return setVisibilityHandlerImpl(ctx, request, segments[0]!);
+  }
   const id = url.pathname.split("/").filter(Boolean).pop() ?? "";
   const bearer = bearerFromRequest(request);
   const body = await readJsonBody(request);
@@ -200,6 +216,51 @@ const updateHandler = httpAction(async (ctx, request) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// CLOUD-31 — delete (→ tombstone) + visibility.
+// ---------------------------------------------------------------------------
+
+/**
+ * DELETE /v1/pages/{id} → tombstone the page (NOT a hard delete; the record +
+ * versions are retained, PRD §8.2). Returns the new lifecycle. requireWrite;
+ * account-scoped not-found → 404; auth errors → 401/403.
+ */
+const deleteHandler = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const id = pagesPathSegments(url.pathname)[0] ?? "";
+  const bearer = bearerFromRequest(request);
+  try {
+    const result = await ctx.runMutation(api.pages.deletePage, {
+      bearer,
+      id: id as Id<"pages">,
+    });
+    return json(result, 200);
+  } catch (err) {
+    return errorResponse(err);
+  }
+});
+
+/** Shared body for PATCH /v1/pages/{id}/visibility (dispatched from the PATCH
+ * prefix handler). Reads `{ visibility }` from the JSON body. */
+async function setVisibilityHandlerImpl(
+  ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
+  request: Request,
+  id: string,
+): Promise<Response> {
+  const bearer = bearerFromRequest(request);
+  const body = await readJsonBody(request);
+  try {
+    const result = await ctx.runMutation(api.pages.setVisibility, {
+      bearer,
+      id: id as Id<"pages">,
+      visibility: body["visibility"] as never,
+    });
+    return json(result, 200);
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });
 http.route({ path: "/v1/pages", method: "POST", handler: publishHandler });
 http.route({
@@ -211,6 +272,11 @@ http.route({
   pathPrefix: "/v1/pages/",
   method: "PATCH",
   handler: updateHandler,
+});
+http.route({
+  pathPrefix: "/v1/pages/",
+  method: "DELETE",
+  handler: deleteHandler,
 });
 
 export default http;

@@ -1,13 +1,15 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import {
   action,
   internalMutation,
   internalQuery,
+  mutation,
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRead, requireWrite } from "./lib/auth-guard.js";
+import { applyLifecycle } from "./moderation.js";
 import {
   runPublish,
   runUpdate,
@@ -429,6 +431,43 @@ async function putEdgeRoute(route: {
   void route;
 }
 
+async function deleteEdgeRoute(route: {
+  pageId: string;
+  slug: string;
+}): Promise<void> {
+  // CLOUD-30: evict the hostname+path → page-version route from the Worker KV
+  // namespace (the edge side is worker/src/kv.ts `deleteRoute`). Driven here via
+  // the edge port so a tombstoned/quarantined page stops resolving on the hot
+  // path. No worker code is imported into Convex (CLAUDE.md dependency direction).
+  void route;
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle edge port (CLOUD-31). The delete/visibility MUTATIONS invalidate the
+// edge cache + evict the KV route through this injectable seam so the change is
+// reflected on the hot path. Exposed as `__setLifecycleEdgePort` ONLY so the
+// integration tests can assert `invalidate`/`evictRoute` fired (the production
+// port is the no-op placeholders above, wired for real at deploy — CLOUD-30).
+// ---------------------------------------------------------------------------
+
+/** The edge effects a lifecycle/visibility change drives. */
+export interface LifecycleEdgePort {
+  /** Purge the edge cache for the page URL (visibility + delete both affect it). */
+  invalidate(url: string): Promise<void>;
+  /** Evict the KV route so a deleted/pulled page stops resolving on the edge. */
+  evictRoute(args: { pageId: string; slug: string }): Promise<void>;
+}
+
+let lifecycleEdgePort: LifecycleEdgePort = {
+  invalidate: (url) => invalidateEdge(url),
+  evictRoute: (route) => deleteEdgeRoute(route),
+};
+
+/** Test-only: override the lifecycle edge port to assert it was driven. */
+export function __setLifecycleEdgePort(port: LifecycleEdgePort): void {
+  lifecycleEdgePort = port;
+}
+
 // ---------------------------------------------------------------------------
 // Public verbs.
 // ---------------------------------------------------------------------------
@@ -630,6 +669,10 @@ export interface PageSummary {
   slug: string;
   url: string;
   visibility: "public" | "unlisted" | "private";
+  /** Lifecycle disposition so callers can see a page's state (CLOUD-31). An
+   * agent never gets a tombstoned/quarantined page from `find`, but `get`
+   * surfaces it (clearly marked) for audit. */
+  lifecycle: "active" | "quarantined" | "tombstoned";
   customDomain: string | null;
   currentVersion: number;
   tags: string[];
@@ -641,6 +684,7 @@ export interface PageRowLike {
   _id: string;
   slug: string;
   visibility: "public" | "unlisted" | "private";
+  lifecycle: "active" | "quarantined" | "tombstoned";
   customDomain: string | null;
   currentVersion: number;
   tags: string[];
@@ -676,11 +720,25 @@ export function toPageSummary(row: PageRowLike, baseUrl: string): PageSummary {
     slug: row.slug,
     url: summaryUrl(baseUrl, row.slug),
     visibility: row.visibility,
+    lifecycle: row.lifecycle,
     customDomain: row.customDomain,
     currentVersion: row.currentVersion,
     tags: row.tags,
     updatedAt: row.updatedAt,
   };
+}
+
+/**
+ * `find` returns only pages an agent can still act on. A tombstoned page is
+ * deleted (gone); a quarantined page is pulled for abuse — neither should come
+ * back from a discovery query (CLOUD-31 / CLOUD-24 follow-up). `get` does NOT
+ * use this filter: it can still return a dead page's metadata for audit, clearly
+ * marked by its `lifecycle` field.
+ */
+export function isFindable(row: {
+  lifecycle: "active" | "quarantined" | "tombstoned";
+}): boolean {
+  return row.lifecycle === "active";
 }
 
 /** Trim a query-string value; treat empty/whitespace as absent. */
@@ -784,6 +842,11 @@ const summaryValidator = v.object({
     v.literal("unlisted"),
     v.literal("private"),
   ),
+  lifecycle: v.union(
+    v.literal("active"),
+    v.literal("quarantined"),
+    v.literal("tombstoned"),
+  ),
   customDomain: v.union(v.string(), v.null()),
   currentVersion: v.number(),
   tags: v.array(v.string()),
@@ -839,7 +902,10 @@ export const find = query({
         .collect();
     }
 
-    const filtered = applyResidualFilters(candidates, filters);
+    const filtered = applyResidualFilters(candidates, filters)
+      // CLOUD-31: a dead page (tombstoned/quarantined) is never discoverable —
+      // an agent must not get a deleted/pulled page back. `get` still returns it.
+      .filter(isFindable);
     const baseUrl = pageBaseUrl();
     return filtered.map((row) =>
       toPageSummary(
@@ -847,6 +913,7 @@ export const find = query({
           _id: row._id,
           slug: row.slug,
           visibility: row.visibility,
+          lifecycle: row.lifecycle,
           customDomain: row.customDomain,
           currentVersion: row.currentVersion,
           tags: row.tags,
@@ -894,11 +961,14 @@ export const get = query({
     );
 
     return {
+      // `get` returns a page's metadata even when tombstoned/quarantined (for
+      // audit) — the `lifecycle` field on the summary marks it clearly.
       page: toPageSummary(
         {
           _id: page._id,
           slug: page.slug,
           visibility: page.visibility,
+          lifecycle: page.lifecycle,
           customDomain: page.customDomain,
           currentVersion: page.currentVersion,
           tags: page.tags,
@@ -908,5 +978,106 @@ export const get = query({
       ),
       versions,
     };
+  },
+});
+
+// ===========================================================================
+// CLOUD-31 — delete (→ tombstone) + visibility mutations.
+//
+// Both are MUTATIONS (a mutation has `ctx.db`; the lifecycle/visibility patch +
+// audit are DB writes). The edge effects ride the injectable `lifecycleEdgePort`
+// no-op placeholders (real purge/evict wired at deploy — CLOUD-30); they are
+// awaited so the contract is exercised end-to-end and the tests can assert it.
+// ===========================================================================
+
+const lifecycleResultValidator = v.object({
+  lifecycle: v.union(
+    v.literal("active"),
+    v.literal("quarantined"),
+    v.literal("tombstoned"),
+  ),
+  sealedKey: v.union(v.string(), v.null()),
+});
+
+/**
+ * deletePage (DELETE /v1/pages/{id}): requireWrite → move the page's lifecycle
+ * to `tombstoned` via the shared moderation transition (NOT a hard delete — the
+ * page record + every version row are RETAINED, PRD §8.2), invalidate the edge
+ * cache + evict the KV route so the page stops serving (→ 410 at the edge), and
+ * audit. A tombstoned page no longer appears in `find` but `get` still returns
+ * its metadata for audit, marked by its `lifecycle`.
+ */
+export const deletePage = mutation({
+  args: { bearer: v.string(), id: v.id("pages") },
+  returns: lifecycleResultValidator,
+  handler: async (ctx, args) => {
+    const auth = await requireWrite(ctx, args.bearer);
+    const page = await ctx.db.get(args.id);
+    if (!page || page.accountId !== auth.accountId) {
+      // Account-scoped not-found (no existence leak): mirror `get`/`update`.
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+    }
+
+    // active → tombstoned (+ audit) through the single shared transition path.
+    const outcome = await applyLifecycle(ctx, {
+      pageId: args.id,
+      accountId: auth.accountId,
+      tokenId: auth.tokenId,
+      transition: "delete",
+      reason: null,
+    });
+
+    // Edge: purge the cache + evict the KV route so the dead page stops serving.
+    const url = summaryUrl(pageBaseUrl(), page.slug);
+    await lifecycleEdgePort.invalidate(url);
+    await lifecycleEdgePort.evictRoute({ pageId: args.id, slug: page.slug });
+
+    return outcome;
+  },
+});
+
+const visibilityArg = v.union(
+  v.literal("public"),
+  v.literal("unlisted"),
+  v.literal("private"),
+);
+
+/**
+ * setVisibility (PATCH /v1/pages/{id}/visibility): requireWrite → update
+ * `pages.visibility`, invalidate the edge cache (visibility affects who the edge
+ * serves the artifact to), and audit. Returns the new visibility.
+ */
+export const setVisibility = mutation({
+  args: {
+    bearer: v.string(),
+    id: v.id("pages"),
+    visibility: visibilityArg,
+  },
+  returns: v.object({ visibility: visibilityArg }),
+  handler: async (ctx, args) => {
+    const auth = await requireWrite(ctx, args.bearer);
+    const page = await ctx.db.get(args.id);
+    if (!page || page.accountId !== auth.accountId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+    }
+
+    const now = Date.now();
+    const from = page.visibility;
+    if (from !== args.visibility) {
+      await ctx.db.patch(args.id, { visibility: args.visibility, updatedAt: now });
+    }
+    await ctx.db.insert("auditLog", {
+      accountId: auth.accountId,
+      action: "page.visibility",
+      targetId: args.id,
+      actorTokenId: auth.tokenId,
+      metadata: { from, to: args.visibility },
+      createdAt: now,
+    });
+
+    // Visibility changes what the edge may serve → purge the cached URL.
+    await lifecycleEdgePort.invalidate(summaryUrl(pageBaseUrl(), page.slug));
+
+    return { visibility: args.visibility };
   },
 });

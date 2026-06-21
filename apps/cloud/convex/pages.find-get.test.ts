@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyResidualFilters,
+  isFindable,
   normalizeFindFilters,
   planFindIndex,
   selectGetVersions,
@@ -32,6 +33,7 @@ function row(over: Partial<PageRowLike>): PageRowLike {
     _id: "pg_1",
     slug: "status",
     visibility: "public",
+    lifecycle: "active",
     customDomain: null,
     currentVersion: 3,
     tags: ["ops"],
@@ -120,6 +122,14 @@ describe("applyResidualFilters — filters no index can serve (q substring, tag 
   });
 });
 
+describe("isFindable — find excludes dead pages (CLOUD-31)", () => {
+  it("keeps only active pages discoverable; tombstoned/quarantined are excluded", () => {
+    expect(isFindable({ lifecycle: "active" })).toBe(true);
+    expect(isFindable({ lifecycle: "tombstoned" })).toBe(false);
+    expect(isFindable({ lifecycle: "quarantined" })).toBe(false);
+  });
+});
+
 describe("toPageSummary — the exact CLI-facing JSON shape", () => {
   it("projects every summary field and builds the public url", () => {
     expect(
@@ -140,11 +150,21 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
       slug: "status",
       url: "https://shortwind.app/status",
       visibility: "unlisted",
+      lifecycle: "active",
       customDomain: "status.acme.com",
       currentVersion: 7,
       tags: ["ops", "prod"],
       updatedAt: 4242,
     });
+  });
+
+  it("surfaces the page lifecycle so callers can see a page's state (CLOUD-31)", () => {
+    expect(toPageSummary(row({ lifecycle: "tombstoned" }), BASE).lifecycle).toBe(
+      "tombstoned",
+    );
+    expect(
+      toPageSummary(row({ lifecycle: "quarantined" }), BASE).lifecycle,
+    ).toBe("quarantined");
   });
 
   it("does not leak accountId or other internal fields", () => {
@@ -154,6 +174,7 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
         "currentVersion",
         "customDomain",
         "id",
+        "lifecycle",
         "slug",
         "tags",
         "updatedAt",

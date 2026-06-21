@@ -19,6 +19,7 @@ import type * as http from "../http.js";
 // CONVEX_DEPLOYMENT) so these two modules are declared by hand below so
 // `internal.pages.*` / `internal.recipes.*` references in pages.ts typecheck.
 // A real `convex dev` (CLOUD-30) regenerates this file and supersedes the edit.
+import type * as moderation from "../moderation.js";
 import type * as pages from "../pages.js";
 import type * as recipes from "../recipes.js";
 import type * as tokens from "../tokens.js";
@@ -34,6 +35,7 @@ import type * as tokens from "../tokens.js";
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   http: typeof http;
+  moderation: typeof moderation;
   pages: typeof pages;
   recipes: typeof recipes;
   tokens: typeof tokens;
