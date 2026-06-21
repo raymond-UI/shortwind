@@ -385,15 +385,34 @@ export function bumpRecipeVersion(prior: string | null): string {
 
 /**
  * Assemble the COMPLETE self-contained served document (PRD §6.1 — the serve
- * path stays dumb; it only streams this, never compiles). Matches the
- * established Shortwind CDN artifact pattern: the frozen, already-expanded
- * Tailwind HTML + the `@tailwindcss/browser@4` compile script + the scoped CSS
- * preamble / theme vars in a `<style type="text/tailwindcss">` block. No
- * `expand.js` runtime — the HTML is already expanded server-side (PRD §5.6).
+ * path stays dumb; it only streams this, never compiles).
+ *
+ * Two cases:
+ *
+ *  1. FULL-DOCUMENT PASSTHROUGH: when `expandedHtml` (trimmed) already starts with
+ *     `<!doctype html` (case-insensitive) or `<html`, it IS a complete document —
+ *     it carries its own `<head>`/`<title>`/styles/fonts. We return it VERBATIM:
+ *     no wrapper, no injected `@tailwindcss/browser` script (it does not need the
+ *     browser compiler — it brought its own CSS). This is how a self-contained
+ *     standalone page (e.g. an author's hand-written HTML) is served unchanged.
+ *
+ *  2. FRAGMENT WRAP: otherwise the content is a fragment authored for the platform
+ *     (recipe tokens already expanded server-side) that still needs the Tailwind
+ *     browser compiler. We wrap it in the established Shortwind CDN artifact
+ *     pattern: the frozen expanded HTML + the `@tailwindcss/browser@4` compile
+ *     script + the scoped CSS preamble / theme vars in a
+ *     `<style type="text/tailwindcss">` block. No `expand.js` runtime — the HTML
+ *     is already expanded server-side (PRD §5.6).
  *
  * Deterministic output (stable bytes) so it is golden-fixture testable.
  */
 export function assembleArtifact(expandedHtml: string, css: string): string {
+  // Full-document passthrough: a complete `<!doctype html>` / `<html>` document
+  // is served verbatim (it owns its own head/styles; don't double-wrap).
+  const head = expandedHtml.trimStart().toLowerCase();
+  if (head.startsWith("<!doctype html") || head.startsWith("<html")) {
+    return expandedHtml;
+  }
   return [
     "<!doctype html>",
     '<html lang="en">',

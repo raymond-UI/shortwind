@@ -550,6 +550,40 @@ describe("pure helpers", () => {
     expect(lockfileVersions(lf)).toEqual({ btn: "1.0.0", card: "0.4.0" });
   });
 
+  it("assembleArtifact returns a FULL document verbatim (no wrap, no browser script)", () => {
+    const fullDoc = [
+      "<!DOCTYPE html>",
+      '<html lang="en">',
+      "<head>",
+      "<title>Standalone</title>",
+      '<link href="https://fonts.googleapis.com/css2?family=Fraunces" rel="stylesheet">',
+      "<style>:root{--background:hsl(15 55% 96.5%)}</style>",
+      "</head>",
+      '<body><h1 class="hero">Hello</h1></body>',
+      "</html>",
+    ].join("\n");
+    // A complete document is returned byte-identical — no wrapper injected.
+    expect(assembleArtifact(fullDoc, '@import "tailwindcss";')).toBe(fullDoc);
+    // Verbatim: exactly one <html>, and the browser compiler is NOT injected.
+    const out = assembleArtifact(fullDoc, '@import "tailwindcss";');
+    expect(out.match(/<html/gi)).toHaveLength(1);
+    expect(out).not.toContain("@tailwindcss/browser");
+    // Leading whitespace before the doctype is tolerated (still passthrough).
+    expect(assembleArtifact(`\n  ${fullDoc}`, "x")).toBe(`\n  ${fullDoc}`);
+    // A bare <html> (no doctype) also passes through verbatim.
+    const htmlOnly = "<html><body>hi</body></html>";
+    expect(assembleArtifact(htmlOnly, "x")).toBe(htmlOnly);
+  });
+
+  it("assembleArtifact WRAPS a fragment (injects the tailwindcss browser compiler)", () => {
+    const fragment = '<div class="rounded-lg border p-4">hi</div>';
+    const out = assembleArtifact(fragment, '@import "tailwindcss";');
+    expect(out.startsWith("<!doctype html>")).toBe(true);
+    expect(out).toContain("@tailwindcss/browser@4");
+    expect(out).toContain('<style type="text/tailwindcss">');
+    expect(out).toContain(fragment);
+  });
+
   it("assembleArtifact is a stable, self-contained golden document", () => {
     const doc = assembleArtifact(
       '<div class="rounded-lg border p-4">hi</div>',

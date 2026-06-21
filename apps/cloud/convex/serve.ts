@@ -20,12 +20,12 @@ import { isReservedSubdomain } from "../shared/src/slug.js";
  * Worker enforces visibility/lifecycle itself. `validateRouteToken` re-uses the
  * standard {@link requireRead} guard to validate a bearer for a PRIVATE page.
  *
- * Slug resolution (v1, single-account demo): a workers.dev request path IS the
- * page slug (`/hello` → slug `hello`). The `pages.by_slug` index keys on
- * (accountId, slug), so a slug-only lookup can't use it directly; for v1 we scan
- * the (small) pages table and match the slug. A multi-account launch resolves the
- * account from the hostname first (custom domain / subdomain) and then hits
- * `by_slug` — that lands with the bind-domain work, not here.
+ * Route resolution (CLOUD-SUBDOMAIN) is SUBDOMAIN-ONLY: a request resolves to a
+ * page solely by its per-page subdomain (`<label>.shortwind.dev` → the page whose
+ * `subdomain === label`, via the global `by_subdomain` index). The request path is
+ * irrelevant. There is no path-as-slug fallback — a host that is not a per-page
+ * subdomain (apex, reserved/system label, `*.workers.dev`) resolves to null and
+ * the Worker 404s.
  */
 
 // ---------------------------------------------------------------------------
@@ -53,13 +53,6 @@ const serveRouteValidator = v.union(
   v.null(),
 );
 
-/** Normalize an incoming serve path to a slug: strip the leading slash, drop a
- * trailing slash, and treat the bare root ("/") as empty (no page). */
-export function pathToSlug(path: string): string {
-  const trimmed = path.replace(/^\/+/, "").replace(/\/+$/, "");
-  return trimmed;
-}
-
 /**
  * CLOUD-SUBDOMAIN: extract the per-page subdomain label from a serve host, or
  * null when the host is not a single-label subdomain under a 2-label apex.
@@ -68,14 +61,11 @@ export function pathToSlug(path: string): string {
  * front of the 2-label registrable apex (`shortwind.dev`). We treat any 3-label
  * host as `<label>.<apex>` and return the leading label, EXCEPT when that label
  * is a reserved/system subdomain (`c`, `www`, `api`, …) — those are system hosts
- * (e.g. the legacy `c.shortwind.dev` path-based serve, `…workers.dev`) and MUST
- * fall through to path-based resolution, never resolve as a page.
+ * and never resolve as a page (→ null → Worker 404).
  *
- * A bare apex (`shortwind.dev`), a `*.workers.dev` host (4 labels, leading label
- * is the script name = reserved-ish but more importantly NOT a 3-label host), or
- * any deeper host returns null → the caller uses path-as-slug resolution. This
- * keeps the existing `c.shortwind.dev/<slug>` and `…workers.dev/<slug>` serving
- * working unchanged.
+ * A bare apex (`shortwind.dev`), a `*.workers.dev` host (4 labels), or any deeper
+ * host returns null. Since serving is subdomain-only, a null here means the
+ * request resolves to no page.
  */
 export function subdomainLabel(host: string): string | null {
   const h = host.toLowerCase().replace(/\.$/, "");
@@ -84,7 +74,7 @@ export function subdomainLabel(host: string): string | null {
   if (labels.length !== 3) return null;
   const label = labels[0]!;
   if (label === "") return null;
-  // Reserved/system labels are NOT page subdomains — fall through to path-based.
+  // Reserved/system labels are NOT page subdomains → null (no page resolves).
   if (isReservedSubdomain(label)) return null;
   return label;
 }
@@ -109,10 +99,14 @@ function toServeRoute(
 /**
  * resolveRoute (GET /internal/resolve?host=&path=) — the Worker cold source.
  *
- * Maps an incoming hostname/path to the route record the Worker needs, or null
- * when no page maps to it. v1: the path is the page slug; we resolve the slug
- * across the (single-account demo) pages table. `host` is accepted for forward
- * compatibility (custom-domain resolution) and currently informational.
+ * Maps an incoming hostname to the route record the Worker needs, or null when
+ * no page maps to it. CLOUD-SUBDOMAIN: serving is SUBDOMAIN-ONLY — a page is
+ * resolved EXCLUSIVELY by its per-page subdomain (`<label>.shortwind.dev` →
+ * `by_subdomain`). The request `path` is irrelevant (a page serves at the host
+ * root). A request whose host is NOT a per-page subdomain (the bare apex, a
+ * reserved/system label like `c.shortwind.dev`, a `*.workers.dev` host, or any
+ * non-3-label host) returns null → the Worker 404s. The legacy path-as-slug
+ * fallback (`c.shortwind.dev/<slug>`) has been removed.
  *
  * Returns the FULL route incl. lifecycle/visibility even for tombstoned/
  * quarantined/private pages — the Worker enforces those states itself (410/451/
@@ -123,39 +117,18 @@ export const resolveRoute = query({
   args: { host: v.string(), path: v.string() },
   returns: serveRouteValidator,
   handler: async (ctx, args) => {
-    // 1. CLOUD-SUBDOMAIN: a per-page subdomain host (`<label>.shortwind.dev`,
-    //    label not reserved/system) resolves the page by its globally-unique
-    //    `subdomain` via the `by_subdomain` index. This is the Vercel-style hot
-    //    path; the request path is irrelevant (the page serves at the host root).
+    // SUBDOMAIN-ONLY: a per-page subdomain host (`<label>.shortwind.dev`, label
+    // not reserved/system) resolves the page by its globally-unique `subdomain`
+    // via the `by_subdomain` index. Any other host (apex, reserved label,
+    // workers.dev, deeper host) is not a page → null (Worker 404).
     const label = subdomainLabel(args.host);
-    if (label !== null) {
-      const page = await ctx.db
-        .query("pages")
-        .withIndex("by_subdomain", (q) => q.eq("subdomain", label))
-        .first();
-      if (page === null) return null;
-      const version =
-        page.currentVersionId === null
-          ? null
-          : await ctx.db.get(page.currentVersionId);
-      return toServeRoute(page, version);
-    }
+    if (label === null) return null;
 
-    // 2. LEGACY path-based serving (backward-compat): the request path IS the
-    //    page slug (`c.shortwind.dev/<slug>`, `…workers.dev/<slug>`). Kept so the
-    //    live demo (`c.shortwind.dev/cloud-ops`) and any older link still serve.
-    const slug = pathToSlug(args.path);
-    if (slug === "") return null;
-
-    // v1 single-account demo: the by_slug index is (accountId, slug), so a
-    // slug-only lookup scans. The demo deployment holds few pages; a multi-
-    // account launch resolves the account from the host FIRST (bind-domain work).
     const page = await ctx.db
       .query("pages")
-      .filter((q) => q.eq(q.field("slug"), slug))
+      .withIndex("by_subdomain", (q) => q.eq("subdomain", label))
       .first();
     if (page === null) return null;
-
     const version =
       page.currentVersionId === null
         ? null

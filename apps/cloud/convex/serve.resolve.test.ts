@@ -3,18 +3,19 @@ import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
 import { api } from "./_generated/api.js";
-import { subdomainLabel, pathToSlug } from "./serve.js";
+import { subdomainLabel } from "./serve.js";
 import { computeBodySha } from "../shared/src/fingerprint.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
 
 /**
- * CLOUD-SUBDOMAIN — serve resolver integration test (the Vercel hybrid).
+ * CLOUD-SUBDOMAIN — serve resolver integration test (subdomain-only serving).
  *
  * Exercises `serve.resolveRoute` against the REAL schema + publish action via
  * convex-test, proving:
  *   - a per-page subdomain host (`<subdomain>.shortwind.dev`) resolves the page,
- *   - legacy path-based serving (`c.shortwind.dev/<slug>`) still resolves,
- *   - a reserved/system subdomain (`c.shortwind.dev`) falls through to path-based,
+ *   - a reserved/system host (`c.shortwind.dev`) resolves NOTHING (no path-based
+ *     fallback — serving is subdomain-only),
+ *   - a non-subdomain host (apex, workers.dev) resolves nothing regardless of path,
  *   - a second account's same-slug page gets a disambiguated subdomain that
  *     resolves independently (no collision).
  */
@@ -83,7 +84,7 @@ describe("CLOUD-SUBDOMAIN — pure host parsing", () => {
     expect(subdomainLabel("My-Status.Shortwind.Dev")).toBe("my-status");
   });
 
-  it("returns null for reserved/system labels (fall through to path-based)", () => {
+  it("returns null for reserved/system labels (never resolve as a page)", () => {
     expect(subdomainLabel("c.shortwind.dev")).toBeNull();
     expect(subdomainLabel("www.shortwind.dev")).toBeNull();
     expect(subdomainLabel("api.shortwind.dev")).toBeNull();
@@ -93,14 +94,9 @@ describe("CLOUD-SUBDOMAIN — pure host parsing", () => {
     expect(subdomainLabel("shortwind.dev")).toBeNull();
     expect(subdomainLabel("shortwind-cloud-serve.mzed-studio.workers.dev")).toBeNull();
   });
-
-  it("pathToSlug strips slashes and treats root as empty", () => {
-    expect(pathToSlug("/cloud-ops")).toBe("cloud-ops");
-    expect(pathToSlug("/")).toBe("");
-  });
 });
 
-describe("CLOUD-SUBDOMAIN — serve.resolveRoute (subdomain + path-based)", () => {
+describe("CLOUD-SUBDOMAIN — serve.resolveRoute (subdomain-only)", () => {
   it("resolves a per-page subdomain host to the right page", async () => {
     const t = convexTest(schema, modules);
     const bearer = await seedAuth(t, "auth_user_a");
@@ -117,21 +113,21 @@ describe("CLOUD-SUBDOMAIN — serve.resolveRoute (subdomain + path-based)", () =
     expect(route!.lifecycle).toBe("active");
   });
 
-  it("keeps legacy path-based serving working (c.shortwind.dev/<slug>)", async () => {
+  it("does NOT resolve a reserved/system host by path (subdomain-only — no fallback)", async () => {
     const t = convexTest(schema, modules);
     const bearer = await seedAuth(t, "auth_user_b");
-    const { id } = await publishPage(t, bearer, "cloud-ops");
+    await publishPage(t, bearer, "cloud-ops");
 
-    // c.shortwind.dev is a reserved/system host → path-as-slug resolution.
+    // c.shortwind.dev is a reserved/system host. With path-based serving removed,
+    // it resolves NOTHING regardless of the path that would once have matched.
     const route = await t.query(api.serve.resolveRoute, {
       host: "c.shortwind.dev",
       path: "/cloud-ops",
     });
-    expect(route).not.toBeNull();
-    expect(route!.pageId).toBe(id);
+    expect(route).toBeNull();
   });
 
-  it("a reserved subdomain host with no matching path resolves nothing", async () => {
+  it("a reserved subdomain host resolves nothing", async () => {
     const t = convexTest(schema, modules);
     await seedAuth(t, "auth_user_c");
     const route = await t.query(api.serve.resolveRoute, {

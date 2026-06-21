@@ -533,11 +533,17 @@ async function writeArtifactToR2(
   });
 
   const objectUrl = `${endpoint.replace(/\/+$/, "")}/${bucket}/${key}`;
+  // R2's S3 API requires an explicit Content-Length on PUT (it rejects a
+  // streamed/unknown-length body with 411 MissingContentLength). A string body
+  // in the Convex V8 runtime is sent without one, so encode to bytes and set the
+  // length ourselves (aws4fetch signs over the resulting headers).
+  const bodyBytes = new TextEncoder().encode(html);
   const res = await client.fetch(objectUrl, {
     method: "PUT",
-    body: html,
+    body: bodyBytes,
     headers: {
       "content-type": "text/html; charset=utf-8",
+      "content-length": String(bodyBytes.byteLength),
       // Mirror worker/src/r2.ts ArtifactMeta. S3 custom metadata rides as
       // `x-amz-meta-*`; R2 surfaces these as the object's customMetadata.
       "x-amz-meta-expandedhash": meta.expandedHash,
