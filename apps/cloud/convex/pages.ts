@@ -1,8 +1,13 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  query,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireWrite } from "./lib/auth-guard.js";
+import { requireRead, requireWrite } from "./lib/auth-guard.js";
 import {
   runPublish,
   runUpdate,
@@ -598,3 +603,310 @@ function toPageRecord(row: Doc<"pages">) {
     currentVersion: row.currentVersion,
   };
 }
+
+// ===========================================================================
+// CLOUD-24 — `find` / `get` read verbs (PRD §3.1 load-bearing, §4).
+//
+// `find` is the verb a STATELESS agent calls to answer "do I already have a
+// page like this?" before publishing — so it must be cheap, account-scoped, and
+// index-backed (never a full table scan). `get` returns a page's metadata + its
+// version history so the agent can confirm before acting.
+//
+// Both are public `query`s (a query CAN read `ctx.db`, unlike the publish/update
+// ACTIONS), so they validate the bearer inline via `requireRead` and read the
+// `by_customDomain` / `by_tag` / `by_account` / `by_page` indexes directly.
+//
+// The non-trivial decision logic (index plan, residual q filter, summary
+// projection, version ordering) is factored into the PURE helpers below and
+// unit-tested offline in `pages.find-get.test.ts` (apps/cloud has no convex-test
+// harness — same convention as CLOUD-23's schema-shape test).
+// ===========================================================================
+
+/** A page summary returned by `find` — the fields the agent needs to decide
+ * publish-vs-update without fetching the full page. CLOUD-25's CLI consumes
+ * this verbatim. */
+export interface PageSummary {
+  id: string;
+  slug: string;
+  url: string;
+  visibility: "public" | "unlisted" | "private";
+  customDomain: string | null;
+  currentVersion: number;
+  tags: string[];
+  updatedAt: number;
+}
+
+/** The minimal page-row shape the projection reads. Mirrors the `pages` table. */
+export interface PageRowLike {
+  _id: string;
+  slug: string;
+  visibility: "public" | "unlisted" | "private";
+  customDomain: string | null;
+  currentVersion: number;
+  tags: string[];
+  updatedAt: number;
+}
+
+/** The normalized, trimmed `find` filters. `undefined`/blank ⇒ "no filter". */
+export interface FindFilters {
+  q?: string;
+  domain?: string;
+  tag?: string;
+}
+
+/** A version entry in the `get` history (newest first). */
+export interface VersionEntry {
+  id: string;
+  version: number;
+  artifactKey: string;
+  expandedHash: string;
+  sourceHash: string;
+  createdAt: number;
+}
+
+/** Render the public URL for a page slug under the platform origin. */
+export function summaryUrl(baseUrl: string, slug: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/${slug}`;
+}
+
+/** Project a page row into the `find` summary shape. */
+export function toPageSummary(row: PageRowLike, baseUrl: string): PageSummary {
+  return {
+    id: row._id,
+    slug: row.slug,
+    url: summaryUrl(baseUrl, row.slug),
+    visibility: row.visibility,
+    customDomain: row.customDomain,
+    currentVersion: row.currentVersion,
+    tags: row.tags,
+    updatedAt: row.updatedAt,
+  };
+}
+
+/** Trim a query-string value; treat empty/whitespace as absent. */
+export function normalizeFilter(
+  value: string | undefined | null,
+): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
+
+/** Normalize a raw filter bag (parsed query params) into `FindFilters`. */
+export function normalizeFindFilters(raw: {
+  q?: string | null;
+  domain?: string | null;
+  tag?: string | null;
+}): FindFilters {
+  return {
+    q: normalizeFilter(raw.q),
+    domain: normalizeFilter(raw.domain),
+    tag: normalizeFilter(raw.tag),
+  };
+}
+
+/** Case-insensitive substring match of `q` against the page slug. (Title is
+ * only used at publish time to derive a slug — never persisted — so the slug is
+ * the only durable text handle.) */
+export function matchesQuery(row: { slug: string }, q: string): boolean {
+  return row.slug.toLowerCase().includes(q.toLowerCase());
+}
+
+/** True when `tag` is one of the page's tags (membership, not whole-array). */
+export function matchesTag(row: { tags: string[] }, tag: string): boolean {
+  return row.tags.includes(tag);
+}
+
+/**
+ * Apply the residual (non-index) `find` filters to an already account-scoped,
+ * index-narrowed candidate set. The adapter drives the scan from the most
+ * selective INDEX (see {@link planFindIndex}); the filters no index can serve
+ * are applied here:
+ *   - the free-text substring `q` (no equality index exists for it), and
+ *   - `tag` MEMBERSHIP. Convex's `by_tag` index keys on the WHOLE `tags` array,
+ *     not on individual elements, so it can only answer whole-array equality —
+ *     not "contains this tag". Membership is therefore enforced here over the
+ *     account-scoped candidate set (still index-backed via `by_account`; see
+ *     {@link planFindIndex}). A schema migration to a fan-out tag table would
+ *     let this move onto an index, but the schema is owned elsewhere (CLOUD-00).
+ */
+export function applyResidualFilters<T extends { slug: string; tags: string[] }>(
+  rows: T[],
+  filters: FindFilters,
+): T[] {
+  let out = rows;
+  if (filters.q !== undefined) {
+    const q = filters.q;
+    out = out.filter((r) => matchesQuery(r, q));
+  }
+  if (filters.tag !== undefined) {
+    const tag = filters.tag;
+    out = out.filter((r) => matchesTag(r, tag));
+  }
+  return out;
+}
+
+/**
+ * The INDEX the adapter drives the scan from, as plain data (so the "no full
+ * scan" choice is unit-testable without a DB):
+ *   - `domain` present → `by_customDomain` (a true equality index, most
+ *     selective: at most one page binds a given hostname).
+ *   - else             → `by_account` (the caller's pages). `tag`-only and
+ *     `q`-only both land here; `tag` membership is then a residual filter (see
+ *     {@link applyResidualFilters} for why `by_tag` cannot serve membership).
+ * Every branch is constrained to ONE account downstream, so there is never a
+ * cross-account leak and never a full-table scan.
+ */
+export type FindIndexPlan =
+  | { index: "by_customDomain"; domain: string }
+  | { index: "by_account" };
+
+export function planFindIndex(filters: FindFilters): FindIndexPlan {
+  if (filters.domain !== undefined) {
+    return { index: "by_customDomain", domain: filters.domain };
+  }
+  return { index: "by_account" };
+}
+
+/** Order a page's versions newest-first (descending `version`). */
+export function selectGetVersions<T extends { version: number }>(
+  versions: T[],
+): T[] {
+  return [...versions].sort((a, b) => b.version - a.version);
+}
+
+const summaryValidator = v.object({
+  id: v.string(),
+  slug: v.string(),
+  url: v.string(),
+  visibility: v.union(
+    v.literal("public"),
+    v.literal("unlisted"),
+    v.literal("private"),
+  ),
+  customDomain: v.union(v.string(), v.null()),
+  currentVersion: v.number(),
+  tags: v.array(v.string()),
+  updatedAt: v.number(),
+});
+
+const versionEntryValidator = v.object({
+  id: v.id("pageVersions"),
+  version: v.number(),
+  artifactKey: v.string(),
+  expandedHash: v.string(),
+  sourceHash: v.string(),
+  createdAt: v.number(),
+});
+
+/**
+ * find (GET /v1/pages?q=&domain=&tag=): list the caller's pages matching the
+ * filters, as summaries. Empty result → `[]` (the agent reads this to decide
+ * publish-vs-update). requireRead-guarded, account-scoped, INDEX-backed.
+ */
+export const find = query({
+  args: {
+    bearer: v.string(),
+    q: v.optional(v.string()),
+    domain: v.optional(v.string()),
+    tag: v.optional(v.string()),
+  },
+  returns: v.array(summaryValidator),
+  handler: async (ctx, args) => {
+    const auth = await requireRead(ctx, args.bearer);
+    const filters = normalizeFindFilters({
+      q: args.q,
+      domain: args.domain,
+      tag: args.tag,
+    });
+    const plan = planFindIndex(filters);
+
+    // Narrow by the chosen index FIRST, then enforce account scope. Every
+    // branch yields rows for the caller's account only — no full table scan,
+    // no cross-account leakage.
+    let candidates: Doc<"pages">[];
+    if (plan.index === "by_customDomain") {
+      const domain = plan.domain;
+      candidates = await ctx.db
+        .query("pages")
+        .withIndex("by_customDomain", (q) => q.eq("customDomain", domain))
+        .collect();
+      candidates = candidates.filter((p) => p.accountId === auth.accountId);
+    } else {
+      candidates = await ctx.db
+        .query("pages")
+        .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+        .collect();
+    }
+
+    const filtered = applyResidualFilters(candidates, filters);
+    const baseUrl = pageBaseUrl();
+    return filtered.map((row) =>
+      toPageSummary(
+        {
+          _id: row._id,
+          slug: row.slug,
+          visibility: row.visibility,
+          customDomain: row.customDomain,
+          currentVersion: row.currentVersion,
+          tags: row.tags,
+          updatedAt: row.updatedAt,
+        },
+        baseUrl,
+      ),
+    );
+  },
+});
+
+/**
+ * get (GET /v1/pages/{id}): a page's metadata (as the `find` summary) + its full
+ * version history (newest first) so the agent can confirm before acting.
+ * requireRead-guarded + account-scoped: a page belonging to another account is
+ * reported as not-found (no existence leak).
+ */
+export const get = query({
+  args: { bearer: v.string(), id: v.id("pages") },
+  returns: v.union(
+    v.object({
+      page: summaryValidator,
+      versions: v.array(versionEntryValidator),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const auth = await requireRead(ctx, args.bearer);
+    const page = await ctx.db.get(args.id);
+    if (!page || page.accountId !== auth.accountId) return null;
+
+    const versionRows = await ctx.db
+      .query("pageVersions")
+      .withIndex("by_page", (q) => q.eq("pageId", page._id))
+      .collect();
+    const versions = selectGetVersions(
+      versionRows.map((vr) => ({
+        id: vr._id,
+        version: vr.version,
+        artifactKey: vr.artifactKey,
+        expandedHash: vr.expandedHash,
+        sourceHash: vr.sourceHash,
+        createdAt: vr.createdAt,
+      })),
+    );
+
+    return {
+      page: toPageSummary(
+        {
+          _id: page._id,
+          slug: page.slug,
+          visibility: page.visibility,
+          customDomain: page.customDomain,
+          currentVersion: page.currentVersion,
+          tags: page.tags,
+          updatedAt: page.updatedAt,
+        },
+        pageBaseUrl(),
+      ),
+      versions,
+    };
+  },
+});
