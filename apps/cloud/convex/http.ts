@@ -4,6 +4,12 @@ import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { authComponent, createAuth } from "./auth";
+import {
+  API_CATALOG_PATH,
+  OAUTH_AS_METADATA_PATH,
+  buildApiCatalog,
+  buildOAuthAuthorizationServerMetadata,
+} from "./wellknown";
 
 /**
  * Convex HTTP router (CLOUD-01 + CLOUD-24).
@@ -360,6 +366,49 @@ const bindDomainHandler = httpAction(async (ctx, request) => {
     }
     return errorResponse(err);
   }
+});
+
+// ---------------------------------------------------------------------------
+// CLOUD-42 — standards-based discovery (PRD §7.3). PUBLIC, no auth. Two
+// `/.well-known/...` documents let a modern agent self-discover HOW to
+// authenticate (RFC 8414/9728 authorization-server metadata → the RFC 8628
+// device grant in auth.ts) and WHAT verbs exist (RFC 9727 endpoint catalog →
+// the `/v1/pages` routes above). The builders are PURE (convex/wellknown.ts);
+// the issuer/base URL is env-injected at deploy (CLOUD-30b sets the public base
+// URL via `SITE_URL`, the same origin auth.ts uses).
+// ---------------------------------------------------------------------------
+
+/** Minimal ambient `process` — this workspace types against workers-types. */
+declare const process: { env: Record<string, string | undefined> };
+
+/**
+ * The public discovery issuer/base URL. Same origin the auth layer uses
+ * (`SITE_URL`); falls back to localhost for dev. CLOUD-30b injects the real
+ * deployed origin so the advertised endpoints resolve.
+ */
+function discoveryBaseUrl(): string {
+  return process.env.SITE_URL ?? "http://localhost:3000";
+}
+
+/** GET /.well-known/oauth-authorization-server → RFC 8414/9728 metadata. */
+const oauthMetadataHandler = httpAction(async () => {
+  return json(buildOAuthAuthorizationServerMetadata(discoveryBaseUrl()), 200);
+});
+
+/** GET /.well-known/api-catalog → RFC 9727 endpoint catalog (the REST verbs). */
+const apiCatalogHandler = httpAction(async () => {
+  return json(buildApiCatalog(discoveryBaseUrl()), 200);
+});
+
+http.route({
+  path: OAUTH_AS_METADATA_PATH,
+  method: "GET",
+  handler: oauthMetadataHandler,
+});
+http.route({
+  path: API_CATALOG_PATH,
+  method: "GET",
+  handler: apiCatalogHandler,
 });
 
 http.route({ path: "/v1/abuse", method: "POST", handler: abuseHandler });
