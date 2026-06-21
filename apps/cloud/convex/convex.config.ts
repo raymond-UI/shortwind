@@ -1,5 +1,6 @@
 import { defineApp } from "convex/server";
 import betterAuth from "@convex-dev/better-auth/convex.config";
+import rateLimiter from "@convex-dev/rate-limiter/convex.config";
 
 /**
  * Convex app component registration (CLOUD-01).
@@ -9,10 +10,14 @@ import betterAuth from "@convex-dev/better-auth/convex.config";
  * the component, not in `schema.ts`. Registering it here is what makes
  * `components.betterAuth` available to `convex/auth.ts`.
  *
- * Later waves (`app.use(...)`) add the rate-limiter component when the HTTP
- * surface lands; kept minimal here per CLOUD-01 scope.
+ * CLOUD-33 registers the `@convex-dev/rate-limiter` component (additive): it owns
+ * the per-account publish rate-limit buckets consumed by `lib/rate-limit.ts`
+ * (`components.rateLimiter`). The component is active at deploy; offline tests
+ * inject an in-memory limiter (the component's child mutations don't run under
+ * `convex-test`) — see `lib/rate-limit.ts`.
  */
 const app = defineApp();
 app.use(betterAuth);
+app.use(rateLimiter);
 
 export default app;
