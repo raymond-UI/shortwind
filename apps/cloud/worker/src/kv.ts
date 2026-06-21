@@ -79,6 +79,26 @@ export async function putRoute(
 }
 
 /**
+ * Evict a route from KV.
+ *
+ * CLOUD-21's `invalidateRoute` (./cache.ts) only purges the edge *Cache*; it
+ * leaves the ROUTES KV entry in place, so a tombstone/delete would keep being
+ * re-served from KV until its TTL lapsed. The §8.2 kill path and publish/delete
+ * therefore also need to drop the KV record so the next request re-resolves
+ * against Convex (cold) and sees the new — or absent — route. This is the small,
+ * additive KV-side companion to the edge-cache purge.
+ *
+ * Idempotent: deleting an absent key is a no-op (KV `delete` does not error).
+ */
+export async function deleteRoute(
+  env: Env,
+  host: string,
+  path: string,
+): Promise<void> {
+  await env.ROUTES.delete(routeKey(host, path));
+}
+
+/**
  * Resolve a route with KV-first / Convex-cold fallback.
  *  - KV hit  → return it, no cold call.
  *  - KV miss → call `coldSource` exactly once; on a non-null result populate KV

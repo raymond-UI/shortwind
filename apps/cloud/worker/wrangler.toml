@@ -1,23 +1,33 @@
-# CLOUD-02 Phase-0 spike stub. NOT the production Worker config.
+# Shortwind Cloud serve Worker — the hot path (PRD §6.1).
 #
-# This exists only so `expand-edge.ts` is a deployable Worker entrypoint and so
-# the @cloudflare/vitest-pool-workers runtime can boot workerd against the same
-# settings. The production Worker (serve path) is wired in a later wave and does
-# NOT expand — expansion happens server-side at publish via the Convex action
-# (CLOUD-20).
+# CLOUD-22 finalizes this from the CLOUD-02 spike stub into the production serve
+# config: `main` is now the serve ROUTER (src/router.ts, `export default
+# { fetch }`), not the expand-edge spike. The router resolves hostname/path →
+# route (KV hot, Convex cold) and streams the frozen R2 artifact — it NEVER
+# expands and NEVER writes the DB on the hot path. expand-edge.ts remains in the
+# tree as the CLOUD-02 spike artifact but is no longer the Worker entrypoint.
 #
-# Hypothesis under test: @shortwind/core needs NO Node built-ins, so this config
-# carries NO `compatibility_flags = ["nodejs_compat"]`. If the spike test fails
-# to boot/run without it, add the flag here and in worker/vitest.config.ts and
-# record that in SPIKE.md. Outcome: see worker/SPIKE.md.
-name = "shortwind-cloud-expand-spike"
-main = "src/expand-edge.ts"
+# Compatibility: NO `compatibility_flags = ["nodejs_compat"]`. The serve path
+# touches only Web-standard APIs (Request/Response/URL, R2, KV, Cache) — no Node
+# built-ins. (The CLOUD-02 spike confirmed even @shortwind/core's expand() runs
+# without the flag; the router doesn't import it at all. See worker/SPIKE.md.)
+name = "shortwind-cloud-serve"
+main = "src/router.ts"
 compatibility_date = "2025-06-01"
 
+# --- routes (custom hostnames) ----------------------------------------------
+# Placeholder. The live serve hostnames — including the Cloudflare-for-SaaS
+# custom-hostname fallback that fronts bind-domain pages (PRD §6.1) — are wired
+# in CLOUD-30 alongside the live zone/account ids. Left commented so this config
+# stays deployable-shaped without claiming a zone the project does not yet own.
+# routes = [
+#   { pattern = "*", custom_domain = true },  # CLOUD-30: Cloudflare for SaaS
+# ]
+
 # --- CLOUD-21: serve-path storage bindings ----------------------------------
-# These declare the R2 bucket + KV namespace the hot path (CLOUD-22 router) and
-# the publish/delete mutations bind. Under @cloudflare/vitest-pool-workers /
-# miniflare these resolve to LOCAL in-memory stores — no live Cloudflare creds.
+# The R2 bucket + KV namespace the hot path (this router) and the publish/delete
+# mutations bind. Under @cloudflare/vitest-pool-workers / miniflare these resolve
+# to LOCAL in-memory stores — no live Cloudflare creds.
 #
 # CLOUD-30 wires the LIVE resources: replace `bucket_name` with the real R2
 # bucket and fill `id` with the real KV namespace id (and add `preview_id`).
@@ -30,3 +40,11 @@ bucket_name = "shortwind-artifacts-local"  # CLOUD-30: real bucket name
 [[kv_namespaces]]
 binding = "ROUTES"              # env.ROUTES — hostname/path -> route hot cache
 id = "shortwind-routes-local"   # CLOUD-30: real KV namespace id (+ preview_id)
+
+# --- live cold source (Convex) ----------------------------------------------
+# The router's cold-source resolution + private-token validation hit Convex on a
+# KV miss. The live Convex HTTP URL is a deferred placeholder (CLOUD-30 wires the
+# real value + injects the live RouterDeps); until then the worker's default deps
+# are closed-by-default (every cold miss → 404, every token → 401).
+[vars]
+CONVEX_HTTP_URL = ""  # CLOUD-30: live Convex HTTP route base URL
