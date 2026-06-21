@@ -1,0 +1,20 @@
+# Makes `apps/cloud/` its own pnpm workspace ROOT, fully decoupled from the
+# package monorepo above it. `pnpm install` here resolves @shortwind/* from the
+# npm registry (published beta), never `workspace:*`. Empty members = single
+# root. Mirrors the `site/` precedent. This workspace MUST NOT be listed in the
+# repo-root pnpm-workspace.yaml, and @shortwind/cloud is never published.
+packages: []
+
+# pnpm 11 blocks postinstall build scripts unless allow-listed. `workerd` ships
+# the V8 isolate the Cloudflare Worker tests run inside; `esbuild` is pulled by
+# wrangler/vitest tooling.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
+
+# Mirror the security override from site/ and the repo-root workspace: devalue
+# 5.8.0 carries GHSA-77vg-94rm-hx3p (high-severity DoS); 5.8.1 is the
+# semver-compatible patch.
+overrides:
+  devalue: ">=5.8.1"
