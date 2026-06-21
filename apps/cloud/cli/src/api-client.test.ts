@@ -246,3 +246,74 @@ describe("updatePage", () => {
     expect(calls[0]!.url).toBe("https://api.test/v1/pages/pg_1");
   });
 });
+
+describe("deletePage (CLOUD-34)", () => {
+  it("DELETEs /v1/pages/{id} with the bearer and no body", async () => {
+    const calls: Recorded[] = [];
+    const client = createApiClient({
+      baseUrl: "https://api.test",
+      token: "swc_secret",
+      // A tombstone returns an empty body (204-ish) — request normalizes it.
+      fetch: fakeFetch({ ok: true, status: 204, body: "" }, calls),
+    });
+    await expect(client.deletePage!("pg_1")).resolves.toBeUndefined();
+    expect(calls[0]!.method).toBe("DELETE");
+    expect(calls[0]!.url).toBe("https://api.test/v1/pages/pg_1");
+    expect(calls[0]!.headers?.Authorization).toBe("Bearer swc_secret");
+    expect(calls[0]!.body).toBeUndefined();
+  });
+
+  it("maps 404 / 403 to typed errors", async () => {
+    const c404 = createApiClient({
+      baseUrl: "https://api.test",
+      token: "t",
+      fetch: fakeFetch({ ok: false, status: 404, body: '{"error":{"code":"NOT_FOUND"}}' }, []),
+    });
+    await expect(c404.deletePage!("nope")).rejects.toMatchObject({ kind: "not_found", status: 404 });
+    const c403 = createApiClient({
+      baseUrl: "https://api.test",
+      token: "t",
+      fetch: fakeFetch({ ok: false, status: 403, body: '{"error":{"code":"FORBIDDEN"}}' }, []),
+    });
+    await expect(c403.deletePage!("pg_1")).rejects.toMatchObject({ kind: "forbidden", status: 403 });
+  });
+});
+
+describe("setVisibility (CLOUD-34)", () => {
+  const SUMMARY = {
+    id: "pg_1",
+    slug: "status",
+    url: "https://shortwind.dev/status",
+    visibility: "private",
+    customDomain: null,
+    currentVersion: 2,
+    tags: [],
+    updatedAt: 1000,
+  };
+
+  it("PATCHes /v1/pages/{id}/visibility with { visibility } and returns the summary", async () => {
+    const calls: Recorded[] = [];
+    const client = createApiClient({
+      baseUrl: "https://api.test",
+      token: "t",
+      fetch: fakeFetch({ ok: true, status: 200, body: JSON.stringify(SUMMARY) }, calls),
+    });
+    const updated = await client.setVisibility!("pg_1", "private");
+    expect(updated).toEqual(SUMMARY);
+    expect(calls[0]!.method).toBe("PATCH");
+    expect(calls[0]!.url).toBe("https://api.test/v1/pages/pg_1/visibility");
+    expect(JSON.parse(calls[0]!.body!)).toEqual({ visibility: "private" });
+  });
+
+  it("maps 401 to unauthorized", async () => {
+    const client = createApiClient({
+      baseUrl: "https://api.test",
+      token: "t",
+      fetch: fakeFetch({ ok: false, status: 401, body: '{"error":{"code":"UNAUTHORIZED"}}' }, []),
+    });
+    await expect(client.setVisibility!("pg_1", "public")).rejects.toMatchObject({
+      kind: "unauthorized",
+      status: 401,
+    });
+  });
+});

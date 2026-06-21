@@ -5,10 +5,17 @@ import { publish, publishFromFile } from "./commands/publish.js";
 import { update, updateFromFile } from "./commands/update.js";
 import { find, runFind } from "./commands/find.js";
 import { get, runGet } from "./commands/get.js";
-import { deletePage } from "./commands/delete.js";
-import { visibility } from "./commands/visibility.js";
+import { deletePage, runDelete, type Confirm } from "./commands/delete.js";
+import { visibility, runVisibility, InvalidVisibilityError } from "./commands/visibility.js";
 import { bindDomain } from "./commands/bind-domain.js";
-import { ApiError, createApiClient, resolveBaseUrl } from "./api-client.js";
+import { runSkill } from "./commands/skill.js";
+import {
+  ApiError,
+  createApiClient,
+  resolveBaseUrl,
+  type DeleteCapableClient,
+  type VisibilityCapableClient,
+} from "./api-client.js";
 import { resolveHome, readActiveAccount } from "./home.js";
 import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
 
@@ -294,16 +301,36 @@ export function buildRealCli(): CAC {
   cli
     .command("delete <id>", "Remove a page (DELETE /v1/pages/{id} — tombstone)")
     .option("-y, --yes", "Skip the confirmation prompt")
+    .option("--endpoint <url>", "Cloud API origin")
     .option("--json", "Emit machine-readable JSON")
-    .action((id: string, opts: { yes?: boolean; json?: boolean }) => {
-      reportStub(deletePage(id, opts));
+    .action(async (id: string, opts: { yes?: boolean; endpoint?: string; json?: boolean }) => {
+      try {
+        const client = makeClient(opts.endpoint) as DeleteCapableClient;
+        const run = await runDelete(client, id, opts, stdinConfirm);
+        process.stdout.write(run.output + "\n");
+        if (!run.deleted) process.exitCode = 1;
+      } catch (err) {
+        reportApiError(err);
+      }
     });
 
   cli
     .command("visibility <id> <level>", "Set page visibility: public | unlisted | private")
+    .option("--endpoint <url>", "Cloud API origin")
     .option("--json", "Emit machine-readable JSON")
-    .action((id: string, level: string, opts: { json?: boolean }) => {
-      reportStub(visibility(id, level, opts));
+    .action(async (id: string, level: string, opts: { endpoint?: string; json?: boolean }) => {
+      try {
+        const client = makeClient(opts.endpoint) as VisibilityCapableClient;
+        const output = await runVisibility(client, id, level, opts);
+        process.stdout.write(output + "\n");
+      } catch (err) {
+        if (err instanceof InvalidVisibilityError) {
+          process.stderr.write(`error: ${err.message}\n`);
+          process.exitCode = 1;
+          return;
+        }
+        reportApiError(err);
+      }
     });
 
   cli
@@ -316,10 +343,39 @@ export function buildRealCli(): CAC {
       reportStub(bindDomain(id, hostname, opts));
     });
 
+  cli
+    .command("skill", "Emit the cloud SKILL.md (verbs + this account's recipe palette)")
+    .option("--out <file>", "Write the SKILL.md to a file instead of stdout")
+    .action((opts: { out?: string }) => {
+      const markdown = runSkill(opts);
+      if (opts.out) {
+        process.stderr.write(`wrote ${opts.out}\n`);
+      } else {
+        process.stdout.write(markdown + "\n");
+      }
+    });
+
   cli.help();
   cli.version("0.0.0");
   return cli;
 }
+
+/**
+ * Default {@link Confirm}: read a single y/N line from stdin. Anything but
+ * `y`/`yes` (case-insensitive) aborts. `--yes` skips this entirely, so it only
+ * runs in an attended terminal.
+ */
+const stdinConfirm: Confirm = (id: string): Promise<boolean> => {
+  process.stderr.write(`Delete ${id}? This tombstones the page. [y/N] `);
+  return new Promise<boolean>((resolve) => {
+    process.stdin.resume();
+    process.stdin.once("data", (chunk: Buffer) => {
+      process.stdin.pause();
+      const answer = chunk.toString("utf8").trim().toLowerCase();
+      resolve(answer === "y" || answer === "yes");
+    });
+  });
+};
 
 /**
  * Build the read-path api-client for `find` / `get` from the active account's
