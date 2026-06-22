@@ -1,0 +1,112 @@
+name: Cloud Deploy
+
+# Deploys Shortwind Cloud to PRODUCTION: Convex backend, the serve Worker, and
+# the TanStack Start dashboard. Dormant until enabled — set the repo variable
+# CLOUD_DEPLOY_ENABLED=true and provide the secrets/vars below, so a fork or an
+# un-provisioned repo never fails red on push.
+#
+# Required repo SECRETS:
+#   CONVEX_DEPLOY_KEY        prod deploy key (Convex dashboard → Settings → Deploy Keys)
+#   CLOUDFLARE_API_TOKEN     Workers Scripts + R2 + KV edit
+#   CLOUDFLARE_ACCOUNT_ID    cloudflare account id
+# Required repo VARIABLES:
+#   CLOUD_DEPLOY_ENABLED     "true" to arm this workflow
+#   CONVEX_URL_PROD          https://<prod>.convex.cloud
+#   CONVEX_SITE_URL_PROD     https://<prod>.convex.site
+#   DASHBOARD_URL_PROD       the deployed dashboard origin (for the SSR build)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/cloud/**"
+      - ".github/workflows/cloud-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-deploy
+  cancel-in-progress: false
+
+jobs:
+  convex:
+    name: Deploy Convex (prod)
+    if: ${{ vars.CLOUD_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloud
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: convex deploy (prod)
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: pnpm exec convex deploy -y
+
+  worker:
+    name: Deploy serve Worker
+    needs: convex
+    if: ${{ vars.CLOUD_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloud
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: wrangler deploy (serve Worker, prod Convex cold source)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --var CONVEX_HTTP_URL:${{ vars.CONVEX_SITE_URL_PROD }}
+
+  dashboard:
+    name: Deploy dashboard (TanStack Start)
+    needs: convex
+    if: ${{ vars.CLOUD_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloud/dashboard
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/dashboard/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Build + deploy dashboard
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VITE_CONVEX_URL: ${{ vars.CONVEX_URL_PROD }}
+          VITE_CONVEX_SITE_URL: ${{ vars.CONVEX_SITE_URL_PROD }}
+        run: pnpm run deploy

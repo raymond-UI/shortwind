@@ -1,0 +1,79 @@
+name: Cloud CI
+
+# Typecheck + tests for the self-contained apps/cloud project (Convex backend,
+# serve Worker, CLI, and the TanStack Start dashboard). apps/cloud is its OWN
+# pnpm root (decoupled from the package workspace, like site/), so it installs
+# and runs independently. Path-filtered so package/site work doesn't trigger it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/cloud/**"
+      - ".github/workflows/cloud-ci.yml"
+  pull_request:
+    paths:
+      - "apps/cloud/**"
+      - ".github/workflows/cloud-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Convex + Worker + CLI — typecheck & test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloud
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck (convex + worker + cli + shared)
+        run: pnpm exec tsc --noEmit
+      - name: Test — node pool (convex via convex-test, cli, shared)
+        run: pnpm exec vitest run
+      - name: Test — workerd pool (serve Worker via miniflare)
+        run: pnpm exec vitest run --config worker/vitest.config.ts
+
+  dashboard:
+    name: Dashboard (TanStack Start) — typecheck, test, build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/cloud/dashboard
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/dashboard/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+      - name: Test
+        run: pnpm exec vitest run
+      - name: Build (SSR + client)
+        run: pnpm build
