@@ -1,0 +1,92 @@
+name: Cloud — Production (deploy on main)
+
+# Mirrors the offry / Togethr pattern: a push to main runs the test gate then
+# deploys. Solo-dev shape — no GitHub Environment / required-reviewer ceremony;
+# merging to main ships. Adapted for shortwind's THREE deploy targets (Convex
+# control plane, the serve Worker, the TanStack Start dashboard) and its nested
+# pnpm root. Path-filtered so unrelated monorepo work doesn't trigger a deploy.
+#
+# Required repo SECRETS:
+#   CONVEX_DEPLOY_KEY       Convex prod deploy key (Convex dashboard → Deploy Keys)
+#   CLOUDFLARE_API_TOKEN    Workers Scripts + R2 + KV edit
+#   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account id (no longer committed, audit #159)
+# Required repo VARIABLES (public prod Convex origins, used by the dashboard build):
+#   VITE_CONVEX_URL         https://<prod>.convex.cloud
+#   VITE_CONVEX_SITE_URL    https://<prod>.convex.site
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/cloud/**"
+      - ".github/workflows/cloud-production.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cloud-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Test + deploy (Convex, serve Worker, dashboard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/pnpm-lock.yaml
+
+      # --- test gate (backend: convex + worker + cli + shared) ---
+      - name: Install (apps/cloud)
+        working-directory: apps/cloud
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        working-directory: apps/cloud
+        run: pnpm run typecheck
+      - name: Test — node pool
+        working-directory: apps/cloud
+        run: pnpm run test
+      - name: Test — workerd pool
+        working-directory: apps/cloud
+        run: pnpm exec vitest run --config worker/vitest.config.ts
+
+      # --- 1. Convex control plane (regenerates _generated against prod) ---
+      - name: Deploy Convex (prod)
+        working-directory: apps/cloud
+        run: npx convex deploy -y
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
+      # --- 2. Serve Worker (the hot path; CONVEX_HTTP_URL is in wrangler.toml) ---
+      - name: Deploy serve Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/cloud/worker
+          command: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # --- 3. Dashboard (TanStack Start SSR + client → wrangler deploy) ---
+      - name: Install (dashboard)
+        working-directory: apps/cloud/dashboard
+        run: pnpm install --frozen-lockfile
+      - name: Build dashboard
+        working-directory: apps/cloud/dashboard
+        run: pnpm run build
+        env:
+          VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+          VITE_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL }}
+      - name: Deploy dashboard
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/cloud/dashboard
+          command: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
