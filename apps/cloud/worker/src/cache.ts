@@ -51,9 +51,23 @@ export function cacheArtifactResponse(
 }
 
 /**
+ * The canonical edge-cache key for a request/URL: `(host, pathname)` with the
+ * query string STRIPPED (audit #4). Route resolution keys on `(host, path)` only,
+ * so caching under the full URL let an attacker prime unbounded `?x=N` variants of
+ * any public page (cache poisoning/flooding) and let a poisoned variant shadow the
+ * canonical entry. Normalizing put + delete to the query-less key closes that.
+ */
+export function edgeCacheKey(url: string | URL): string {
+  const u = typeof url === "string" ? new URL(url) : new URL(url.toString());
+  u.search = "";
+  return u.toString();
+}
+
+/**
  * Purge the edge cache entry for a URL. Called by publish/update/delete to
  * invalidate a route so the next request re-resolves and re-streams the new (or
- * absent) artifact. Returns whether an entry was actually deleted.
+ * absent) artifact. Returns whether an entry was actually deleted. Uses the same
+ * normalized `(host, pathname)` key as the put (audit #4).
  *
  * `env` is accepted (unused today) so the signature is stable when CLOUD-30
  * wires an account-scoped zone purge alongside the per-URL Cache API delete.
@@ -62,8 +76,7 @@ export async function invalidateRoute(
   _env: Env,
   url: string | URL,
 ): Promise<boolean> {
-  const key = typeof url === "string" ? url : url.toString();
-  return edgeCache().delete(key);
+  return edgeCache().delete(edgeCacheKey(url));
 }
 
 /**

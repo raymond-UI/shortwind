@@ -138,8 +138,38 @@ export const resolveRoute = query({
 });
 
 /**
- * validateRouteToken (GET /internal/validate-token?bearer=&pageId=) — the
- * private-page bearer check the Worker calls before serving a `private` route.
+ * resolveCustomDomain (GET /internal/resolve-custom?host=) — the Worker custom-
+ * hostname cold source (CLOUD-40). A bound `pages.customDomain` (Cloudflare for
+ * SaaS) resolves to its page route via the `by_customDomain` index. Tried by the
+ * Worker ONLY on a subdomain miss, so it never shadows the per-page subdomain hot
+ * path. Like {@link resolveRoute} it returns the full projection (the Worker
+ * enforces lifecycle/visibility itself); the HTTP route is shared-secret gated
+ * (audit #7) so the projection is never publicly readable. Host is lowercased to
+ * match the stored hostname.
+ */
+export const resolveCustomDomain = query({
+  args: { host: v.string() },
+  returns: serveRouteValidator,
+  handler: async (ctx, args) => {
+    const host = args.host.toLowerCase().replace(/\.$/, "");
+    if (host === "") return null;
+    const page = await ctx.db
+      .query("pages")
+      .withIndex("by_customDomain", (q) => q.eq("customDomain", host))
+      .first();
+    if (page === null) return null;
+    const version =
+      page.currentVersionId === null
+        ? null
+        : await ctx.db.get(page.currentVersionId);
+    return toServeRoute(page, version);
+  },
+});
+
+/**
+ * validateRouteToken (GET /internal/validate-token; bearer in Authorization
+ * header, audit #5) — the private-page bearer check the Worker calls before
+ * serving a `private` route.
  *
  * Returns `{ ok: true }` iff the bearer is a valid `pages:read` token whose
  * account OWNS the page. Re-uses {@link requireRead} so the validity + scope

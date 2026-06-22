@@ -47,7 +47,7 @@ import {
   type ColdRouteSource,
 } from "./kv.js";
 import { getArtifact } from "./r2.js";
-import { cacheArtifactResponse } from "./cache.js";
+import { cacheArtifactResponse, edgeCacheKey } from "./cache.js";
 
 /**
  * Validates a bearer token against a private route. Injected so the router has
@@ -110,7 +110,7 @@ const MARKETING_URL = `https://${PLATFORM_DOMAIN}`;
  * shared package's tsconfig doesn't load; an equality test guards the drift). A
  * genuine unknown PAGE label (a typo'd slug) is NOT in this set and still 404s.
  */
-const RESERVED_LABELS: ReadonlySet<string> = new Set([
+export const RESERVED_LABELS: ReadonlySet<string> = new Set([
   "c",
   "www",
   "api",
@@ -246,12 +246,20 @@ export async function handleRequest(
     response.headers.set("x-robots-tag", "noindex");
   }
 
-  // Cache at the edge so a viral page costs ~nothing (PRD §6.1, §6.4). Use the
-  // request URL as the cache key (mirrors invalidateRoute's per-URL key). Clone
-  // so the body the client receives is independent of the cached copy. Do the
-  // put in the background via waitUntil — never block the response on it.
-  const edge = (caches as unknown as { default: Cache }).default;
-  ctx.waitUntil(edge.put(request.url, response.clone()));
+  // Only PUBLIC pages are cacheable (audit). A private page is gated on a per-
+  // request bearer, and an unlisted page must stay out of any shared cache; both
+  // get `private, no-store` and are NEVER written to the shared edge cache (a
+  // cached private artifact would serve to a later request that presents no/another
+  // token). Public pages cache at the edge so a viral page costs ~nothing
+  // (PRD §6.1, §6.4), keyed by the normalized `(host, pathname)` key (audit #4 —
+  // query stripped so `?x=N` variants can't poison/flood the cache).
+  if (route.visibility === "public") {
+    const edge = (caches as unknown as { default: Cache }).default;
+    // Clone so the body the client receives is independent of the cached copy.
+    ctx.waitUntil(edge.put(edgeCacheKey(request.url), response.clone()));
+  } else {
+    response.headers.set("cache-control", "private, no-store");
+  }
 
   return response;
 }
@@ -316,8 +324,11 @@ function defaultDeps(env: Env): RouterDeps {
   // Audit #7: present the shared secret on every cold-source call so Convex's
   // `/internal/*` endpoints can reject anyone who is not this Worker.
   const secret = env.SERVE_INTERNAL_SECRET;
+  const secretHeader: Record<string, string> = secret
+    ? { "x-serve-secret": secret }
+    : {};
   const internalInit: RequestInit | undefined = secret
-    ? { headers: { "x-serve-secret": secret } }
+    ? { headers: secretHeader }
     : undefined;
 
   const coldRoute: ColdRouteSource = async (host, path) => {
@@ -337,10 +348,14 @@ function defaultDeps(env: Env): RouterDeps {
 
   const validateToken: TokenValidator = async (token, route) => {
     try {
-      const url = `${base}/internal/validate-token?bearer=${encodeURIComponent(
-        token,
-      )}&pageId=${encodeURIComponent(route.pageId)}`;
-      const res = await fetch(url, internalInit);
+      // Audit #5: send the bearer in the Authorization HEADER, never the URL
+      // query — a `?bearer=` token leaks into CF/Convex access logs + Referer.
+      const url = `${base}/internal/validate-token?pageId=${encodeURIComponent(
+        route.pageId,
+      )}`;
+      const res = await fetch(url, {
+        headers: { ...secretHeader, authorization: `Bearer ${token}` },
+      });
       if (!res.ok) return false;
       const body = (await res.json()) as { ok?: unknown };
       return body.ok === true;
@@ -350,7 +365,24 @@ function defaultDeps(env: Env): RouterDeps {
     }
   };
 
-  return { coldRoute, validateToken };
+  // Audit (serve WARNING): wire the custom-hostname cold source so a bound
+  // `pages.customDomain` actually resolves in prod (it was a dead branch —
+  // defaultDeps omitted it). Tried only on a host/path miss (see handleRequest).
+  const coldCustomHostname: ColdCustomHostnameSource = async (host) => {
+    try {
+      const url = `${base}/internal/resolve-custom?host=${encodeURIComponent(
+        host,
+      )}`;
+      const res = await fetch(url, internalInit);
+      if (!res.ok) return null;
+      const body = (await res.json()) as ResolvedRoute;
+      return asCachedRoute(body);
+    } catch {
+      return null;
+    }
+  };
+
+  return { coldRoute, validateToken, coldCustomHostname };
 }
 
 /**

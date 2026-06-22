@@ -468,13 +468,25 @@ const validateTokenHandler = httpAction(async (ctx, request) => {
   const url = new URL(request.url);
   try {
     const result = await ctx.runQuery(api.serve.validateRouteToken, {
-      bearer: url.searchParams.get("bearer") ?? "",
+      // Audit #5: bearer rides in the Authorization header, not the URL query.
+      bearer: bearerFromRequest(request),
       pageId: url.searchParams.get("pageId") ?? "",
     });
     return json(result, 200);
   } catch {
     return json({ ok: false }, 200);
   }
+});
+
+/** GET /internal/resolve-custom?host= → the Worker custom-hostname route (or null). */
+const resolveCustomDomainHandler = httpAction(async (ctx, request) => {
+  const gate = serveSecretGate(request);
+  if (gate) return gate;
+  const url = new URL(request.url);
+  const route = await ctx.runQuery(api.serve.resolveCustomDomain, {
+    host: url.searchParams.get("host") ?? "",
+  });
+  return json(route, 200);
 });
 
 http.route({
@@ -486,6 +498,11 @@ http.route({
   path: "/internal/validate-token",
   method: "GET",
   handler: validateTokenHandler,
+});
+http.route({
+  path: "/internal/resolve-custom",
+  method: "GET",
+  handler: resolveCustomDomainHandler,
 });
 
 http.route({ path: "/v1/abuse", method: "POST", handler: abuseHandler });

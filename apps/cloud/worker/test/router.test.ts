@@ -11,9 +11,11 @@ import {
 } from "../src/kv";
 import {
   handleRequest,
+  RESERVED_LABELS,
   type RouterDeps,
   type TokenValidator,
 } from "../src/router";
+import { RESERVED_SUBDOMAINS } from "../../shared/src/slug";
 
 // CLOUD-22 serve-router integration tests. These run INSIDE workerd via
 // @cloudflare/vitest-pool-workers against LOCAL miniflare R2 (ARTIFACTS) + KV
@@ -290,6 +292,18 @@ describe("router: reserved/retired host redirect (audit #3 apex move)", () => {
     expect(res.status).toBe(404);
     // A real page label is resolved against the cold source (which returns null).
     expect(cold).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("router: RESERVED_LABELS parity with shared (drift guard, audit)", () => {
+  it("covers every shared RESERVED_SUBDOMAIN (minus the @ apex marker)", () => {
+    // The worker can't import shared at runtime in prod (tsconfig), so the set is
+    // duplicated. This test fails loudly if shared adds a reserved label the
+    // worker doesn't mirror — otherwise that label would serve as a normal page.
+    for (const label of RESERVED_SUBDOMAINS) {
+      if (label === "@") continue; // apex marker, not a subdomain label
+      expect(RESERVED_LABELS.has(label)).toBe(true);
+    }
   });
 });
 
