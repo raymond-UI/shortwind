@@ -66,6 +66,12 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: apps/cloud/dashboard/pnpm-lock.yaml
+      # The dashboard typechecks `../convex` (via the @convex/* path → the Convex
+      # client + _generated api), so it needs apps/cloud's deps installed too, not
+      # just the dashboard's own.
+      - name: Install apps/cloud (for ../convex resolution)
+        working-directory: apps/cloud
+        run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm run typecheck

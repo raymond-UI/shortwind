@@ -15,7 +15,8 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["shared", "convex", "worker", "cli"],
+  "include": ["shared", "convex", "worker"],
   "comment:dashboard": "CLOUD-35: the dashboard is its OWN sub-package (apps/cloud/dashboard) with its own tsconfig (jsx: react-jsx, DOM/React types) + build/typecheck. The convex-side tsc here must NOT compile its .tsx — that needs jsx + browser types this config deliberately lacks. So `dashboard` is dropped from `include` and excluded below; it is typechecked by `pnpm -C apps/cloud/dashboard typecheck`.",
-  "exclude": ["node_modules", "**/_generated", "dist", "dashboard"]
+  "comment:cli": "The CLI is a NODE program (process/Buffer/streams/node: builtins) — it has its OWN tsconfig (cli/tsconfig.json, types:[node]) so this Web/Workers-typed program (workers-types + DOM lib) never tries to resolve Node globals against it. `pnpm run typecheck` runs both. (convex/worker self-declare the tiny `process.env` surface they touch.)",
+  "exclude": ["node_modules", "**/_generated", "dist", "dashboard", "cli"]
 }
