@@ -32,23 +32,31 @@ async function seedAccount(t: ReturnType<typeof convexTest>): Promise<string> {
   );
 }
 
+/**
+ * Patch the device code with this user_code. Uses collect()+find rather than the
+ * `by_userCode` index because convex-test's `t.run` ctx is generically typed (no
+ * schema), so custom indexes don't typecheck there. Test data is tiny.
+ */
+async function patchByUserCode(
+  t: ReturnType<typeof convexTest>,
+  userCode: string,
+  patch: Record<string, unknown>,
+) {
+  await t.run(async (ctx) => {
+    const all = await ctx.db.query("deviceCodes").collect();
+    const row = all.find((r) => (r as { userCode: string }).userCode === userCode);
+    if (!row) throw new Error("seed: device code not found");
+    await ctx.db.patch(row._id, patch as never);
+  });
+}
+
 /** Flip a device code to approved+account, as approveDeviceCode would. */
 async function approveByUserCode(
   t: ReturnType<typeof convexTest>,
   userCode: string,
   accountId: string,
 ) {
-  await t.run(async (ctx) => {
-    const row = await ctx.db
-      .query("deviceCodes")
-      .withIndex("by_userCode", (q) => q.eq("userCode", userCode))
-      .first();
-    if (!row) throw new Error("seed: device code not found");
-    await ctx.db.patch(row._id, {
-      status: "approved",
-      accountId: accountId as never,
-    });
-  });
+  await patchByUserCode(t, userCode, { status: "approved", accountId });
 }
 
 describe("device authorization grant", () => {
@@ -125,13 +133,7 @@ describe("device authorization grant", () => {
       clientId: "shortwind-cli",
       scope: "pages:read",
     });
-    await t.run(async (ctx) => {
-      const row = await ctx.db
-        .query("deviceCodes")
-        .withIndex("by_userCode", (q) => q.eq("userCode", req.userCode))
-        .first();
-      await ctx.db.patch(row!._id, { status: "denied" });
-    });
+    await patchByUserCode(t, req.userCode, { status: "denied" });
     const res = await t.mutation(internal.device.pollDeviceToken, {
       deviceCode: req.deviceCode,
     });
@@ -144,13 +146,7 @@ describe("device authorization grant", () => {
       clientId: "shortwind-cli",
       scope: "pages:read",
     });
-    await t.run(async (ctx) => {
-      const row = await ctx.db
-        .query("deviceCodes")
-        .withIndex("by_userCode", (q) => q.eq("userCode", req.userCode))
-        .first();
-      await ctx.db.patch(row!._id, { expiresAt: Date.now() - 1 });
-    });
+    await patchByUserCode(t, req.userCode, { expiresAt: Date.now() - 1 });
     const res = await t.mutation(internal.device.pollDeviceToken, {
       deviceCode: req.deviceCode,
     });
@@ -174,13 +170,7 @@ describe("device authorization grant", () => {
       clientId: "shortwind-cli",
       scope: "pages:read",
     });
-    await t.run(async (ctx) => {
-      const row = await ctx.db
-        .query("deviceCodes")
-        .withIndex("by_userCode", (q) => q.eq("userCode", req.userCode))
-        .first();
-      await ctx.db.patch(row!._id, { expiresAt: Date.now() - 1 });
-    });
+    await patchByUserCode(t, req.userCode, { expiresAt: Date.now() - 1 });
     const swept = await t.mutation(internal.device.sweepExpiredDeviceCodes, {});
     expect(swept.deleted).toBe(1);
   });
