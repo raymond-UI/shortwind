@@ -1,7 +1,12 @@
 import { cac, type CAC } from "cac";
 import { login } from "./commands/login.js";
 import { initGlobal } from "./commands/init-global.js";
-import { publish, publishFromFile } from "./commands/publish.js";
+import {
+  publish,
+  publishFromFile,
+  InvalidSlugError,
+  BundleTooLargeError,
+} from "./commands/publish.js";
 import { update, updateFromFile } from "./commands/update.js";
 import { find, runFind } from "./commands/find.js";
 import { get, runGet } from "./commands/get.js";
@@ -11,6 +16,7 @@ import {
   bindDomain,
   runBindDomain,
   StepUpDeniedError,
+  InvalidHostnameError,
   BIND_SCOPE,
   type StepUpOutcome,
 } from "./commands/bind-domain.js";
@@ -198,6 +204,14 @@ function reportApiError(err: unknown): void {
     process.exitCode = 1;
     return;
   }
+  // Client-side validation / resource-guard failures (bad --domain slug, an
+  // over-cap bundle) are expected, actionable errors — a clean line + exit 1,
+  // not a re-thrown stack to bin.ts.
+  if (err instanceof InvalidSlugError || err instanceof BundleTooLargeError) {
+    process.stderr.write(`error: ${err.message}\n`);
+    process.exitCode = 1;
+    return;
+  }
   throw err;
 }
 
@@ -357,7 +371,7 @@ export function buildRealCli(): CAC {
         });
         process.stdout.write(output + "\n");
       } catch (err) {
-        if (err instanceof StepUpDeniedError) {
+        if (err instanceof StepUpDeniedError || err instanceof InvalidHostnameError) {
           process.stderr.write(`error: ${err.message}\n`);
           process.exitCode = 1;
           return;
@@ -432,18 +446,30 @@ function activeScopes(): readonly string[] {
 /**
  * The bind-domain step-up grant (PRD §7.2): re-run the device flow (`login`)
  * requesting the active account's existing scopes PLUS `domains:bind`, so the
- * human approves the privileged grant. On success the re-auth rewrites the
- * active account's stored scopes; we read them back for the handler's retry.
+ * human approves the privileged grant.
+ *
+ * The elevated `domains:bind` capability is for THIS bind only — it is requested
+ * over the wire (and lives on the minted token) but is NOT persisted into the
+ * stored credential's scopes (`persistScopes` keeps only the pre-existing set),
+ * so it never leaks into every later token. The handler gets the elevated scope
+ * set in-memory via the return value.
  */
 async function stepUpBindScope(endpoint?: string): Promise<StepUpOutcome> {
   process.stderr.write(
     `binding a custom domain needs the ${BIND_SCOPE} scope — re-authorizing (PRD §7.2)\n`,
   );
   const existing = activeScopes();
-  const scope = Array.from(new Set([...existing, BIND_SCOPE]));
-  const result = await login({ scope, ...(endpoint ? { endpoint } : {}) });
+  const requested = Array.from(new Set([...existing, BIND_SCOPE]));
+  const result = await login({
+    scope: requested,
+    // Persist only the pre-existing scopes — do NOT bake domains:bind into the
+    // stored credential (it is a single-operation elevation).
+    persistScopes: [...existing],
+    ...(endpoint ? { endpoint } : {}),
+  });
   if (!result.ok) return { ok: false, reason: result.reason };
-  return { ok: true, scopes: activeScopes() };
+  // The elevated scope is live on the just-minted token for this operation only.
+  return { ok: true, scopes: requested };
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {

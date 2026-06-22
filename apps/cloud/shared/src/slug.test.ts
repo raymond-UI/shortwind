@@ -8,6 +8,7 @@ import {
   RESERVED_SLUGS,
   RESERVED_SUBDOMAINS,
   slugCollision,
+  validateHostname,
   validateSlug,
 } from "./slug.js";
 
@@ -154,5 +155,47 @@ describe("CLOUD-SUBDOMAIN — deriveSubdomain (the Vercel hybrid)", () => {
       () => ids[i++] ?? "zzz",
     );
     expect(label).toBe("my-status-bbb");
+  });
+});
+
+describe("validateHostname (#156 — bind-domain pre-flight)", () => {
+  it("accepts a well-formed lowercase FQDN", () => {
+    expect(validateHostname("www.example.com")).toEqual({
+      ok: true,
+      value: "www.example.com",
+    });
+    expect(validateHostname("a.b.example.co.uk").ok).toBe(true);
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(validateHostname("  www.example.com  ")).toEqual({
+      ok: true,
+      value: "www.example.com",
+    });
+  });
+
+  it("rejects an empty hostname", () => {
+    expect(validateHostname("").ok).toBe(false);
+    expect(validateHostname("   ").ok).toBe(false);
+  });
+
+  it("rejects a bare label (not a fully-qualified domain)", () => {
+    expect(validateHostname("localhost").ok).toBe(false);
+  });
+
+  it("rejects uppercase hostnames", () => {
+    expect(validateHostname("WWW.Example.com").ok).toBe(false);
+  });
+
+  it("rejects invalid characters / malformed labels", () => {
+    expect(validateHostname("ex ample.com").ok).toBe(false);
+    expect(validateHostname("-bad.example.com").ok).toBe(false);
+    expect(validateHostname("bad-.example.com").ok).toBe(false);
+    expect(validateHostname("under_score.example.com").ok).toBe(false);
+  });
+
+  it("rejects an over-long hostname", () => {
+    const long = `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.example.com`;
+    expect(validateHostname(long).ok).toBe(false);
   });
 });

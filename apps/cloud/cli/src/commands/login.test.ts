@@ -127,6 +127,41 @@ describe("login — happy path", () => {
   });
 });
 
+describe("login — step-up scope is not persisted (#156)", () => {
+  it("requests domains:bind over the wire but persists ONLY the non-elevated scopes", async () => {
+    let requestedScope: string | undefined;
+    const io: DeviceFlowIO = {
+      async requestDeviceAuthorization(input) {
+        requestedScope = input.scope;
+        return AUTH;
+      },
+      async pollToken() {
+        return TOKEN_ALICE;
+      },
+      onUserCode() {},
+      async sleep() {},
+      now() {
+        return 0;
+      },
+    };
+    // Mirrors cli.ts `stepUpBindScope`: request the elevated scope, persist only
+    // the pre-existing set so domains:bind never leaks into the stored credential.
+    await login(
+      {
+        scope: ["pages:read", "pages:write", "domains:bind"],
+        persistScopes: ["pages:read", "pages:write"],
+      },
+      { env: env(), io, resolveAccount: async () => ({ id: "acct_alice", label: "alice" }) },
+    );
+    // The wire request DID carry the elevated scope (the human approves it)...
+    expect(requestedScope).toBe("pages:read pages:write domains:bind");
+    // ...but the persisted credential does NOT include domains:bind.
+    const active = readActiveAccount(globalHomeRoot(env()));
+    expect(active?.scopes).toEqual(["pages:read", "pages:write"]);
+    expect(active?.scopes).not.toContain("domains:bind");
+  });
+});
+
 describe("login — multi-account switch (gh auth switch semantics)", () => {
   it("a second login with a different account adds + switches active to it", async () => {
     await login(

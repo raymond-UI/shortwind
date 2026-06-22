@@ -185,6 +185,57 @@ export function validateSlug(slug: string): SlugResult {
 }
 
 // ---------------------------------------------------------------------------
+// Custom-hostname validation (bind-domain, PRD §7.2)
+// ---------------------------------------------------------------------------
+
+/** Max length of a full hostname (RFC 1035 §3.1: 253 chars). */
+export const MAX_HOSTNAME_LENGTH = 253;
+
+/** A single DNS label: alphanumerics + internal hyphens, ≤ 63 chars. */
+const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * Validate a custom hostname a page can bind (e.g. `www.example.com`). Lowercase
+ * dot-separated DNS labels, at least two of them (a registrable domain), each
+ * label ≤ 63 chars and the whole name ≤ 253. Pure; returns a result, never throws.
+ *
+ * Validated client-side BEFORE any network/step-up so a malformed hostname does
+ * not burn a `domains:bind` step-up re-auth.
+ */
+export function validateHostname(hostname: string): SlugResult {
+  const host = hostname.trim();
+  if (host.length === 0) {
+    return { ok: false, error: "hostname is empty" };
+  }
+  if (host.length > MAX_HOSTNAME_LENGTH) {
+    return {
+      ok: false,
+      error: `hostname exceeds ${MAX_HOSTNAME_LENGTH} characters`,
+    };
+  }
+  if (host !== host.toLowerCase()) {
+    return { ok: false, error: "hostname must be lowercase" };
+  }
+  const labels = host.split(".");
+  if (labels.length < 2) {
+    return {
+      ok: false,
+      error: "hostname must be a fully-qualified domain (e.g. www.example.com)",
+    };
+  }
+  for (const label of labels) {
+    if (!HOSTNAME_LABEL.test(label)) {
+      return {
+        ok: false,
+        error:
+          "hostname has an invalid label — each dot-separated part must be lowercase alphanumerics with internal hyphens only (≤ 63 chars)",
+      };
+    }
+  }
+  return { ok: true, value: host };
+}
+
+// ---------------------------------------------------------------------------
 // Idempotent-publish collision signal (PRD 3.2)
 // ---------------------------------------------------------------------------
 

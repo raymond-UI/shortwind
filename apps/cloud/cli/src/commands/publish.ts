@@ -11,6 +11,7 @@ import {
   selectTouchedRecipes,
   type CandidateRecipe,
 } from "../../../shared/src/fingerprint.js";
+import { validateSlug } from "../../../shared/src/slug.js";
 import type { Lockfile } from "../../../shared/src/lockfile-diff.js";
 import {
   ApiError,
@@ -73,6 +74,27 @@ export function publish(file: string, opts: PublishOptions): StubResult {
       bundle: Boolean(opts.bundle),
     },
   };
+}
+
+/** Thrown when `--domain <slug>` is malformed (caught client-side, pre-network). */
+export class InvalidSlugError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidSlugError";
+  }
+}
+
+/**
+ * Assert a `--domain` slug is well-formed BEFORE any network call, so a bad
+ * handle fails fast locally instead of round-tripping (and, for bundles, before
+ * walking the directory). Reuses the shared {@link validateSlug} grammar.
+ */
+function assertValidSlug(slug: string | undefined): void {
+  if (slug === undefined) return;
+  const result = validateSlug(slug);
+  if (!result.ok) {
+    throw new InvalidSlugError(`invalid --domain "${slug}": ${result.error}`);
+  }
 }
 
 /** The four page-visibility levels, validated before they hit the wire. */
@@ -326,10 +348,32 @@ export function readPaletteCandidates(home: ResolvedHome): CandidateRecipe[] {
  * so even this shell can be exercised in tests with a fake client + temp home.
  */
 /**
+ * Bundle resource caps (CLOUD security hardening). A `--bundle` publish walks the
+ * entry file's whole directory tree; without bounds a deep/large tree or a
+ * symlink loop could exhaust memory or hang. We cap the file COUNT and the total
+ * BYTES, and never follow symlinks (they could escape the bundle dir entirely).
+ */
+export const MAX_BUNDLE_FILES = 2000;
+export const MAX_BUNDLE_BYTES = 50 * 1024 * 1024; // 50 MB
+
+/** Thrown when a bundle exceeds {@link MAX_BUNDLE_FILES}/{@link MAX_BUNDLE_BYTES}. */
+export class BundleTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BundleTooLargeError";
+  }
+}
+
+/**
  * Read a bundle's files off disk: the entry `file` + every other `.html` file in
  * its directory (recursively), each as a `{ path, html }` with a bundle-relative
  * POSIX path. The entry's relative path is returned as `entryPath`. Pure-ish IO
  * (fs only) so the assembly above stays unit-testable without a directory.
+ *
+ * Bounded + symlink-safe: the walk caps the file count and total bytes (a
+ * {@link BundleTooLargeError} on exceed) and SKIPS symlinks rather than following
+ * them — `withFileTypes` reports the entry's own type, so a symlinked dir/file is
+ * neither recursed into nor read.
  */
 export function readBundleDir(file: string): {
   files: BundleFilePayload[];
@@ -338,9 +382,26 @@ export function readBundleDir(file: string): {
   const dir = path.dirname(path.resolve(file));
   const entryPath = toPosix(path.relative(dir, path.resolve(file)));
   const files: BundleFilePayload[] = [];
+  let totalBytes = 0;
+  const add = (relPath: string, html: string): void => {
+    if (files.length >= MAX_BUNDLE_FILES) {
+      throw new BundleTooLargeError(
+        `bundle exceeds the ${MAX_BUNDLE_FILES}-file limit — split it or publish fewer files`,
+      );
+    }
+    totalBytes += Buffer.byteLength(html, "utf8");
+    if (totalBytes > MAX_BUNDLE_BYTES) {
+      throw new BundleTooLargeError(
+        `bundle exceeds the ${MAX_BUNDLE_BYTES}-byte (${Math.round(MAX_BUNDLE_BYTES / (1024 * 1024))} MB) size limit`,
+      );
+    }
+    files.push({ path: relPath, html });
+  };
   const walk = (current: string): void => {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       if (entry.name.startsWith(".")) continue;
+      // Never follow symlinks — they can escape the bundle dir or loop forever.
+      if (entry.isSymbolicLink()) continue;
       const abs = path.join(current, entry.name);
       if (entry.isDirectory()) {
         walk(abs);
@@ -348,16 +409,13 @@ export function readBundleDir(file: string): {
       }
       if (!entry.isFile()) continue;
       if (path.extname(entry.name).toLowerCase() !== ".html") continue;
-      files.push({
-        path: toPosix(path.relative(dir, abs)),
-        html: readFileSync(abs, "utf8"),
-      });
+      add(toPosix(path.relative(dir, abs)), readFileSync(abs, "utf8"));
     }
   };
   walk(dir);
   if (!files.some((f) => f.path === entryPath)) {
     // The entry file itself may be non-.html (defensive) — include it explicitly.
-    files.push({ path: entryPath, html: readFileSync(path.resolve(file), "utf8") });
+    add(entryPath, readFileSync(path.resolve(file), "utf8"));
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
   return { files, entryPath };
@@ -383,6 +441,8 @@ export async function publishBundleFromFile(
     baseUrl?: string;
   } = {},
 ): Promise<PublishRun> {
+  // Validate the slug locally first — fail fast before walking the directory.
+  assertValidSlug(opts.domain);
   const home = deps.home ?? resolveHome();
   const account = readActiveAccount(home.root);
   if (!account) {
@@ -426,6 +486,8 @@ export async function publishFromFile(
       baseUrl: deps.baseUrl,
     });
   }
+  // Validate the slug locally first — fail fast before reading the file/network.
+  assertValidSlug(opts.domain);
   const home = deps.home ?? resolveHome();
   const account = readActiveAccount(home.root);
   if (!account) {

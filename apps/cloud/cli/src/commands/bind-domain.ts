@@ -1,5 +1,6 @@
 import { type StubResult } from "./stub.js";
 import { SCOPE_DOMAINS_BIND } from "../../../shared/src/scopes.js";
+import { validateHostname } from "../../../shared/src/slug.js";
 import { ApiError, type DomainBindResult, type DomainCapableClient } from "../api-client.js";
 
 /**
@@ -58,6 +59,14 @@ export type StepUp = () => Promise<StepUpOutcome>;
 export type StepUpOutcome =
   | { ok: true; scopes: readonly string[] }
   | { ok: false; reason: "denied" | "expired" };
+
+/** Thrown when the supplied hostname is malformed (caught client-side, pre-step-up). */
+export class InvalidHostnameError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidHostnameError";
+  }
+}
 
 /** Thrown when the human declines / lets the privileged grant expire (PRD §7.2). */
 export class StepUpDeniedError extends Error {
@@ -119,6 +128,13 @@ export async function runBindDomain(
   ctx: BindDomainContext,
 ): Promise<string> {
   const json = Boolean(opts.json);
+
+  // (0) Validate the hostname locally FIRST — before any step-up — so a typo
+  // never burns a `domains:bind` re-auth round trip (the step-up is human-gated).
+  const valid = validateHostname(hostname);
+  if (!valid.ok) {
+    throw new InvalidHostnameError(`invalid hostname "${hostname}": ${valid.error}`);
+  }
 
   // (1) Local pre-flight: avoid a guaranteed-403 round trip — step up first.
   if (!hasBindScope(ctx.readScopes())) {

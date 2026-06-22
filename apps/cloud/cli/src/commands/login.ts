@@ -28,6 +28,14 @@ export interface LoginOptions {
   scope?: string | string[];
   /** Override the auth origin (defaults to the production Cloud endpoint). */
   endpoint?: string;
+  /**
+   * Scopes to PERSIST into the credential store, when they should differ from
+   * the scopes REQUESTED over the wire (`scope`). The bind-domain step-up uses
+   * this to request the elevated `domains:bind` grant for a single operation
+   * WITHOUT persisting that privileged scope into every later token (PRD §7.2).
+   * Defaults to the requested scopes.
+   */
+  persistScopes?: string[];
 }
 
 /** The account a token is bound to, resolved after a successful device flow. */
@@ -99,11 +107,15 @@ export async function login(
   const who = await resolve(outcome.token);
 
   const home = globalHomeRoot(env);
+  // Persist `persistScopes` when given (the step-up requests an elevated scope
+  // over the wire but must NOT bake it into the stored credential); otherwise
+  // persist what was requested.
+  const persisted = opts.persistScopes ?? scope.split(" ").filter(Boolean);
   const creds = addAccount(home, {
     id: who.id,
     label: who.label,
     token: outcome.token,
-    scopes: scope.split(" ").filter(Boolean),
+    scopes: persisted,
     ...(ctx.now ? { now: ctx.now } : {}),
   });
   const account = creds.accounts[who.id]!;

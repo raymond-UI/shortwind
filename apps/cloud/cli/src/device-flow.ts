@@ -122,8 +122,11 @@ export function initialPollState(
  *  - expired_token  -> expired (terminal).
  *  - authorization_pending -> keep current interval, stay pending.
  *  - slow_down      -> increase interval by 5s, stay pending.
- *  - unknown error  -> treated as a hard stop (denied) so we never spin
- *                      forever on a malformed server response.
+ *  - unknown error  -> treated as TRANSIENT (network blip / 5xx / malformed
+ *                      body): stay pending and keep polling, backing off like a
+ *                      slow_down so we don't hammer a struggling server. Only an
+ *                      explicit `access_denied` is terminal denial; the deadline
+ *                      still bounds the loop so a permanently-down server expires.
  *  - Independently: if `nowMs >= deadline`, the device code has expired
  *    regardless of what the server said, so we transition to `expired`.
  */
@@ -162,7 +165,14 @@ export function nextPollState(
       return { ...state, status: "pending" };
     case "unknown":
     default:
-      return { ...state, status: "denied" };
+      // Transient (5xx / network / malformed): keep polling with a backed-off
+      // interval rather than declaring a terminal denial. The deadline still
+      // caps the loop, so a server that never recovers ends as `expired`.
+      return {
+        ...state,
+        status: "pending",
+        intervalMs: state.intervalMs + SLOW_DOWN_INCREMENT_SECONDS * 1000,
+      };
   }
 }
 

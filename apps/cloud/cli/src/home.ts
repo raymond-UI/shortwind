@@ -23,7 +23,7 @@
  * fine here — unlike core, which stays pure.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { Lockfile } from "../../shared/src/lockfile-diff.js";
@@ -50,6 +50,16 @@ export const LOCK_FILENAME = ".shortwind-lock.json";
 
 /** The multi-account credentials store filename, at the home root. */
 export const CREDENTIALS_FILENAME = "credentials.json";
+
+/**
+ * Owner-only permission bits for secret-bearing paths. `credentials.json` holds
+ * bearer + refresh tokens, so the home dir is created `0700` (owner rwx) and the
+ * file written `0600` (owner rw). The process umask clears mode bits at create
+ * time, so callers MUST `chmodSync` after writing to guarantee these bits land.
+ * No-ops on Windows (where POSIX mode is unreliable) — see `applyMode`.
+ */
+export const SECRET_DIR_MODE = 0o700;
+export const SECRET_FILE_MODE = 0o600;
 
 // ---------------------------------------------------------------------------
 // Resolved-home + path shapes — plain serializable data.
@@ -233,9 +243,30 @@ export function loadCredentials(homeRoot: string): Credentials {
   return { version: CREDENTIALS_VERSION, active, accounts };
 }
 
-/** Persist a credentials store, creating the home root if needed. Atomic enough for a CLI (single writer). */
+/**
+ * Apply an owner-only POSIX mode to a path, swallowing failures on platforms
+ * (Windows) where `chmod` is a no-op or unsupported. The `mode` option on
+ * `mkdirSync`/`writeFileSync` is masked by the process umask, so an explicit
+ * `chmodSync` is the only way to guarantee the bits land.
+ */
+function applyMode(target: string, mode: number): void {
+  if (process.platform === "win32") return;
+  try {
+    chmodSync(target, mode);
+  } catch {
+    // Best-effort: a chmod failure must not wedge login on exotic filesystems.
+  }
+}
+
+/**
+ * Persist a credentials store, creating the home root if needed. The store holds
+ * bearer + refresh tokens, so the home dir is locked to `0700` and the file to
+ * `0600` (owner-only) — created with those modes AND `chmod`ed afterward, since
+ * the umask clears mode bits at create time. Atomic enough for a CLI (single writer).
+ */
 export function saveCredentials(homeRoot: string, creds: Credentials): void {
-  mkdirSync(homeRoot, { recursive: true });
+  mkdirSync(homeRoot, { recursive: true, mode: SECRET_DIR_MODE });
+  applyMode(homeRoot, SECRET_DIR_MODE);
   const sorted: Credentials = {
     version: CREDENTIALS_VERSION,
     active: creds.active,
@@ -243,7 +274,11 @@ export function saveCredentials(homeRoot: string, creds: Credentials): void {
       Object.entries(creds.accounts).sort(([a], [b]) => a.localeCompare(b)),
     ),
   };
-  writeFileSync(homePaths(homeRoot).credentials, JSON.stringify(sorted, null, 2) + "\n");
+  const file = homePaths(homeRoot).credentials;
+  writeFileSync(file, JSON.stringify(sorted, null, 2) + "\n", {
+    mode: SECRET_FILE_MODE,
+  });
+  applyMode(file, SECRET_FILE_MODE);
 }
 
 /** Input to {@link addAccount} — an account binding from a successful login. */
@@ -320,7 +355,16 @@ export function emptyLockfile(registry: string): Lockfile {
 export function readHomeLockfile(homeRoot: string, registry = ""): Lockfile {
   const file = homePaths(homeRoot).lockfile;
   if (!existsSync(file)) return emptyLockfile(registry);
-  const raw = JSON.parse(readFileSync(file, "utf8")) as Lockfile;
+  let raw: Lockfile;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8")) as Lockfile;
+  } catch {
+    // A corrupt/half-written lockfile must yield a friendly error, not a raw
+    // SyntaxError stack — tell the operator which file to fix or delete.
+    throw new Error(
+      `corrupt lockfile at ${file} — it is not valid JSON; delete it to regenerate or restore a good copy`,
+    );
+  }
   return {
     version: typeof raw.version === "number" ? raw.version : LOCK_VERSION,
     registry: typeof raw.registry === "string" ? raw.registry : registry,

@@ -5,6 +5,7 @@ import {
   renderBindDomain,
   hasBindScope,
   StepUpDeniedError,
+  InvalidHostnameError,
   BIND_SCOPE,
   type BindDomainContext,
   type StepUpOutcome,
@@ -150,6 +151,37 @@ describe("renderBindDomain — golden output", () => {
 
   it("--json: emits the bind state verbatim (stable contract)", () => {
     expect(JSON.parse(renderBindDomain(ACTIVE, true))).toEqual(ACTIVE);
+  });
+});
+
+describe("runBindDomain — client-side hostname validation (#156)", () => {
+  it("rejects a malformed hostname BEFORE any step-up or bind call", async () => {
+    let steppedUp = false;
+    let bindCalled = false;
+    await expect(
+      runBindDomain("pg_1", "not a host!", {}, {
+        client: clientReturning(PENDING_HUMAN, () => {
+          bindCalled = true;
+        }),
+        // No scope → would normally step up; the hostname check must short-circuit.
+        readScopes: () => ["pages:read", "pages:write"],
+        stepUp: fakeStepUp({ ok: true, scopes: [BIND_SCOPE] }, () => {
+          steppedUp = true;
+        }),
+      }),
+    ).rejects.toBeInstanceOf(InvalidHostnameError);
+    expect(steppedUp).toBe(false);
+    expect(bindCalled).toBe(false);
+  });
+
+  it("accepts a valid hostname and proceeds to bind", async () => {
+    const out = await runBindDomain(
+      "pg_1",
+      "www.example.com",
+      {},
+      ctx({ client: clientReturning(ACTIVE) }),
+    );
+    expect(out).toBe("bind www.example.com → pg_1: active");
   });
 });
 

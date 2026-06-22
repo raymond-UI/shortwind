@@ -96,13 +96,17 @@ describe("nextPollState — the golden transition sequence", () => {
     expect(s.status).toBe("denied");
   });
 
-  it("treats an unknown error as a hard stop (never spins forever)", () => {
+  it("treats an unknown/transient error as a keep-polling backoff, NOT a denial", () => {
+    // A 5xx / network blip / malformed body maps to `unknown`: stay pending and
+    // back off so we keep polling — only `access_denied` is terminal denial. The
+    // deadline still bounds the loop (covered by the runDeviceFlow test below).
     const s = nextPollState(
       initialPollState(AUTH, 0),
       { kind: "error", code: "unknown" },
       1_000,
     );
-    expect(s.status).toBe("denied");
+    expect(s.status).toBe("pending");
+    expect(s.intervalMs).toBe(10_000); // +5s backoff, like slow_down
   });
 
   it("is terminal-stable: authorized never moves", () => {
@@ -217,6 +221,39 @@ describe("runDeviceFlow", () => {
     const { io } = makeFakeIO({
       auth: AUTH,
       responses: [{ kind: "error", code: "expired_token" }],
+    });
+    const result = await runDeviceFlow(io, { clientId: "shortwind-cli" });
+    expect(result).toEqual({ ok: false, reason: "expired" });
+  });
+
+  it("keeps polling through a transient unknown/5xx error, then authorizes", async () => {
+    // The middle poll fails transiently (a 5xx / network blip / malformed body
+    // surfaces as `unknown`). It must NOT be treated as denial — the flow backs
+    // off and keeps polling, ultimately succeeding.
+    const { io } = makeFakeIO({
+      auth: AUTH,
+      responses: [PENDING, { kind: "error", code: "unknown" }, TOKEN],
+    });
+    const result = await runDeviceFlow(io, { clientId: "shortwind-cli" });
+    expect(result).toEqual({
+      ok: true,
+      token: {
+        accessToken: "tok_abc",
+        tokenType: "bearer",
+        refreshToken: "ref_1",
+      },
+    });
+  });
+
+  it("ends expired (NOT denied) when transient errors never recover before the deadline", async () => {
+    // A server stuck on 5xx (`unknown`) must expire on the deadline, never denial.
+    const { io } = makeFakeIO({
+      auth: { ...AUTH, expiresIn: 12, interval: 5 },
+      responses: [
+        { kind: "error", code: "unknown" },
+        { kind: "error", code: "unknown" },
+        { kind: "error", code: "unknown" },
+      ],
     });
     const result = await runDeviceFlow(io, { clientId: "shortwind-cli" });
     expect(result).toEqual({ ok: false, reason: "expired" });

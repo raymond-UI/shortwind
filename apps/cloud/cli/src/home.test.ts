@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -11,8 +11,11 @@ import {
   homePaths,
   loadCredentials,
   readActiveAccount,
+  readHomeLockfile,
   resolveHome,
+  saveCredentials,
   switchAccount,
+  writeHomeLockfile,
   type Credentials,
 } from "./home.js";
 
@@ -187,5 +190,57 @@ describe("credentials store — multi-account", () => {
     const creds = loadCredentials(home());
     expect(creds.active).toBeNull();
     expect(creds.accounts).toEqual({});
+  });
+
+  // Security hardening (#156): credentials.json holds bearer + refresh tokens,
+  // so it must be owner-only (0600) and live under an owner-only (0700) home.
+  // POSIX mode is unreliable on Windows, so skip there.
+  const itPosix = process.platform === "win32" ? it.skip : it;
+  itPosix("writes credentials 0600 under a 0700 home (owner-only secrets)", () => {
+    addAccount(home(), {
+      id: "acct_alice",
+      label: "alice@example.com",
+      token: { accessToken: "tok_a", tokenType: "bearer", refreshToken: "ref_a" },
+    });
+    const fileMode = statSync(homePaths(home()).credentials).mode & 0o777;
+    expect(fileMode).toBe(0o600);
+    const dirMode = statSync(home()).mode & 0o777;
+    expect(dirMode).toBe(0o700);
+  });
+
+  itPosix("re-clamps the credentials mode to 0600 on a subsequent save", () => {
+    const target = home();
+    saveCredentials(target, { version: 1, active: null, accounts: {} });
+    // Loosen the file deliberately, then a second save must lock it back down.
+    chmodSync(homePaths(target).credentials, 0o644);
+    saveCredentials(target, { version: 1, active: null, accounts: {} });
+    expect(statSync(homePaths(target).credentials).mode & 0o777).toBe(0o600);
+  });
+});
+
+describe("readHomeLockfile — corrupt-file handling (#156)", () => {
+  function home() {
+    return path.join(sandbox, ".shortwind");
+  }
+
+  it("returns an empty lockfile when none exists", () => {
+    const lock = readHomeLockfile(home(), "reg");
+    expect(lock.families).toEqual({});
+    expect(lock.registry).toBe("reg");
+  });
+
+  it("round-trips a written lockfile", () => {
+    writeHomeLockfile(home(), {
+      version: 1,
+      registry: "reg",
+      families: { card: { version: "1.0.0", sha: "abc" } },
+    });
+    expect(readHomeLockfile(home()).families["card"]?.sha).toBe("abc");
+  });
+
+  it("throws a FRIENDLY error (not a raw SyntaxError) on a corrupt lockfile", () => {
+    mkdirSync(homePaths(home()).recipesDir, { recursive: true });
+    writeFileSync(homePaths(home()).lockfile, "{ not json");
+    expect(() => readHomeLockfile(home())).toThrow(/corrupt lockfile/);
   });
 });
