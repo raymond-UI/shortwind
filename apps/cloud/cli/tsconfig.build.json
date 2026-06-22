@@ -1,0 +1,20 @@
+{
+  // Emit config for the shippable binary. The typecheck config (tsconfig.json)
+  // has `include: ["src"]` + `noEmit`, but the CLI imports `../shared/src/*`, so
+  // the emit `rootDir` must be the cloud root (..) for those files to fall under
+  // it — otherwise tsc errors TS6059 ("not under rootDir"). Output mirrors the
+  // source tree: dist/cli/src/bin.js + dist/shared/src/*.js, so the compiled
+  // relative imports (`../../../shared/src/slug.js`) still resolve. `bin` in
+  // package.json points at dist/cli/src/bin.js. Inherits `strict` from the base
+  // config (the one-shot `tsc <file> --flags` form dropped it, which is why the
+  // discriminated `SlugResult` union failed to narrow).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "..",
+    "outDir": "../dist",
+    "declaration": false
+  },
+  "include": ["src", "../shared/src"],
+  "exclude": ["**/*.test.ts", "../shared/**/*.test.ts", "**/__fixtures__"]
+}
