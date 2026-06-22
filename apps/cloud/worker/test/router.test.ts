@@ -221,32 +221,34 @@ describe("CLOUD-22 router: not found", () => {
 });
 
 describe("CLOUD-SUBDOMAIN router: per-page subdomain serving", () => {
-  it("serves a <subdomain>.shortwind.dev/ request via the cold source (host passed through)", async () => {
+  it("serves a <subdomain>.shortwind.app/ request via the cold source (host passed through)", async () => {
     const r = route({ pageId: "page_sub" });
     await seedArtifact(r);
     // The cold source (Convex resolveRoute) does the subdomain logic; the router
     // just passes the host + path through and caches under (host, path).
     const cold = vi.fn<ColdRouteSource>(async (host, path) =>
-      host === "cloud-ops.shortwind.dev" && path === "/" ? r : null,
+      host === "cloud-ops.shortwind.app" && path === "/" ? r : null,
     );
     const d = deps({ coldRoute: cold });
 
-    const res = await run(req("cloud-ops.shortwind.dev", "/"), d);
+    const res = await run(req("cloud-ops.shortwind.app", "/"), d);
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(HTML);
-    expect(cold).toHaveBeenCalledWith("cloud-ops.shortwind.dev", "/");
+    // Defense-in-depth headers (audit #3) ride on the served artifact.
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(cold).toHaveBeenCalledWith("cloud-ops.shortwind.app", "/");
 
-    // The subdomain route is now cached under route:cloud-ops.shortwind.dev/ — a
+    // The subdomain route is now cached under route:cloud-ops.shortwind.app/ — a
     // repeat view is a KV hit (no second cold call).
-    expect(await lookupRoute(E, "cloud-ops.shortwind.dev", "/")).toEqual(r);
-    const res2 = await run(req("cloud-ops.shortwind.dev", "/"), d);
+    expect(await lookupRoute(E, "cloud-ops.shortwind.app", "/")).toEqual(r);
+    const res2 = await run(req("cloud-ops.shortwind.app", "/"), d);
     expect(res2.status).toBe(200);
     expect(cold).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("router: reserved/retired host redirect", () => {
-  it("c.shortwind.dev (retired legacy serve host) → 301 to the apex", async () => {
+describe("router: reserved/retired host redirect (audit #3 apex move)", () => {
+  it("c.shortwind.dev (retired legacy serve host) → 301 to the marketing site", async () => {
     const cold = vi.fn<ColdRouteSource>(async () => null);
     const res = await run(req("c.shortwind.dev", "/"), deps({ coldRoute: cold }));
     expect(res.status).toBe(301);
@@ -255,16 +257,34 @@ describe("router: reserved/retired host redirect", () => {
     expect(cold).not.toHaveBeenCalled();
   });
 
-  it("www.shortwind.dev (system label) → 301 to the apex", async () => {
-    const res = await run(req("www.shortwind.dev", "/anything"), deps());
+  it("a legacy page subdomain on the platform apex (*.shortwind.dev) → 301 (retired)", async () => {
+    const cold = vi.fn<ColdRouteSource>(async () => null);
+    const res = await run(
+      req("old-page.shortwind.dev", "/"),
+      deps({ coldRoute: cold }),
+    );
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://shortwind.dev/");
+    // User content no longer serves on shortwind.dev — never reaches resolution.
+    expect(cold).not.toHaveBeenCalled();
+  });
+
+  it("a reserved/system label under the user-content apex (www.shortwind.app) → 301", async () => {
+    const res = await run(req("www.shortwind.app", "/anything"), deps());
     expect(res.status).toBe(301);
     expect(res.headers.get("location")).toBe("https://shortwind.dev/");
   });
 
-  it("an unknown PAGE subdomain (typo'd slug) still 404s — NOT a redirect", async () => {
+  it("the bare user-content apex (shortwind.app) → 301", async () => {
+    const res = await run(req("shortwind.app", "/"), deps());
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://shortwind.dev/");
+  });
+
+  it("an unknown PAGE subdomain under shortwind.app still 404s — NOT a redirect", async () => {
     const cold = vi.fn<ColdRouteSource>(async () => null);
     const res = await run(
-      req("totally-unknown-slug.shortwind.dev", "/"),
+      req("totally-unknown-slug.shortwind.app", "/"),
       deps({ coldRoute: cold }),
     );
     expect(res.status).toBe(404);

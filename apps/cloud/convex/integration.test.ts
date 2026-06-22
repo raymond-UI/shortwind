@@ -103,7 +103,7 @@ describe("CLOUD-30a integration — publish → find → get → update", () => 
     if (!published.ok) throw new Error("publish collided unexpectedly");
     expect(published.version).toBe(1);
     // CLOUD-SUBDOMAIN: the canonical URL is now the per-page subdomain.
-    expect(published.url).toBe("https://my-status-page.shortwind.dev");
+    expect(published.url).toBe("https://my-status-page.shortwind.app");
     const pageId = published.id;
 
     // page + version rows actually landed (handler-level scoping proof).

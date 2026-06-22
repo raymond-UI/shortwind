@@ -20,13 +20,22 @@ compatibility_date = "2025-06-01"
 account_id = "31d65fe8d35768972de29c4199b648ee"
 
 # --- routes (custom hostnames) ----------------------------------------------
-# Placeholder. The live serve hostnames — including the Cloudflare-for-SaaS
-# custom-hostname fallback that fronts bind-domain pages (PRD §6.1) — are wired
-# in CLOUD-30 alongside the live zone/account ids. Left commented so this config
-# stays deployable-shaped without claiming a zone the project does not yet own.
-# routes = [
-#   { pattern = "*", custom_domain = true },  # CLOUD-30: Cloudflare for SaaS
-# ]
+# SECURITY (audit #3): user content serves from the DEDICATED apex `shortwind.app`
+# (a separate registrable domain from the dashboard/marketing `shortwind.dev`), so
+# untrusted page JS shares no cookie/origin trust with the platform. The wildcard
+# route below binds every per-page subdomain to this serve Worker.
+#
+# IMPORTANT — retire the old apex: remove the previous `*.shortwind.dev` wildcard
+# route that pointed at this Worker (in the Cloudflare dashboard) so user content
+# stops serving on shortwind.dev. The router 301s any leftover `*.shortwind.dev`
+# host to the marketing site as a backstop.
+#
+# Requires (manual, see DEPLOY.md): add the `shortwind.app` zone to this account,
+# a proxied wildcard DNS record `*.shortwind.app`, and (for bind-domain, Phase 2)
+# the Cloudflare-for-SaaS custom-hostname fallback.
+routes = [
+  { pattern = "*.shortwind.app/*", zone_name = "shortwind.app" },
+]
 
 # --- CLOUD-21: serve-path storage bindings ----------------------------------
 # The R2 bucket + KV namespace the hot path (this router) and the publish/delete

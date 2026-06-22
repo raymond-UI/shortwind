@@ -1261,20 +1261,21 @@ function makeDeps(ctx: RunnerCtx, tokenId: TokenId): PublishDeps {
 }
 
 function pageBaseUrl(): string {
-  // CLOUD-30: read the public origin from env (`PAGES_BASE_URL`). Fallback keeps
-  // URLs well-formed in dev/test deployments. This is the LEGACY path-based serve
-  // origin (`c.shortwind.dev/<slug>`), kept for backward-compat (CLOUD-31 edge
-  // eviction + the demo page still serve from it).
-  return process.env.PAGES_BASE_URL ?? "https://c.shortwind.dev";
+  // Read the public origin from env (`PAGES_BASE_URL`). Fallback keeps URLs
+  // well-formed in dev/test. SECURITY (audit #3): user content serves from the
+  // dedicated `shortwind.app` apex — isolated from the dashboard/marketing
+  // `shortwind.dev` apex so untrusted page JS shares no cookie/origin trust.
+  return process.env.PAGES_BASE_URL ?? "https://shortwind.app";
 }
 
 /**
- * CLOUD-SUBDOMAIN: the apex domain pages are served under as per-page subdomains
+ * The apex domain pages are served under as per-page subdomains
  * (`https://<subdomain>.<rootDomain>`). Read from env (`PAGES_ROOT_DOMAIN`),
- * else default to `shortwind.dev`. The publish/update URL builder uses this.
+ * else default to the dedicated user-content apex `shortwind.app` (audit #3 —
+ * separate from the platform apex `shortwind.dev`).
  */
 function pageRootDomain(): string {
-  return process.env.PAGES_ROOT_DOMAIN ?? "shortwind.dev";
+  return process.env.PAGES_ROOT_DOMAIN ?? "shortwind.app";
 }
 
 function flattenOutcome(outcome: PublishOutcome) {

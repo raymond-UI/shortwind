@@ -22,6 +22,25 @@ wrangler kv namespace create ROUTES          # note the returned id
 Edit `worker/wrangler.toml`: set `[[r2_buckets]].bucket_name = "shortwind-artifacts"`,
 `[[kv_namespaces]].id = "<id>"`, and `[vars].CONVEX_HTTP_URL = "<convex https origin>"`.
 
+### User-content apex — `shortwind.app` (audit #3)
+Published pages serve from the DEDICATED apex `shortwind.app`, separate from the
+dashboard/marketing apex `shortwind.dev`, so untrusted page JS shares no cookie or
+origin trust with the platform. To provision:
+1. Add the `shortwind.app` zone to the Cloudflare account; add a **proxied wildcard
+   DNS** record `*.shortwind.app` (e.g. AAAA `*` → `100::`).
+2. The serve Worker route is `*.shortwind.app/*` (already in `wrangler.toml`).
+3. **Remove the old `*.shortwind.dev` wildcard route** that pointed at the serve
+   Worker — user content must stop serving on `shortwind.dev`. (The router 301s any
+   leftover `*.shortwind.dev` host to `https://shortwind.dev` as a backstop.)
+4. Set the publish-path Convex env vars so generated URLs match:
+   ```bash
+   npx convex env set PAGES_ROOT_DOMAIN shortwind.app --prod
+   npx convex env set PAGES_BASE_URL https://shortwind.app --prod
+   ```
+5. Follow-up for cross-page isolation: submit `shortwind.app` to the **Public
+   Suffix List** (like `vercel.app`) so each `*.shortwind.app` subdomain is its own
+   eTLD+1 and pages can't set cookies readable across each other.
+
 ## 2. Deploy Convex (control plane)
 ```bash
 npx convex deploy           # regenerates convex/_generated against the live deployment,

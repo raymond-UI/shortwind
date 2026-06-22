@@ -146,18 +146,18 @@ describe("CLOUD-SUBDOMAIN — serve.resolveRoute (subdomain-only)", () => {
     const b = await publishPage(t, bearerB, "cloud-ops");
 
     // A took the bare label; B was disambiguated.
-    expect(a.url).toBe("https://cloud-ops.shortwind.dev");
-    expect(b.url).toMatch(/^https:\/\/cloud-ops-[a-z0-9]+\.shortwind\.dev$/);
+    expect(a.url).toBe("https://cloud-ops.shortwind.app");
+    expect(b.url).toMatch(/^https:\/\/cloud-ops-[a-z0-9]+\.shortwind\.app$/);
     expect(b.url).not.toBe(a.url);
 
     // Each subdomain resolves to its OWN page.
     const labelB = new URL(b.url).hostname.split(".")[0]!;
     const routeA = await t.query(api.serve.resolveRoute, {
-      host: "cloud-ops.shortwind.dev",
+      host: "cloud-ops.shortwind.app",
       path: "/",
     });
     const routeB = await t.query(api.serve.resolveRoute, {
-      host: `${labelB}.shortwind.dev`,
+      host: `${labelB}.shortwind.app`,
       path: "/",
     });
     expect(routeA!.pageId).toBe(a.id);

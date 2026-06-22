@@ -33,6 +33,20 @@ export function cacheArtifactResponse(
   // writeHttpMetadata may overwrite content-type from stored httpMetadata; the
   // artifact is always text/html so re-assert it.
   headers.set("content-type", "text/html; charset=utf-8");
+  // SECURITY (audit #3). Primary isolation of untrusted page content is the
+  // dedicated `shortwind.app` apex (no shared cookie/origin trust with the
+  // dashboard). These headers are defense-in-depth that DON'T break arbitrary
+  // author HTML:
+  //   - nosniff: never let a mistyped artifact be sniffed into a script/other type.
+  //   - COOP: a page can't get a window handle to its opener (popup attacks).
+  //   - CORP cross-origin: explicit — artifacts are public, embeddable anywhere.
+  // A content-restricting CSP is deliberately NOT imposed (it would break the
+  // arbitrary inline JS/CSS pages this product exists to host); per-page opt-in
+  // CSP + adding `shortwind.app` to the Public Suffix List (to isolate page
+  // subdomains from each other, like vercel.app) are the documented follow-ups.
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("cross-origin-opener-policy", "same-origin");
+  headers.set("cross-origin-resource-policy", "cross-origin");
   return new Response(artifact.object.body, { status: 200, headers });
 }
 

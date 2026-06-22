@@ -85,20 +85,30 @@ export interface RouterDeps {
 }
 
 /**
- * The registrable apex pages are served under as subdomains. The router only
- * ever sees `*.shortwind.dev` (the wildcard serve route); this is the apex it
- * redirects reserved/system labels back to.
+ * The dedicated user-content apex pages serve under as subdomains
+ * (`<label>.shortwind.app`). SECURITY (audit #3): this is a SEPARATE registrable
+ * domain from the platform apex {@link PLATFORM_DOMAIN}, so untrusted page JS
+ * shares no cookie/origin trust with the dashboard/marketing site.
  */
-const ROOT_DOMAIN = "shortwind.dev";
+const USER_CONTENT_DOMAIN = "shortwind.app";
 
 /**
- * Reserved/system subdomain labels under {@link ROOT_DOMAIN} that are NOT pages.
- * Mirrors `shared/src/slug.ts` `RESERVED_SUBDOMAINS` (the worker can't import it —
- * it types against @cloudflare/workers-types via ./env, which the shared package's
- * tsconfig doesn't load). `c` is the RETIRED legacy serve host: its custom domain
- * was removed but the wildcard still resolves it, so it must land somewhere sane
- * (a 301 to the apex) instead of a bare 404. A genuine unknown PAGE label (a
- * typo'd slug) is NOT in this set and still 404s.
+ * The platform marketing + dashboard apex. NO user content serves here anymore
+ * (audit #3). Any subdomain that still reaches this Worker (legacy
+ * `*.shortwind.dev` — including the retired `c.shortwind.dev`) is retired with a
+ * 301 to the marketing site.
+ */
+const PLATFORM_DOMAIN = "shortwind.dev";
+
+/** Where reserved/retired hosts redirect (the marketing site). */
+const MARKETING_URL = `https://${PLATFORM_DOMAIN}`;
+
+/**
+ * Reserved/system subdomain labels under {@link USER_CONTENT_DOMAIN} that are NOT
+ * pages. Mirrors `shared/src/slug.ts` `RESERVED_SUBDOMAINS` (the worker can't
+ * import it — it types against @cloudflare/workers-types via ./env, which the
+ * shared package's tsconfig doesn't load; an equality test guards the drift). A
+ * genuine unknown PAGE label (a typo'd slug) is NOT in this set and still 404s.
  */
 const RESERVED_LABELS: ReadonlySet<string> = new Set([
   "c",
@@ -110,19 +120,32 @@ const RESERVED_LABELS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * If `host` is a reserved/system or retired label under {@link ROOT_DOMAIN}
- * (`c.shortwind.dev`, `www.shortwind.dev`, …), return a 301 to the apex. Returns
- * `null` for any genuine page subdomain (which then resolves / 404s normally).
+ * Decide whether `host` should be redirected instead of served:
+ *   - ANY host under the platform apex `shortwind.dev` (a retired serve host:
+ *     `c.shortwind.dev`, `www.shortwind.dev`, or a legacy page subdomain) → 301
+ *     to the marketing site. User content no longer serves on `shortwind.dev`.
+ *   - The bare user-content apex (`shortwind.app`) or a reserved/system label
+ *     under it (`www.shortwind.app`, …) → 301 to the marketing site.
+ *   - A genuine page subdomain under `shortwind.app` (or any bound custom domain)
+ *     → `null`, so it resolves / 404s normally.
  */
 function reservedHostRedirect(host: string): Response | null {
   const h = host.toLowerCase().replace(/\.$/, "");
-  const suffix = `.${ROOT_DOMAIN}`;
-  if (!h.endsWith(suffix)) return null;
+
+  // Retired platform apex: nothing under shortwind.dev serves user content now.
+  if (h === PLATFORM_DOMAIN || h.endsWith(`.${PLATFORM_DOMAIN}`)) {
+    return Response.redirect(MARKETING_URL, 301);
+  }
+
+  // User-content apex: the bare apex and reserved/system labels are not pages.
+  const suffix = `.${USER_CONTENT_DOMAIN}`;
+  if (h === USER_CONTENT_DOMAIN) return Response.redirect(MARKETING_URL, 301);
+  if (!h.endsWith(suffix)) return null; // a bound custom domain → resolve normally
   const label = h.slice(0, -suffix.length);
   // Exactly one label in front of the apex, and it is a reserved/system label.
   if (label === "" || label.includes(".")) return null;
   if (!RESERVED_LABELS.has(label)) return null;
-  return Response.redirect(`https://${ROOT_DOMAIN}`, 301);
+  return Response.redirect(MARKETING_URL, 301);
 }
 
 /** Minimal text/html response with no body — used for refusals (4xx/410/451). */

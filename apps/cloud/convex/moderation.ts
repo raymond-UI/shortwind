@@ -579,8 +579,8 @@ declare const process: { env: Record<string, string | undefined> };
 /** The platform origin pages serve under (mirrors pages.ts `pageBaseUrl`). */
 function killBaseUrl(): string {
   // CLOUD-30b reads the public origin from env; the fallback keeps the purge URL
-  // well-formed in dev/test.
-  return process.env.PAGES_BASE_URL ?? "https://c.shortwind.dev";
+  // well-formed in dev/test. Audit #3: user content serves from `shortwind.app`.
+  return process.env.PAGES_BASE_URL ?? "https://shortwind.app";
 }
 
 /** The public URL the kill purges from the edge cache. */
