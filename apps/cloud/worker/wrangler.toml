@@ -33,9 +33,26 @@ compatibility_date = "2025-06-01"
 # Requires (manual, see DEPLOY.md): add the `shortwind.app` zone to this account,
 # a proxied wildcard DNS record `*.shortwind.app`, and (for bind-domain, Phase 2)
 # the Cloudflare-for-SaaS custom-hostname fallback.
-routes = [
-  { pattern = "*.shortwind.app/*", zone_name = "shortwind.app" },
-]
+#
+# ROUTE IS ATTACHED MANUALLY, NOT HERE. The CI deploy authenticates with an
+# ACCOUNT-OWNED API token (CF's recommended CI credential). Account-owned tokens
+# are "Entire Account" scoped and do NOT expose zone-level permission groups —
+# there is no "Workers Routes" or "Zone" permission to grant them — so they can
+# upload the Worker (Workers Scripts) and bind KV/R2, but CANNOT attach a route to
+# the `shortwind.app` zone. Declaring `routes` here makes `wrangler deploy` call
+# the zone route API and fail with auth error 10000.
+#
+# Fix: attach the wildcard route ONCE by hand, then leave it out of this file.
+# With no `routes` key, wrangler does not touch routes on deploy — the manual
+# route persists across every CI deploy.
+#   Cloudflare dash → Workers & Pages → shortwind-cloud-serve → Settings →
+#   Domains & Routes → Add → Route → `*.shortwind.app/*`, zone `shortwind.app`.
+# (Alternatively use a USER API token with Workers Routes:Edit + Zone:Read for the
+#  CLOUDFLARE_API_TOKEN secret and restore the `routes` block below for full IaC.)
+#
+# routes = [
+#   { pattern = "*.shortwind.app/*", zone_name = "shortwind.app" },
+# ]
 
 # --- CLOUD-21: serve-path storage bindings ----------------------------------
 # The R2 bucket + KV namespace the hot path (this router) and the publish/delete
