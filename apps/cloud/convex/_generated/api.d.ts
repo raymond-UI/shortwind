@@ -13,6 +13,7 @@ import type * as billing from "../billing.js";
 import type * as bundles from "../bundles.js";
 import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
+import type * as device from "../device.js";
 import type * as domains from "../domains.js";
 import type * as expand from "../expand.js";
 import type * as http from "../http.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   bundles: typeof bundles;
   crons: typeof crons;
   dashboard: typeof dashboard;
+  device: typeof device;
   domains: typeof domains;
   expand: typeof expand;
   http: typeof http;

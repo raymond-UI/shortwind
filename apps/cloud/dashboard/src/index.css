@@ -294,6 +294,47 @@ a {
   margin-bottom: 14px;
 }
 
+/* Device-authorization approval (RFC 8628 verification page). */
+.auth-ok {
+  color: var(--fg);
+  border: 1px solid var(--border);
+  background: var(--panel, transparent);
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.device-meta {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+.device-meta p {
+  margin: 0 0 6px;
+}
+
+.device-meta code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.device-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.device-actions .btn {
+  width: auto;
+  flex: 1;
+}
+
+.device-actions .btn-ghost {
+  width: auto;
+  flex: 1;
+  text-align: center;
+}
+
 .auth-foot {
   margin-top: 16px;
   font-size: 12px;

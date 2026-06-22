@@ -74,9 +74,16 @@ describe("every shared record type maps 1:1 to a table", () => {
     });
   }
 
-  it("defines exactly the record tables (no extras, none missing)", () => {
+  // Infra tables with NO 1:1 shared record type — internal auth/transient state.
+  const infraTables = [
+    // RFC 8628 device-authorization grant (the CLI `login` flow). Transient,
+    // swept hourly; deliberately not a shared `types.ts` record.
+    "deviceCodes",
+  ];
+
+  it("defines exactly the record tables + infra tables (no extras, none missing)", () => {
     expect(new Set(Object.keys(tables))).toEqual(
-      new Set(Object.values(recordToTable)),
+      new Set([...Object.values(recordToTable), ...infraTables]),
     );
   });
 });
