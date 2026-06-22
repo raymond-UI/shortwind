@@ -7,7 +7,11 @@ needs the credentials documented in `.env.example`.
 ## 0. Prerequisites
 - A valid **Cloudflare API token** with: Workers Scripts *Edit*, Workers R2 *Edit*,
   Workers KV *Edit*, and (for bind-domain) SSL/Certificates *Edit* + Custom Hostnames.
-  > The token supplied during the build failed `/user/tokens/verify` — re-issue it.
+  > CI uses an **account-owned** token (CF's recommended CI credential). These are
+  > account-scoped and do NOT expose zone-level permissions (`Workers Routes`,
+  > `Zone`), so the `*.shortwind.app` route is attached manually (see §1) — the
+  > token can still upload the Worker + bind KV/R2. A **user** token can carry the
+  > zone perms if you'd rather manage routes from `wrangler.toml`.
 - A **Convex** project + deploy key (`CONVEX_DEPLOY_KEY`).
 - `BETTER_AUTH_SECRET` (`openssl rand -base64 32`).
 
@@ -28,7 +32,15 @@ dashboard/marketing apex `shortwind.dev`, so untrusted page JS shares no cookie 
 origin trust with the platform. To provision:
 1. Add the `shortwind.app` zone to the Cloudflare account; add a **proxied wildcard
    DNS** record `*.shortwind.app` (e.g. AAAA `*` → `100::`).
-2. The serve Worker route is `*.shortwind.app/*` (already in `wrangler.toml`).
+2. Attach the serve Worker route `*.shortwind.app/*` **manually, once**:
+   Cloudflare dash → Workers & Pages → `shortwind-cloud-serve` → Settings →
+   Domains & Routes → Add → Route → `*.shortwind.app/*`, zone `shortwind.app`.
+   It is NOT in `wrangler.toml` on purpose: CI deploys with an **account-owned**
+   API token, which is account-scoped and has no zone-level `Workers Routes`
+   permission — declaring the route would make `wrangler deploy` fail (auth error
+   10000). With no `routes` key, wrangler leaves the manual route untouched on
+   every deploy. (To automate it instead, use a **user** API token with
+   `Workers Routes:Edit` + `Zone:Read` and uncomment the `routes` block.)
 3. **Remove the old `*.shortwind.dev` wildcard route** that pointed at the serve
    Worker — user content must stop serving on `shortwind.dev`. (The router 301s any
    leftover `*.shortwind.dev` host to `https://shortwind.dev` as a backstop.)
