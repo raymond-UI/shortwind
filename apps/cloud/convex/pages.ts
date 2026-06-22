@@ -1728,19 +1728,21 @@ export const sweepExpired = internalMutation({
   returns: v.object({ tombstoned: v.number() }),
   handler: async (ctx, args) => {
     const now = args.now ?? Date.now();
-    // Scan active pages with a non-null expiry that is due. The set is small in
-    // practice (only pages that opted into an expiry); the filter keeps the
-    // tombstone path off non-expiring pages.
-    const due = await ctx.db
+    // Perf (audit #157): range due pages by `expiresAt` via the `by_expiry` index
+    // instead of full-table scanning every page. `gt(expiresAt, null)` excludes
+    // both absent (undefined) and explicit-null expiries (the non-expiring pages,
+    // which sort before all numbers), so only pages that opted into an expiry are
+    // read; `lte(now)` bounds to those already due. Then keep only `active` pages
+    // (a quarantined/preserved/tombstoned page must not be silently tombstoned).
+    const dueByExpiry = await ctx.db
       .query("pages")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("lifecycle"), "active"),
-          q.neq(q.field("expiresAt"), null),
-          q.lte(q.field("expiresAt"), now),
-        ),
+      .withIndex("by_expiry", (q) =>
+        q.gt("expiresAt", null).lte("expiresAt", now),
       )
       .collect();
+    const due = dueByExpiry.filter(
+      (p: Doc<"pages">) => p.lifecycle === "active",
+    );
 
     let tombstoned = 0;
     for (const page of due) {

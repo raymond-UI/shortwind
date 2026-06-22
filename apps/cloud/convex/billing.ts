@@ -112,12 +112,12 @@ export const getUsage = query({
     const auth = await requireReadOperator(ctx, args.bearer);
 
     // publishes + storageBytes — derived from the account's frozen versions.
-    // `pageVersions` carries `accountId` on every row but is indexed only
-    // `by_page`, so (mirroring `dashboard.listModeration`) we filter in app code.
-    const allVersions = await ctx.db.query("pageVersions").collect();
-    const versions = allVersions.filter(
-      (r: Doc<"pageVersions">) => r.accountId === auth.accountId,
-    );
+    // Perf (audit #157): range the account's versions via `by_account` instead of
+    // scanning every version in the table.
+    const versions = await ctx.db
+      .query("pageVersions")
+      .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+      .collect();
 
     const publishes = versions.length;
     const storageBytes = versions.reduce(

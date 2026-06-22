@@ -99,7 +99,10 @@ export default defineSchema({
     // Discovery: enumerate pages by tag (array index fans out per element).
     .index("by_tag", ["tags"])
     // CLOUD-51: enumerate an account's pages within a project group.
-    .index("by_project", ["accountId", "projectGroup"]),
+    .index("by_project", ["accountId", "projectGroup"])
+    // Perf (audit #157): the hourly expiry sweep ranges due pages by `expiresAt`
+    // instead of full-table scanning + JS-filtering every page.
+    .index("by_expiry", ["expiresAt"]),
 
   // Mirrors shared `PageVersion`. An immutable published snapshot — old
   // versions are frozen and never rebuilt (PRD 5.6).
@@ -118,7 +121,10 @@ export default defineSchema({
     createdAt: v.number(),
   })
     // List/iterate a page's version history.
-    .index("by_page", ["pageId"]),
+    .index("by_page", ["pageId"])
+    // Perf (audit #157): account-scoped usage metering (billing.getUsage) ranges
+    // an account's versions instead of full-table scanning every version.
+    .index("by_account", ["accountId"]),
 
   // Mirrors shared `RecipeVersion`. Forward-only versioned recipe family bodies
   // in the account's cloud palette (PRD 5.4).
@@ -265,7 +271,10 @@ export default defineSchema({
     // Resolve a page's moderation case(s).
     .index("by_page", ["pageId"])
     // Sweep cases by state (review queue, preservation expiry).
-    .index("by_state", ["state"]),
+    .index("by_state", ["state"])
+    // Perf (audit #157): the oversight queue (dashboard.listModeration) ranges an
+    // account's cases instead of full-table scanning + JS-filtering by account.
+    .index("by_account", ["accountId"]),
 
   // Mirrors shared `IdempotencyKey`. A retried publish with the same key returns
   // the same result instead of duplicating (PRD 6.2).

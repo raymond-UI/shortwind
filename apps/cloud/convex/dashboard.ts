@@ -295,12 +295,14 @@ export const listModeration = query({
   returns: v.array(moderationRowValidator),
   handler: async (ctx, args) => {
     const auth = await requireReadOperator(ctx, args.bearer);
-    // The moderation table is indexed by page/state, not account; scope by the
-    // resolved account in app code (each case carries `accountId`).
-    const all = await ctx.db.query("moderation").collect();
-    const mine = all
-      .filter((m: Doc<"moderation">) => m.accountId === auth.accountId)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+    // Perf (audit #157): range the account's cases via `by_account` instead of
+    // scanning the whole table + filtering in JS. Order newest-updated first.
+    const mine = (
+      await ctx.db
+        .query("moderation")
+        .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+        .collect()
+    ).sort((a, b) => b.updatedAt - a.updatedAt);
     return mine.map((m: Doc<"moderation">) => ({
       id: m._id,
       pageId: m.pageId,
