@@ -33,6 +33,7 @@ import {
   type StoragePort,
 } from "./lib/publish_core.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
+import { deriveSubdomain } from "../shared/src/slug.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
 
 /**
@@ -176,13 +177,23 @@ export const getIdempotency = internalQuery({
 // Internal write mutations (data-port writes). Each commits atomically.
 // ---------------------------------------------------------------------------
 
-/** Insert a new page shell (no current version yet) → its id. */
+/**
+ * Insert a new page shell (no current version yet) → its id + the subdomain it
+ * was actually given.
+ *
+ * SECURITY (audit #6/#155 — TOCTOU): the globally-unique subdomain is derived AND
+ * re-probed against `by_subdomain` INSIDE this mutation. Convex mutations are
+ * serializable, so if two concurrent publishes of the same slug both try to take
+ * the bare label, the second commit conflicts on the `by_subdomain` read/write
+ * range and is automatically retried — on retry it sees the label taken and
+ * re-mints `slug-<id>`. This closes the previous hole where the label was probed
+ * in the action (a query) and inserted later (a separate mutation), letting two
+ * tenants land the same subdomain and cross-serve each other's artifact.
+ */
 export const commitNewPage = internalMutation({
   args: {
     accountId: v.id("accounts"),
     slug: v.string(),
-    // CLOUD-SUBDOMAIN: the globally-unique subdomain label minted by the core.
-    subdomain: v.string(),
     visibility: v.union(
       v.literal("public"),
       v.literal("unlisted"),
@@ -190,13 +201,21 @@ export const commitNewPage = internalMutation({
     ),
     tags: v.array(v.string()),
   },
-  returns: v.id("pages"),
+  returns: v.object({ pageId: v.id("pages"), subdomain: v.string() }),
   handler: async (ctx, args) => {
+    // Serializable derive: probe `by_subdomain` and re-mint within this txn.
+    const subdomain = await deriveSubdomain(args.slug, async (label) => {
+      const row = await ctx.db
+        .query("pages")
+        .withIndex("by_subdomain", (q) => q.eq("subdomain", label))
+        .first();
+      return row !== null;
+    });
     const now = Date.now();
-    return ctx.db.insert("pages", {
+    const pageId = await ctx.db.insert("pages", {
       accountId: args.accountId,
       slug: args.slug,
-      subdomain: args.subdomain,
+      subdomain,
       customDomain: null,
       visibility: args.visibility,
       lifecycle: "active",
@@ -212,6 +231,7 @@ export const commitNewPage = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    return { pageId, subdomain };
   },
 });
 
@@ -371,14 +391,17 @@ function makeDataPort(ctx: RunnerCtx, tokenId: TokenId): PublishDataPort {
     // CLOUD-SUBDOMAIN: global subdomain-uniqueness probe (by_subdomain index).
     subdomainTaken: (label) =>
       ctx.runQuery(internal.pages.subdomainTaken, { label }),
-    insertPage: (page) =>
-      ctx.runMutation(internal.pages.commitNewPage, {
+    insertPage: async (page) => {
+      // commitNewPage derives + re-probes the subdomain inside its transaction
+      // (audit #155) and returns the authoritative label it committed.
+      const r = await ctx.runMutation(internal.pages.commitNewPage, {
         accountId: page.accountId as AccountId,
         slug: page.slug,
-        subdomain: page.subdomain,
         visibility: page.visibility,
         tags: page.tags,
-      }),
+      });
+      return { id: r.pageId, subdomain: r.subdomain };
+    },
     // The re-point is committed inside `commitVersion`.
     patchPageCurrentVersion: async () => {},
     // The version write carries the captured audit row, committed atomically.

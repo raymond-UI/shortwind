@@ -45,7 +45,6 @@ import {
 } from "../../shared/src/fingerprint.js";
 import {
   deriveSlug,
-  deriveSubdomain,
   slugCollision,
   validateSlug,
   type ExistingPageRef,
@@ -200,15 +199,21 @@ export interface PublishDataPort {
    * gets the bare `<slug>` or the disambiguated `<slug>-<id>` label.
    */
   subdomainTaken(label: string): Promise<boolean>;
-  /** Insert a new page shell (no current version yet) → its new id. */
+  /**
+   * Insert a new page shell (no current version yet). The globally-unique
+   * subdomain is derived + re-probed INSIDE this insert's transaction
+   * (audit #6 / #155): Convex mutations are serializable, so two concurrent
+   * publishes of the same slug can no longer both read "free" and both insert the
+   * same label (TOCTOU). The authoritative subdomain that was actually committed
+   * is returned alongside the new id — the caller must use it (not a pre-derived
+   * guess) for the URL + edge route.
+   */
   insertPage(page: {
     accountId: string;
     slug: string;
-    /** The globally-unique subdomain label minted for this page. */
-    subdomain: string;
     visibility: "public" | "unlisted" | "private";
     tags: string[];
-  }): Promise<string>;
+  }): Promise<{ id: string; subdomain: string }>;
   /** Re-point a page's current version + bump its counter. */
   patchPageCurrentVersion(
     pageId: string,
@@ -563,22 +568,19 @@ export async function runPublish(
     };
   }
 
-  // 3b. CLOUD-SUBDOMAIN: mint the page's globally-unique subdomain label — the
-  //     bare slug when it is free across ALL accounts (and not a reserved system
-  //     label), else `slug-<id>` re-minted until unique. Stored on the page so it
-  //     is stable; the published URL is `https://<subdomain>.<rootDomain>`.
-  const subdomain = await deriveSubdomain(slug.value, (label) =>
-    deps.data.subdomainTaken(label),
-  );
-
-  // 4. Insert the page shell (with its minted subdomain).
-  const pageId = await deps.data.insertPage({
+  // 4. Insert the page shell. The globally-unique subdomain label (the bare slug
+  //    when free across ALL accounts and not reserved, else `slug-<id>`) is
+  //    derived + re-probed INSIDE the insert transaction (audit #6/#155) so two
+  //    concurrent same-slug publishes can't both mint the same label (TOCTOU).
+  //    The authoritative committed subdomain comes back from the insert.
+  const inserted = await deps.data.insertPage({
     accountId: acct,
     slug: slug.value,
-    subdomain,
     visibility: input.visibility ?? "public",
     tags: [...(input.tags ?? [])],
   });
+  const pageId = inserted.id;
+  const subdomain = inserted.subdomain;
 
   // 5. Lockfile diff vs stored (none yet on create) + touched recipes ride up.
   const storedLock = await deps.data.getStoredLockfile(pageId);

@@ -21,6 +21,7 @@ import {
   type StoredRecipeVersion,
 } from "./publish_core.js";
 import { computeBodySha } from "../../shared/src/fingerprint.js";
+import { deriveSubdomain } from "../../shared/src/slug.js";
 import type { Lockfile } from "../../shared/src/lockfile-diff.js";
 
 /**
@@ -75,21 +76,25 @@ class MemoryData implements PublishDataPort {
   async insertPage(page: {
     accountId: string;
     slug: string;
-    subdomain: string;
     visibility: "public" | "unlisted" | "private";
     tags: string[];
-  }): Promise<string> {
+  }): Promise<{ id: string; subdomain: string }> {
+    // Mirror the real commitNewPage: derive + re-probe the subdomain at insert
+    // time (audit #155) so a same-slug second page gets a distinct `slug-<id>`.
+    const subdomain = await deriveSubdomain(page.slug, (label) =>
+      this.subdomainTaken(label),
+    );
     const id = this.id("page");
     this.pages.set(id, {
       id,
       accountId: page.accountId,
       slug: page.slug,
-      subdomain: page.subdomain,
+      subdomain,
       currentVersion: 0,
       visibility: page.visibility,
       tags: page.tags,
     });
-    return id;
+    return { id, subdomain };
   }
   async patchPageCurrentVersion(
     pageId: string,
