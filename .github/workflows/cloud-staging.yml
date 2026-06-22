@@ -1,0 +1,81 @@
+name: Cloud — Staging (test on push)
+
+# Mirrors the offry / Togethr pattern: EVERY push to a non-main branch (and every
+# PR) runs the full test gate, so you get a CI signal without opening a PR. Unlike
+# those single-app repos, apps/cloud is its OWN pnpm root nested in a monorepo, so
+# jobs run with working-directory: apps/cloud and the run is path-filtered to
+# apps/cloud/** (package/site work doesn't trigger it).
+#
+# There is no staging *deploy* step yet — shortwind has no separate staging
+# Cloudflare worker (dev resources are driven by the dev Convex deployment). Add a
+# `cloudflare/wrangler-action` deploy step here once a staging worker exists, the
+# same way cloud-production.yml deploys prod.
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - "apps/cloud/**"
+      - ".github/workflows/cloud-staging.yml"
+  pull_request:
+    paths:
+      - "apps/cloud/**"
+      - ".github/workflows/cloud-staging.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cloud-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Convex + Worker + CLI — typecheck & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck (convex + worker + cli + shared)
+        run: pnpm run typecheck
+      - name: Test — node pool (convex via convex-test, cli, shared)
+        run: pnpm run test
+      - name: Test — workerd pool (serve Worker via miniflare)
+        run: pnpm exec vitest run --config worker/vitest.config.ts
+
+  dashboard:
+    name: Dashboard (TanStack Start) — typecheck, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/cloud/dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/cloud/dashboard/pnpm-lock.yaml
+      # The dashboard typechecks `../convex` (via the @convex/* path → the Convex
+      # client + _generated api), so it needs apps/cloud's deps installed too, not
+      # just the dashboard's own.
+      - name: Install apps/cloud (for ../convex resolution)
+        working-directory: apps/cloud
+        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Test
+        run: pnpm run test
+      - name: Build (SSR + client)
+        run: pnpm run build

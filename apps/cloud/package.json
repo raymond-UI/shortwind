@@ -1,0 +1,36 @@
+{
+  "name": "@shortwind/cloud",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shortwind Cloud — agent-native HTML hosting. Self-contained workspace, never published.",
+  "bin": {
+    "shortwind-cloud": "./dist/cli/src/bin.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc --noEmit -p cli/tsconfig.json",
+    "test": "vitest run",
+    "build": "echo \"build wired up in a later wave (worker bundle + convex deploy)\" && exit 0",
+    "build:cli": "rm -rf dist && tsc -p cli/tsconfig.build.json"
+  },
+  "dependencies": {
+    "@convex-dev/better-auth": "0.11.4",
+    "@convex-dev/rate-limiter": "0.3.2",
+    "@shortwind/core": "0.1.0-beta.19",
+    "aws4fetch": "^1.0.20",
+    "better-auth": "1.5.6",
+    "cac": "6.7.14",
+    "convex": "1.41.0",
+    "hono": "4.12.26"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.16.18",
+    "@cloudflare/workers-types": "4.20251115.0",
+    "@edge-runtime/vm": "5.0.0",
+    "@types/node": "^22.10.0",
+    "convex-test": "0.0.53",
+    "typescript": "5.7.3",
+    "vitest": "4.1.4",
+    "wrangler": "4.90.1"
+  }
+}

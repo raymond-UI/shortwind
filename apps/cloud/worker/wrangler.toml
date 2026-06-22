@@ -1,0 +1,69 @@
+# Shortwind Cloud serve Worker — the hot path (PRD §6.1).
+#
+# CLOUD-22 finalizes this from the CLOUD-02 spike stub into the production serve
+# config: `main` is now the serve ROUTER (src/router.ts, `export default
+# { fetch }`), not the expand-edge spike. The router resolves hostname/path →
+# route (KV hot, Convex cold) and streams the frozen R2 artifact — it NEVER
+# expands and NEVER writes the DB on the hot path. expand-edge.ts remains in the
+# tree as the CLOUD-02 spike artifact but is no longer the Worker entrypoint.
+#
+# Compatibility: NO `compatibility_flags = ["nodejs_compat"]`. The serve path
+# touches only Web-standard APIs (Request/Response/URL, R2, KV, Cache) — no Node
+# built-ins. (The CLOUD-02 spike confirmed even @shortwind/core's expand() runs
+# without the flag; the router doesn't import it at all. See worker/SPIKE.md.)
+name = "shortwind-cloud-serve"
+main = "src/router.ts"
+compatibility_date = "2025-06-01"
+
+# Audit #159: the Cloudflare account id is NOT committed — wrangler reads it from
+# the CLOUDFLARE_ACCOUNT_ID env var (set locally + by the deploy workflow). The
+# serve Worker deploys to shortwind-cloud-serve.<subdomain>.workers.dev.
+
+# --- routes (custom hostnames) ----------------------------------------------
+# SECURITY (audit #3): user content serves from the DEDICATED apex `shortwind.app`
+# (a separate registrable domain from the dashboard/marketing `shortwind.dev`), so
+# untrusted page JS shares no cookie/origin trust with the platform. The wildcard
+# route below binds every per-page subdomain to this serve Worker.
+#
+# IMPORTANT — retire the old apex: remove the previous `*.shortwind.dev` wildcard
+# route that pointed at this Worker (in the Cloudflare dashboard) so user content
+# stops serving on shortwind.dev. The router 301s any leftover `*.shortwind.dev`
+# host to the marketing site as a backstop.
+#
+# Requires (manual, see DEPLOY.md): add the `shortwind.app` zone to this account,
+# a proxied wildcard DNS record `*.shortwind.app`, and (for bind-domain, Phase 2)
+# the Cloudflare-for-SaaS custom-hostname fallback.
+routes = [
+  { pattern = "*.shortwind.app/*", zone_name = "shortwind.app" },
+]
+
+# --- CLOUD-21: serve-path storage bindings ----------------------------------
+# The R2 bucket + KV namespace the hot path (this router) and the publish/delete
+# mutations bind. Under @cloudflare/vitest-pool-workers / miniflare these resolve
+# to LOCAL in-memory stores — no live Cloudflare creds.
+#
+# CLOUD-30 wires the LIVE resources: replace `bucket_name` with the real R2
+# bucket and fill `id` with the real KV namespace id (and add `preview_id`).
+# Leave these as placeholders until then.
+
+[[r2_buckets]]
+binding = "ARTIFACTS"                 # env.ARTIFACTS — frozen HTML artifacts
+bucket_name = "shortwind-artifacts"   # CLOUD-30b: live R2 bucket
+
+[[kv_namespaces]]
+binding = "ROUTES"                            # env.ROUTES — hostname/path -> route hot cache
+# Audit #159: these are the KV namespaces' opaque RESOURCE ids, not credentials —
+# they grant nothing without the account's deploy API token. wrangler.toml does not
+# support env-var substitution for binding ids, and local/miniflare tests bind by
+# name (these ids are ignored there), so they are kept here for `wrangler deploy`.
+id = "7baeea10fb4041a095005bc4aaabb6cd"        # PROD KV namespace (ROUTES)
+preview_id = "e667f52e15894a32b456a17e50e838d0" # DEV KV namespace (`wrangler dev`)
+
+# --- live cold source (Convex) ----------------------------------------------
+# The router's cold-source resolution + private-token validation hit Convex on a
+# KV miss. CLOUD-30b wires the live Convex HTTP origin; the router's defaultDeps
+# fetch the route resolver at `${CONVEX_HTTP_URL}/internal/resolve` and validate
+# private bearers at `${CONVEX_HTTP_URL}/internal/validate-token`. An empty value
+# keeps the worker closed-by-default (every cold miss → 404, every token → 401).
+[vars]
+CONVEX_HTTP_URL = "https://prestigious-shrimp-154.convex.site"  # live Convex HTTP origin (PROD)

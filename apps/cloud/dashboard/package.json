@@ -1,0 +1,45 @@
+{
+  "name": "@shortwind/cloud-dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shortwind Cloud — human oversight dashboard (TanStack Start + Convex + Better Auth). Operator logs in with email+password; reactive oversight: pages, audit log, recipe-edit visibility, moderation, operator policy, usage. Never published.",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "deploy": "vite build && wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@convex-dev/better-auth": "0.11.4",
+    "@convex-dev/react-query": "^0.1.0",
+    "@tanstack/react-query": "^5.99.0",
+    "@tanstack/react-router": "^1.154.8",
+    "@tanstack/react-start": "^1.154.8",
+    "better-auth": "1.5.6",
+    "convex": "1.41.0",
+    "isbot": "^5.1.33",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.13.6",
+    "@tailwindcss/vite": "^4.1.18",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "jsdom": "^25.0.1",
+    "tailwindcss": "^4.1.18",
+    "typescript": "5.7.3",
+    "vite": "^8.0.16",
+    "vite-tsconfig-paths": "^6.0.4",
+    "vitest": "4.1.4",
+    "wrangler": "^4.103.0"
+  }
+}

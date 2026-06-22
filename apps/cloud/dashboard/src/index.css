@@ -1,0 +1,307 @@
+@import "tailwindcss";
+
+/*
+ * Shortwind Cloud oversight dashboard — dark mono "index" aesthetic.
+ * Ported verbatim from the prior SPA's styles.css (the `.recipe-edit` distinct
+ * styling is load-bearing per PRD §5.4 and asserted by the view tests).
+ */
+
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0a;
+  --panel: #111111;
+  --border: #262626;
+  --fg: #ededed;
+  --muted: #8a8a8a;
+  --accent: #e5e5e5;
+  /* Recipe-edit events are visually DISTINCT (PRD §5.4) — amber rail. */
+  --recipe: #d99e3f;
+  --recipe-bg: rgba(217, 158, 63, 0.08);
+  --danger: #e05252;
+  --danger-bg: rgba(224, 82, 82, 0.08);
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+}
+
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.masthead h1 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.masthead .sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.masthead .spacer {
+  flex: 1;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tab[aria-current="true"] {
+  color: var(--fg);
+  background: var(--panel);
+  border-color: #3a3a3a;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.badge {
+  display: inline-block;
+  border: 1px solid var(--border);
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.badge.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  padding: 24px 12px;
+  color: var(--muted);
+}
+
+/* Recipe-edit feed: amber left rail + tint so the human notices it as a
+   distinct kind of event (PRD §5.4). */
+.recipe-edit {
+  border-left: 3px solid var(--recipe);
+  background: var(--recipe-bg);
+}
+
+.recipe-edit .recipe-kind {
+  color: var(--recipe);
+  border-color: var(--recipe);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+
+.toggle button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  padding: 4px 10px;
+}
+
+/* Usage view (CLOUD-43): a grid of meters — distinct from the oversight row
+   feeds. Billing is "how much of three things", not a chronological list. */
+.meters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.meter {
+  background: var(--panel);
+  padding: 16px 14px;
+}
+
+.meter-value {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.meter-label {
+  margin-top: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── Auth (login / signup) ─────────────────────────────────────────────── */
+
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 28px 24px;
+}
+
+.auth-card h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  letter-spacing: 0.02em;
+}
+
+.auth-card .sub {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 20px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  font: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 8px 10px;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn {
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+  background: var(--fg);
+  color: var(--bg);
+  border: 1px solid var(--fg);
+  padding: 9px 12px;
+  font-weight: 600;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  font-weight: 400;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.auth-error {
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  background: var(--danger-bg);
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.auth-foot {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.auth-foot a {
+  color: var(--fg);
+  text-decoration: underline;
+}

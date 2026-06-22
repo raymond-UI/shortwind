@@ -1,0 +1,20 @@
+# Makes `apps/cloud/dashboard/` its OWN pnpm workspace root, decoupled from the
+# `apps/cloud/` workspace above it (which has `packages: []` and therefore does
+# not adopt this nested package). Mirrors the apps/cloud ← repo-root precedent.
+# The dashboard carries its own React/Vite/TanStack/vitest deps here (CLOUD-35)
+# without touching the convex-side `apps/cloud/package.json`. Never published.
+packages: []
+
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
+
+# Security overrides for vulnerable transitive deps (pnpm 11 reads overrides
+# here, not in package.json's `pnpm.overrides`).
+#  - ws <8.21.0 carries a high-severity memory-exhaustion DoS; force >=8.21.0.
+#  - undici <7.28.0 carries multiple high-severity advisories; force >=7.28.0
+#    (stays within the in-use 7.x major).
+overrides:
+  ws: ">=8.21.0"
+  undici: ">=7.28.0"
