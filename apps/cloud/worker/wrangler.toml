@@ -15,9 +15,9 @@ name = "shortwind-cloud-serve"
 main = "src/router.ts"
 compatibility_date = "2025-06-01"
 
-# CLOUD-30b: live Cloudflare account. The serve Worker deploys to
-# shortwind-cloud-serve.mzed-studio.workers.dev under this account.
-account_id = "31d65fe8d35768972de29c4199b648ee"
+# Audit #159: the Cloudflare account id is NOT committed — wrangler reads it from
+# the CLOUDFLARE_ACCOUNT_ID env var (set locally + by the deploy workflow). The
+# serve Worker deploys to shortwind-cloud-serve.<subdomain>.workers.dev.
 
 # --- routes (custom hostnames) ----------------------------------------------
 # SECURITY (audit #3): user content serves from the DEDICATED apex `shortwind.app`
@@ -52,6 +52,10 @@ bucket_name = "shortwind-artifacts"   # CLOUD-30b: live R2 bucket
 
 [[kv_namespaces]]
 binding = "ROUTES"                            # env.ROUTES — hostname/path -> route hot cache
+# Audit #159: this is the KV namespace's opaque RESOURCE id, not a credential —
+# it grants nothing without the account's deploy API token. wrangler.toml does not
+# support env-var substitution for binding ids, and local/miniflare tests bind by
+# name (this id is ignored there), so it is kept here for `wrangler deploy`.
 id = "7baeea10fb4041a095005bc4aaabb6cd"       # CLOUD-30b: live KV namespace (ROUTES)
 
 # --- live cold source (Convex) ----------------------------------------------

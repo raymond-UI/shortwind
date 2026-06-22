@@ -4,7 +4,8 @@
   // Cloudflare Vite plugin wires the SSR Worker + serves the client bundle from
   // the build's assets dir. Deploy with: `pnpm build && wrangler deploy`.
   "name": "shortwind-cloud-dashboard",
-  "account_id": "31d65fe8d35768972de29c4199b648ee",
+  // Audit #159: account id is NOT committed — wrangler reads it from the
+  // CLOUDFLARE_ACCOUNT_ID env var (set locally + by the deploy workflow).
   "main": "@tanstack/react-start/server-entry",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
