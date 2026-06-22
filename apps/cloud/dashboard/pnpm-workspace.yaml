@@ -9,3 +9,12 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+
+# Security overrides for vulnerable transitive deps (pnpm 11 reads overrides
+# here, not in package.json's `pnpm.overrides`).
+#  - ws <8.21.0 carries a high-severity memory-exhaustion DoS; force >=8.21.0.
+#  - undici <7.28.0 carries multiple high-severity advisories; force >=7.28.0
+#    (stays within the in-use 7.x major).
+overrides:
+  ws: ">=8.21.0"
+  undici: ">=7.28.0"

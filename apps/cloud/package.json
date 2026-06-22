@@ -18,10 +18,10 @@
     "@convex-dev/rate-limiter": "0.3.2",
     "@shortwind/core": "0.1.0-beta.19",
     "aws4fetch": "^1.0.20",
-    "better-auth": "1.5.3",
+    "better-auth": "1.5.6",
     "cac": "6.7.14",
     "convex": "1.41.0",
-    "hono": "4.12.23"
+    "hono": "4.12.26"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.16.18",

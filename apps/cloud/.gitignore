@@ -1,2 +1,6 @@
 
+# Secrets — never commit live env files. .env.example stays tracked.
+.env
+.env.*
+!.env.example
 .env.local

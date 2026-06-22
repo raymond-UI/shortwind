@@ -34,6 +34,11 @@ jobs:
     name: Deploy Convex (prod)
     if: ${{ vars.CLOUD_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
+    # Gates prod deploys behind the GitHub `production` environment.
+    # REPO ADMIN: configure required reviewers (and any branch/wait rules) on the
+    # `production` environment under Settings → Environments, so a human must
+    # approve before secrets are released and this job runs.
+    environment: production
     permissions:
       contents: read
     defaults:
@@ -60,6 +65,10 @@ jobs:
     needs: convex
     if: ${{ vars.CLOUD_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
+    # Gates prod deploys behind the GitHub `production` environment.
+    # REPO ADMIN: configure required reviewers on the `production` environment
+    # under Settings → Environments (see the convex job above).
+    environment: production
     permissions:
       contents: read
     defaults:
@@ -87,6 +96,10 @@ jobs:
     needs: convex
     if: ${{ vars.CLOUD_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
+    # Gates prod deploys behind the GitHub `production` environment.
+    # REPO ADMIN: configure required reviewers on the `production` environment
+    # under Settings → Environments (see the convex job above).
+    environment: production
     permissions:
       contents: read
     defaults:
