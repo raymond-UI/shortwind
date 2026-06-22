@@ -52,11 +52,12 @@ bucket_name = "shortwind-artifacts"   # CLOUD-30b: live R2 bucket
 
 [[kv_namespaces]]
 binding = "ROUTES"                            # env.ROUTES — hostname/path -> route hot cache
-# Audit #159: this is the KV namespace's opaque RESOURCE id, not a credential —
-# it grants nothing without the account's deploy API token. wrangler.toml does not
+# Audit #159: these are the KV namespaces' opaque RESOURCE ids, not credentials —
+# they grant nothing without the account's deploy API token. wrangler.toml does not
 # support env-var substitution for binding ids, and local/miniflare tests bind by
-# name (this id is ignored there), so it is kept here for `wrangler deploy`.
-id = "7baeea10fb4041a095005bc4aaabb6cd"       # CLOUD-30b: live KV namespace (ROUTES)
+# name (these ids are ignored there), so they are kept here for `wrangler deploy`.
+id = "7baeea10fb4041a095005bc4aaabb6cd"        # PROD KV namespace (ROUTES)
+preview_id = "e667f52e15894a32b456a17e50e838d0" # DEV KV namespace (`wrangler dev`)
 
 # --- live cold source (Convex) ----------------------------------------------
 # The router's cold-source resolution + private-token validation hit Convex on a
