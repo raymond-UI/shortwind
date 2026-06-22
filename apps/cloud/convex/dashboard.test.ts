@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
-import { api } from "./_generated/api.js";
+import { api, internal } from "./_generated/api.js";
 
 /**
  * CLOUD-35 — dashboard oversight queries, in-harness against the REAL schema +
@@ -26,7 +26,7 @@ const modules = import.meta.glob("./**/*.ts");
 async function seedAccount(
   t: ReturnType<typeof convexTest>,
   authUserId: string,
-): Promise<{ accountId: string; readBearer: string }> {
+): Promise<{ accountId: string; readBearer: string; writeBearer: string }> {
   const accountId = await t.run(async (ctx) => {
     const now = Date.now();
     return ctx.db.insert("accounts", {
@@ -39,11 +39,21 @@ async function seedAccount(
   });
   // A read-scoped operator bearer through the REAL issueToken so the auth
   // guard's hash-lookup matches (the dashboard holds a pages:read bearer).
-  const issued = await t.mutation(api.tokens.issueToken, {
+  const issued = await t.mutation(internal.tokens.issueToken, {
     accountId: accountId as never,
     scopes: ["pages:read"],
   });
-  return { accountId, readBearer: issued.secret };
+  // A write-scoped bearer for the mutating verb: setAccountPolicy now requires
+  // pages:write on the bearer path (audit #152).
+  const issuedWrite = await t.mutation(internal.tokens.issueToken, {
+    accountId: accountId as never,
+    scopes: ["pages:read", "pages:write"],
+  });
+  return {
+    accountId,
+    readBearer: issued.secret,
+    writeBearer: issuedWrite.secret,
+  };
 }
 
 describe("dashboard.listPages", () => {
@@ -307,10 +317,10 @@ describe("dashboard policy (getAccountPolicy / setAccountPolicy)", () => {
 
   it("persists a toggle and reads it back (the one mutation)", async () => {
     const t = convexTest(schema, modules);
-    const { readBearer } = await seedAccount(t, "acct_pol_set");
+    const { readBearer, writeBearer } = await seedAccount(t, "acct_pol_set");
 
     const set = await t.mutation(api.dashboard.setAccountPolicy, {
-      bearer: readBearer,
+      bearer: writeBearer,
       customDomainNeedsApproval: false,
     });
     expect(set.customDomainNeedsApproval).toBe(false);
@@ -323,7 +333,7 @@ describe("dashboard policy (getAccountPolicy / setAccountPolicy)", () => {
 
     // toggling back round-trips.
     const set2 = await t.mutation(api.dashboard.setAccountPolicy, {
-      bearer: readBearer,
+      bearer: writeBearer,
       customDomainNeedsApproval: true,
     });
     expect(set2.customDomainNeedsApproval).toBe(true);
@@ -333,12 +343,28 @@ describe("dashboard policy (getAccountPolicy / setAccountPolicy)", () => {
     expect(read2.customDomainNeedsApproval).toBe(true);
   });
 
+  it("rejects setAccountPolicy from a read-only bearer (audit #152)", async () => {
+    const t = convexTest(schema, modules);
+    const { readBearer } = await seedAccount(t, "acct_pol_ro");
+    await expect(
+      t.mutation(api.dashboard.setAccountPolicy, {
+        bearer: readBearer,
+        customDomainNeedsApproval: false,
+      }),
+    ).rejects.toThrow();
+    // The safe default is untouched after the rejected write.
+    const policy = await t.query(api.dashboard.getAccountPolicy, {
+      bearer: readBearer,
+    });
+    expect(policy.customDomainNeedsApproval).toBe(true);
+  });
+
   it("scopes policy per account (one account's toggle does not affect another)", async () => {
     const t = convexTest(schema, modules);
     const a = await seedAccount(t, "acct_pol_iso_a");
     const b = await seedAccount(t, "acct_pol_iso_b");
     await t.mutation(api.dashboard.setAccountPolicy, {
-      bearer: a.readBearer,
+      bearer: a.writeBearer,
       customDomainNeedsApproval: false,
     });
     const bPolicy = await t.query(api.dashboard.getAccountPolicy, {

@@ -419,8 +419,34 @@ http.route({
 // private-page bearer check via the standard read guard.
 // ---------------------------------------------------------------------------
 
+/**
+ * Audit #7 — shared-secret gate for the Worker-only `/internal/*` cold-source
+ * endpoints. They return the full route projection (incl. `artifactKey` +
+ * `accountId`) for ANY resolvable subdomain, including private/quarantined/
+ * tombstoned pages, so a public surface leaked the R2 location of sealed/CSAM
+ * material. When `SERVE_INTERNAL_SECRET` is configured (prod), require a matching
+ * `x-serve-secret` header — only the serve Worker (which sends it) may call
+ * these. Unset (local/dev, where the Worker also has no secret) → no gate, so an
+ * un-provisioned setup still works. Returns a 403 `Response` to short-circuit, or
+ * null to proceed.
+ */
+function serveSecretGate(request: Request): Response | null {
+  const expected = process.env.SERVE_INTERNAL_SECRET;
+  if (!expected) return null; // not provisioned → no gate (dev/test)
+  const got = request.headers.get("x-serve-secret");
+  if (got !== expected) {
+    return json(
+      { error: { code: "FORBIDDEN", message: "internal endpoint" } },
+      403,
+    );
+  }
+  return null;
+}
+
 /** GET /internal/resolve?host=&path= → the Worker route record (or null). */
 const resolveRouteHandler = httpAction(async (ctx, request) => {
+  const gate = serveSecretGate(request);
+  if (gate) return gate;
   const url = new URL(request.url);
   const route = await ctx.runQuery(api.serve.resolveRoute, {
     host: url.searchParams.get("host") ?? "",
@@ -437,6 +463,8 @@ const resolveRouteHandler = httpAction(async (ctx, request) => {
  * gets a uniform boolean and 401s a bad token.
  */
 const validateTokenHandler = httpAction(async (ctx, request) => {
+  const gate = serveSecretGate(request);
+  if (gate) return gate;
   const url = new URL(request.url);
   try {
     const result = await ctx.runQuery(api.serve.validateRouteToken, {

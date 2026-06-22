@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { isScope, type Scope } from "../shared/src/scopes.js";
 
@@ -114,8 +114,18 @@ export function hasScopes(
  * Mint a scoped token for an account. Returns the plaintext secret ONCE (the
  * caller must surface it to the user immediately) plus the new token id. Only
  * the hash is stored.
+ *
+ * SECURITY (audit #151/#152): this is an `internalMutation`, NOT a public one.
+ * It mints a fully-scoped bearer (incl. `pages:write` / `domains:bind`) for an
+ * arbitrary `accountId`, so exposing it as a public `mutation` was an account-
+ * takeover hole — any caller with the deployment URL could mint a token for any
+ * account. It is now reachable only server-side: from other Convex functions,
+ * from operators via `npx convex run tokens:issueToken` (admin context), and
+ * from tests via `internal.tokens.issueToken`. A session-gated, self-account-
+ * only public wrapper for the dashboard's "create token" flow lands with the
+ * dashboard trust-model work (#160); until then no public surface mints tokens.
  */
-export const issueToken = mutation({
+export const issueToken = internalMutation({
   args: {
     accountId: v.id("accounts"),
     scopes: v.array(v.string()),

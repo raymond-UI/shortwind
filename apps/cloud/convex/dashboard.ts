@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import { requireReadOperator } from "./lib/operator_auth.js";
+import { requireReadOperator, requireWriteOperator } from "./lib/operator_auth.js";
 import { authComponent } from "./auth.js";
 
 /**
@@ -362,7 +362,9 @@ export const setAccountPolicy = mutation({
   },
   returns: policyValidator,
   handler: async (ctx, args) => {
-    const auth = await requireReadOperator(ctx, args.bearer);
+    // Mutating verb: require pages:write on the bearer path (audit #152) — a
+    // read-scoped credential must not be able to flip customDomainNeedsApproval.
+    const auth = await requireWriteOperator(ctx, args.bearer);
 
     // Merge over the current effective policy so a partial toggle leaves the
     // other fields untouched.

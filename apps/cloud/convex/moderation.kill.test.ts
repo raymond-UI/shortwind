@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
-import { api } from "./_generated/api.js";
+import { api, internal } from "./_generated/api.js";
 import {
   __setKillEdgePort,
   __resetKillEdgePort,
@@ -63,7 +63,7 @@ async function seedAuth(t: ReturnType<typeof convexTest>): Promise<{
       updatedAt: now,
     });
   });
-  const issued = await t.mutation(api.tokens.issueToken, {
+  const issued = await t.mutation(internal.tokens.issueToken, {
     accountId: accountId as never,
     scopes: ["pages:read", "pages:write"],
   });

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
-import { api } from "./_generated/api.js";
+import { api, internal } from "./_generated/api.js";
 import type { Doc } from "./_generated/dataModel.js";
 import {
   __setCloudflareSaaSClient,
@@ -92,7 +92,7 @@ async function issueBearer(
   accountId: string,
   scopes: string[],
 ): Promise<string> {
-  const issued = await t.mutation(api.tokens.issueToken, {
+  const issued = await t.mutation(internal.tokens.issueToken, {
     accountId: accountId as never,
     scopes,
   });

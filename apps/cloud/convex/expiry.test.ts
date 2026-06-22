@@ -55,7 +55,7 @@ async function seedAuth(t: ReturnType<typeof convexTest>): Promise<{
       updatedAt: now,
     });
   });
-  const issued = await t.mutation(api.tokens.issueToken, {
+  const issued = await t.mutation(internal.tokens.issueToken, {
     accountId: accountId as never,
     scopes: ["pages:read", "pages:write"],
   });

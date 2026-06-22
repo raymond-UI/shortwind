@@ -29,4 +29,13 @@ export interface Env {
    * empty string keeps the worker closed-by-default (cold miss → 404, token → 401).
    */
   CONVEX_HTTP_URL: string;
+  /**
+   * Audit #7: shared secret the Worker presents (as `x-serve-secret`) on the
+   * cold-source `/internal/*` calls so those endpoints are NOT publicly callable
+   * (they return artifactKey/accountId incl. for private/quarantined pages). Set
+   * via `wrangler secret put SERVE_INTERNAL_SECRET` and the matching Convex env
+   * var. Optional: when empty the Worker sends no header and Convex (also unset)
+   * applies no gate — the un-provisioned/dev posture.
+   */
+  SERVE_INTERNAL_SECRET?: string;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
-import { api } from "./_generated/api.js";
+import { api, internal } from "./_generated/api.js";
 import { artifactBytes } from "./billing.js";
 
 /**
@@ -41,7 +41,7 @@ async function seedAccount(
   });
   // A read-scoped operator bearer through the REAL issueToken so the auth
   // guard's hash-lookup matches (getUsage is guarded by requireRead).
-  const issued = await t.mutation(api.tokens.issueToken, {
+  const issued = await t.mutation(internal.tokens.issueToken, {
     accountId: accountId as never,
     scopes: ["pages:read"],
   });

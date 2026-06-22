@@ -32,6 +32,18 @@ Set the Convex env vars in the dashboard: `BETTER_AUTH_SECRET`, `SITE_URL`,
 `R2_S3_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` (the publish action's
 R2 writer), and the known-CSAM hash-list / domain-reputation sources.
 
+**Security (audit #7) — `SERVE_INTERNAL_SECRET`:** generate a random secret and set
+it as a Convex env var AND as a Worker secret with the SAME value:
+```bash
+SECRET=$(openssl rand -hex 32)
+npx convex env set SERVE_INTERNAL_SECRET "$SECRET" --prod
+wrangler secret put SERVE_INTERNAL_SECRET   # paste the same value
+```
+This gates the Worker-only `/internal/resolve` + `/internal/validate-token`
+cold-source endpoints (which expose `artifactKey`/`accountId` for private/
+quarantined pages) so only the serve Worker — which presents the matching
+`x-serve-secret` header — can call them. Leave it unset only for local/dev.
+
 ## 3. Wire the live ports (the deploy-time seams every issue documented)
 These are injected at deploy; the offline build left them as closed-by-default no-ops:
 - **R2 writer** (`convex/pages.ts` `writeArtifactToR2`) → S3 client from `R2_*`.

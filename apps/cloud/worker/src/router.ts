@@ -290,12 +290,19 @@ function defaultDeps(env: Env): RouterDeps {
     };
   }
 
+  // Audit #7: present the shared secret on every cold-source call so Convex's
+  // `/internal/*` endpoints can reject anyone who is not this Worker.
+  const secret = env.SERVE_INTERNAL_SECRET;
+  const internalInit: RequestInit | undefined = secret
+    ? { headers: { "x-serve-secret": secret } }
+    : undefined;
+
   const coldRoute: ColdRouteSource = async (host, path) => {
     try {
       const url = `${base}/internal/resolve?host=${encodeURIComponent(
         host,
       )}&path=${encodeURIComponent(path)}`;
-      const res = await fetch(url);
+      const res = await fetch(url, internalInit);
       if (!res.ok) return null;
       const body = (await res.json()) as ResolvedRoute;
       return asCachedRoute(body);
@@ -310,7 +317,7 @@ function defaultDeps(env: Env): RouterDeps {
       const url = `${base}/internal/validate-token?bearer=${encodeURIComponent(
         token,
       )}&pageId=${encodeURIComponent(route.pageId)}`;
-      const res = await fetch(url);
+      const res = await fetch(url, internalInit);
       if (!res.ok) return false;
       const body = (await res.json()) as { ok?: unknown };
       return body.ok === true;

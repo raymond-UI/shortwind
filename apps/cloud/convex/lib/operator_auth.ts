@@ -3,7 +3,7 @@ import type { GenericCtx } from "@convex-dev/better-auth";
 import type { DataModel, Id } from "../_generated/dataModel.js";
 import type { QueryCtx } from "../_generated/server.js";
 import { authComponent } from "../auth.js";
-import { requireRead, AUTH_UNAUTHORIZED } from "./auth_guard.js";
+import { requireRead, requireWrite, AUTH_UNAUTHORIZED } from "./auth_guard.js";
 import type { AccountId, TokenId } from "../tokens.js";
 
 /**
@@ -83,5 +83,47 @@ export async function requireReadOperator(
     });
   }
 
+  return { accountId: account._id as Id<"accounts">, tokenId: null };
+}
+
+/**
+ * Like {@link requireReadOperator}, but the BEARER path requires `pages:write`
+ * (audit #151/#152). Used by the dashboard's one mutating verb
+ * (`setAccountPolicy`), which flips a privileged policy gate
+ * (`customDomainNeedsApproval`) — a READ-scoped credential must not be able to
+ * change it. The web-session path is unchanged (a logged-in operator acts as the
+ * human; finer staff/admin gating arrives with the dashboard trust model, #160).
+ *
+ * @throws ConvexError<{ code }> — UNAUTHORIZED (401) when no credential resolves,
+ *         FORBIDDEN (403) when a bearer lacks `pages:write`.
+ */
+export async function requireWriteOperator(
+  ctx: OperatorCtx,
+  bearer: string | undefined | null,
+): Promise<OperatorAuthContext> {
+  if (bearer && bearer.trim()) {
+    const auth = await requireWrite(ctx, bearer);
+    return { accountId: auth.accountId, tokenId: auth.tokenId };
+  }
+  // Session path identical to the read operator (the logged-in human).
+  const user = await authComponent.safeGetAuthUser(ctx);
+  if (!user) {
+    throw new ConvexError({
+      code: AUTH_UNAUTHORIZED,
+      reason: "missing_token",
+      message: "Not signed in",
+    });
+  }
+  const account = await ctx.db
+    .query("accounts")
+    .withIndex("by_authUserId", (q) => q.eq("authUserId", user._id as string))
+    .unique();
+  if (!account) {
+    throw new ConvexError({
+      code: AUTH_UNAUTHORIZED,
+      reason: "no_account",
+      message: "No account provisioned for this operator yet",
+    });
+  }
   return { accountId: account._id as Id<"accounts">, tokenId: null };
 }
