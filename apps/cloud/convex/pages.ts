@@ -572,13 +572,13 @@ async function putEdgeRoute(route: {
   version: number;
   artifactKey: string;
 }): Promise<void> {
-  // CLOUD-30: write the hostname+path → page-version route into the Worker KV
+  // CLOUD-30: write the hostname → page-version route into the Worker KV
   // namespace consumed by worker/src/kv.ts so the hot path resolves the artifact.
-  // Two route keys map to this page: the legacy path-based one
-  // (`route:{serveHost}/{slug}`) and the per-page subdomain one
-  // (`route:{subdomain}.{root}/`). The hot path lazily populates KV on a cold
-  // miss either way, so an eager put here is an optimization, not required —
-  // left as a documented placeholder (the read-through fallback resolves both).
+  // Serving is subdomain-only, so the one key that maps to this page is the
+  // per-page subdomain key (`route:{subdomain}.{root}/`). The hot path lazily
+  // populates KV on a cold miss, so an eager put here is an optimization, not
+  // required — left as a documented placeholder (the read-through fallback
+  // resolves the subdomain route).
   void route;
 }
 

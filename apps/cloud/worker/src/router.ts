@@ -84,6 +84,47 @@ export interface RouterDeps {
   coldCustomHostname?: ColdCustomHostnameSource;
 }
 
+/**
+ * The registrable apex pages are served under as subdomains. The router only
+ * ever sees `*.shortwind.dev` (the wildcard serve route); this is the apex it
+ * redirects reserved/system labels back to.
+ */
+const ROOT_DOMAIN = "shortwind.dev";
+
+/**
+ * Reserved/system subdomain labels under {@link ROOT_DOMAIN} that are NOT pages.
+ * Mirrors `shared/src/slug.ts` `RESERVED_SUBDOMAINS` (the worker can't import it —
+ * it types against @cloudflare/workers-types via ./env, which the shared package's
+ * tsconfig doesn't load). `c` is the RETIRED legacy serve host: its custom domain
+ * was removed but the wildcard still resolves it, so it must land somewhere sane
+ * (a 301 to the apex) instead of a bare 404. A genuine unknown PAGE label (a
+ * typo'd slug) is NOT in this set and still 404s.
+ */
+const RESERVED_LABELS: ReadonlySet<string> = new Set([
+  "c",
+  "www",
+  "api",
+  "app",
+  "dashboard",
+  "cloud",
+]);
+
+/**
+ * If `host` is a reserved/system or retired label under {@link ROOT_DOMAIN}
+ * (`c.shortwind.dev`, `www.shortwind.dev`, …), return a 301 to the apex. Returns
+ * `null` for any genuine page subdomain (which then resolves / 404s normally).
+ */
+function reservedHostRedirect(host: string): Response | null {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  const suffix = `.${ROOT_DOMAIN}`;
+  if (!h.endsWith(suffix)) return null;
+  const label = h.slice(0, -suffix.length);
+  // Exactly one label in front of the apex, and it is a reserved/system label.
+  if (label === "" || label.includes(".")) return null;
+  if (!RESERVED_LABELS.has(label)) return null;
+  return Response.redirect(`https://${ROOT_DOMAIN}`, 301);
+}
+
 /** Minimal text/html response with no body — used for refusals (4xx/410/451). */
 function refuse(status: number, message: string): Response {
   return new Response(message, {
@@ -114,6 +155,15 @@ export async function handleRequest(
   const url = new URL(request.url);
   const host = url.hostname;
   const path = url.pathname;
+
+  // 0. Reserved/retired host → 301 to the apex (BEFORE page resolution). The
+  //    retired legacy serve host `c.shortwind.dev` (custom domain removed, still
+  //    resolved by the wildcard) and other system labels (`www`, …) redirect to
+  //    https://shortwind.dev instead of returning a confusing 404. A genuine
+  //    unknown PAGE subdomain (a typo'd slug) is not reserved and falls through to
+  //    normal resolution → 404.
+  const redirect = reservedHostRedirect(host);
+  if (redirect !== null) return redirect;
 
   // 1. Resolve host/path → route. KV hot, Convex cold (injected). A KV hit does
   //    NOT call the cold source (asserted by tests + kv.ts contract).

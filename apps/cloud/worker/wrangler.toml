@@ -52,4 +52,4 @@ id = "7baeea10fb4041a095005bc4aaabb6cd"       # CLOUD-30b: live KV namespace (RO
 # private bearers at `${CONVEX_HTTP_URL}/internal/validate-token`. An empty value
 # keeps the worker closed-by-default (every cold miss → 404, every token → 401).
 [vars]
-CONVEX_HTTP_URL = "https://rare-toad-197.convex.site"  # CLOUD-30b: live Convex HTTP origin
+CONVEX_HTTP_URL = "https://prestigious-shrimp-154.convex.site"  # live Convex HTTP origin (PROD)

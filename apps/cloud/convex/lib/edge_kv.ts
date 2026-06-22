@@ -32,18 +32,6 @@ import { internal } from "../_generated/api.js";
 declare const process: { env: Record<string, string | undefined> };
 
 /**
- * The serve hostname the Worker runs under — the `url.hostname` the router sees,
- * which is the host half of the KV route key (worker/src/router.ts derives
- * `host = url.hostname`, `path = url.pathname`). The live serve Worker is
- * `shortwind-cloud-serve.mzed-studio.workers.dev`; an env override
- * (`SERVE_HOST`) lets a different deployment retarget without a code change. The
- * hardcoded fallback mirrors how `pageBaseUrl()` hardcodes the public origin.
- */
-export function serveHost(): string {
-  return process.env.SERVE_HOST ?? "shortwind-cloud-serve.mzed-studio.workers.dev";
-}
-
-/**
  * CLOUD-SUBDOMAIN: the apex domain pages are served under as per-page subdomains
  * (`https://<subdomain>.<rootDomain>`). MUST match the publish-side
  * `pageRootDomain()` (convex/pages.ts) so the eviction targets the SAME host the
@@ -57,23 +45,14 @@ export function rootDomain(): string {
 /**
  * The canonical KV key for a route. MUST match `worker/src/kv.ts`
  * `routeKey(host, path)`: host lowercased, path normalized to a leading slash,
- * prefixed `route:`. The serve Worker writes routes under
- * `route:{host}/{slug}` (path = `url.pathname` = `/<slug>`), so eviction targets
- * the same key.
+ * prefixed `route:`. Serving is SUBDOMAIN-ONLY, so the only key in play is the
+ * per-page subdomain key (`route:{subdomain}.{root}/`, path `/`); this helper is
+ * the shared derivation {@link routeKeyForSubdomain} builds on.
  */
 export function routeKey(host: string, path: string): string {
   const h = host.toLowerCase();
   const p = path.startsWith("/") ? path : `/${path}`;
   return `route:${h}${p}`;
-}
-
-/**
- * The route key for a page slug under the serve host. The serve path treats the
- * request path as the slug (`/hello` → slug `hello`), so the route key is
- * `route:{serveHost}/{slug}`.
- */
-export function routeKeyForSlug(slug: string, host: string = serveHost()): string {
-  return routeKey(host, `/${slug}`);
 }
 
 /**
@@ -139,34 +118,28 @@ export async function evictKvRouteByKey(key: string): Promise<boolean> {
 }
 
 /**
- * Evict the KV route for a page slug (the lifecycle/kill seam's one job). Derives
- * the route key from the serve host + slug and deletes it. Fail-safe — never
- * throws; logs on failure.
+ * CLOUD-SUBDOMAIN: evict the page's per-page subdomain KV route key
+ * (`route:{subdomain}.{root}/`) — the ONLY key a page is served under now that
+ * serving is subdomain-only (the legacy path-based key was retired). A killed/
+ * deleted/expired page must stop serving on its subdomain. Fail-safe — never
+ * throws (see {@link evictKvRouteByKey}).
+ *
+ * `slug` is retained in the signature for the lifecycle/kill call sites + audit
+ * symmetry, but only the `subdomain` drives an eviction (no subdomain on a legacy
+ * row ⇒ nothing to evict; it degrades to stale-until-TTL, the prior behavior).
  *
  * IMPORTANT: this does a `fetch`, so it can ONLY run inside a Convex ACTION (a
  * mutation/query forbids `fetch`). The lifecycle/kill paths are MUTATIONS, so
- * they do NOT call this directly — they SCHEDULE {@link evictRouteAction} via
- * `scheduleRouteEviction` (`ctx.scheduler.runAfter(0, ...)`), which runs this in
- * an action moments after the mutation commits. This module is also imported by
- * the offline unit tests, which call this directly inside `t.run` (no real
- * fetch creds ⇒ a no-op return) to exercise the route-key derivation.
- */
-export async function evictRouteForSlug(slug: string): Promise<void> {
-  await evictKvRouteByKey(routeKeyForSlug(slug));
-}
-
-/**
- * CLOUD-SUBDOMAIN: evict EVERY KV route key a page may be served under — the
- * legacy path-based key (`route:{serveHost}/{slug}`) AND, when the page has a
- * subdomain, the per-page subdomain key (`route:{subdomain}.{root}/`). A killed/
- * deleted/expired page must stop serving on BOTH the path host and its subdomain.
- * Fail-safe per key — never throws (see {@link evictKvRouteByKey}).
+ * they SCHEDULE {@link evictRouteAction} via `scheduleRouteEviction`
+ * (`ctx.scheduler.runAfter(0, ...)`), which runs this in an action moments after
+ * the mutation commits. The offline unit tests call this directly inside `t.run`
+ * (no real fetch creds ⇒ a no-op return) to exercise the route-key derivation.
  */
 export async function evictRouteForPage(
   slug: string,
   subdomain?: string | null,
 ): Promise<void> {
-  await evictKvRouteByKey(routeKeyForSlug(slug));
+  void slug;
   if (subdomain) {
     await evictKvRouteByKey(routeKeyForSubdomain(subdomain));
   }
@@ -175,7 +148,7 @@ export async function evictRouteForPage(
 /**
  * The internalAction that actually performs the KV REST eviction. Scheduled (not
  * called inline) by the kill/delete/expiry mutations so the `fetch` runs in an
- * action context. Fail-safe: `evictRouteForSlug` swallows + logs any error, so a
+ * action context. Fail-safe: `evictRouteForPage` swallows + logs any error, so a
  * Cloudflare failure never surfaces as a failed scheduled job that retries
  * forever — the DB tombstone/quarantine is already the source of truth.
  */
@@ -209,7 +182,7 @@ export interface SchedulerCtx {
 /**
  * Schedule the KV route eviction to run in an action right after the current
  * mutation commits. The kill/delete/expiry mutations call THIS (not
- * `evictRouteForSlug`) because a mutation cannot `fetch`. Fail-safe: scheduling
+ * `evictRouteForPage`) because a mutation cannot `fetch`. Fail-safe: scheduling
  * is a DB-transaction op (no network), so it cannot fail on the Cloudflare side;
  * if the deployment lacks the scheduler (offline tests pass a bare port) the
  * caller simply doesn't reach here.

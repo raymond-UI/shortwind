@@ -245,6 +245,34 @@ describe("CLOUD-SUBDOMAIN router: per-page subdomain serving", () => {
   });
 });
 
+describe("router: reserved/retired host redirect", () => {
+  it("c.shortwind.dev (retired legacy serve host) → 301 to the apex", async () => {
+    const cold = vi.fn<ColdRouteSource>(async () => null);
+    const res = await run(req("c.shortwind.dev", "/"), deps({ coldRoute: cold }));
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://shortwind.dev/");
+    // Reserved hosts redirect BEFORE resolution — no cold-source call.
+    expect(cold).not.toHaveBeenCalled();
+  });
+
+  it("www.shortwind.dev (system label) → 301 to the apex", async () => {
+    const res = await run(req("www.shortwind.dev", "/anything"), deps());
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://shortwind.dev/");
+  });
+
+  it("an unknown PAGE subdomain (typo'd slug) still 404s — NOT a redirect", async () => {
+    const cold = vi.fn<ColdRouteSource>(async () => null);
+    const res = await run(
+      req("totally-unknown-slug.shortwind.dev", "/"),
+      deps({ coldRoute: cold }),
+    );
+    expect(res.status).toBe(404);
+    // A real page label is resolved against the cold source (which returns null).
+    expect(cold).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("CLOUD-22 kv: deleteRoute", () => {
   it("evicts a route from KV (idempotent)", async () => {
     const r = route({ pageId: "page_del" });

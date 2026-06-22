@@ -11,7 +11,7 @@
   "vars": {
     // Client + SSR read these via import.meta.env / process.env. The Convex
     // deployment + its Better Auth (convex.site) origin.
-    "VITE_CONVEX_URL": "https://rare-toad-197.convex.cloud",
-    "VITE_CONVEX_SITE_URL": "https://rare-toad-197.convex.site"
+    "VITE_CONVEX_URL": "https://prestigious-shrimp-154.convex.cloud",
+    "VITE_CONVEX_SITE_URL": "https://prestigious-shrimp-154.convex.site"
   }
 }

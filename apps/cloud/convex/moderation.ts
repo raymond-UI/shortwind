@@ -541,7 +541,7 @@ export interface KillEdgePort {
  * entry the page serves under, via the Cloudflare KV REST API, so a killed page
  * stops resolving on the hot path "in seconds" (PRD §8.2) rather than after the
  * 1h route TTL. Fail-safe: a KV error is logged + swallowed inside
- * `evictRouteForSlug`, so a Cloudflare failure never breaks the DB-level kill
+ * `evictRouteForPage`, so a Cloudflare failure never breaks the DB-level kill
  * (the quarantine + find-exclusion remain the source of truth). `invalidate`
  * (edge-cache purge) is left a no-op for now — the KV eviction is the critical
  * path since serve resolves via KV → cold source, and a cold re-resolve already
@@ -554,8 +554,8 @@ const defaultKillEdgePort: KillEdgePort = {
     // A mutation cannot `fetch`; schedule the KV REST delete to run in an action
     // the instant `killPage` commits. No scheduler (shouldn't happen in prod) →
     // skip. Fail-safe: the scheduled action swallows + logs any Cloudflare error.
-    // CLOUD-SUBDOMAIN: thread the subdomain so the per-page subdomain KV key is
-    // evicted alongside the legacy path-based one.
+    // CLOUD-SUBDOMAIN: thread the subdomain so the per-page subdomain KV key —
+    // the only key serving is keyed on now — is evicted.
     if (ctx === undefined) return;
     await scheduleRouteEviction(ctx, slug, subdomain ?? null);
   },
