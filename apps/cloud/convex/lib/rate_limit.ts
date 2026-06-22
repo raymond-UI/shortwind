@@ -34,6 +34,18 @@ import { components } from "../_generated/api.js";
 /** The named publish limit key in the component config. */
 export const PUBLISH_LIMIT_NAME = "publish" as const;
 
+/** The named public abuse-report intake limit key (audit #158). */
+export const ABUSE_LIMIT_NAME = "abuseReport" as const;
+
+/**
+ * Per-client (IP) abuse-report limit: the public `/v1/abuse` intake is an
+ * unauthenticated write surface, so an unbounded caller could flood the audit log
+ * + moderation table. A token bucket of 20/min sustained with a burst of 10 lets a
+ * genuine reporter file several reports while capping a flooder.
+ */
+export const ABUSE_RATE = 20;
+export const ABUSE_BURST = 10;
+
 /**
  * Per-account publish limit: a token bucket of 10/min sustained with a burst of
  * 5. A burst lets an agent ship a small batch of pages quickly; the sustained
@@ -54,6 +66,12 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     rate: PUBLISH_RATE,
     period: MINUTE,
     capacity: PUBLISH_BURST,
+  },
+  [ABUSE_LIMIT_NAME]: {
+    kind: "token bucket",
+    rate: ABUSE_RATE,
+    period: MINUTE,
+    capacity: ABUSE_BURST,
   },
 });
 
@@ -105,23 +123,29 @@ export const componentPublishLimiter: PublishLimiter = {
       return { ok: res.ok, retryAfter: res.retryAfter };
     } catch (err) {
       // The component runs a child-component mutation, which the OFFLINE
-      // `convex-test` runtime cannot execute (it throws "Component
-      // \"rateLimiter\" is not registered"). Fail OPEN offline so the publish
-      // path stays exercisable end-to-end without the component; the limit tests
-      // inject the in-memory limiter to assert the real trip behavior. At deploy
-      // the component is registered and this branch is never hit.
-      if (isComponentUnavailable(err)) return { ok: true };
-      throw err;
+      // `convex-test` runtime cannot execute (it throws the SPECIFIC "component
+      // is not registered" error). ONLY that exact offline condition fails OPEN
+      // so the publish path stays exercisable without the component. At deploy
+      // the component IS registered, so that error never occurs.
+      //
+      // SECURITY (audit #158): any OTHER limiter error (transient/network/component
+      // fault in prod) must FAIL CLOSED — a rate limiter that fails open lets an
+      // abuser bypass the publish cap. A short retryAfter lets legit clients retry.
+      if (isOfflineComponentMissing(err)) return { ok: true };
+      return { ok: false, retryAfter: 1000 };
     }
   },
 };
 
-/** True when the error is the offline "component not registered" failure. */
-function isComponentUnavailable(err: unknown): boolean {
+/**
+ * True ONLY for the exact offline `convex-test` "component not registered"
+ * failure. Kept narrow (audit #158) so a prod/transient error can never be
+ * mistaken for it and fail open — the prior broad `component .* is not` pattern
+ * could have matched unrelated prod errors.
+ */
+function isOfflineComponentMissing(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /is not registered|not registered as a component|component .* is not/i.test(
-    msg,
-  );
+  return /is not registered|not registered as a component/i.test(msg);
 }
 
 /**
@@ -195,4 +219,27 @@ export function checkPublishLimit(
   accountId: string,
 ): Promise<PublishLimitResult> {
   return publishLimiter.check(ctx, accountId);
+}
+
+/**
+ * Per-client (IP) throttle for the public abuse-report intake (audit #158).
+ * Called from the `/v1/abuse` httpAction (an action — runMutation-capable). Same
+ * fail posture as the publish limiter: the OFFLINE component-missing error fails
+ * OPEN (so a future offline test of the intake stays exercisable), any other
+ * error FAILS CLOSED. `key` is the client IP (or "unknown" when absent).
+ */
+export async function checkAbuseLimit(
+  ctx: RateLimitRunCtx,
+  key: string,
+): Promise<PublishLimitResult> {
+  try {
+    const res = await rateLimiter.limit(ctx as never, ABUSE_LIMIT_NAME, {
+      key,
+      throws: false,
+    });
+    return { ok: res.ok, retryAfter: res.retryAfter };
+  } catch (err) {
+    if (isOfflineComponentMissing(err)) return { ok: true };
+    return { ok: false, retryAfter: 1000 };
+  }
 }

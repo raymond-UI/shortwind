@@ -138,6 +138,11 @@ export async function deriveSubdomain(
  * `{ ok: false }` when nothing slug-able remains.
  */
 export function deriveSlug(input: string): SlugResult {
+  // Audit #158: a non-string input (undefined/number/…) must yield `{ok:false}`,
+  // not a thrown TypeError from `.toLowerCase()`.
+  if (typeof input !== "string") {
+    return { ok: false, error: "slug input must be a string" };
+  }
   const normalized = input
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -153,6 +158,13 @@ export function deriveSlug(input: string): SlugResult {
     return { ok: false, error: "slug is empty after truncation" };
   }
 
+  // Audit #158: a derived slug that lands on a reserved word (e.g. a title of
+  // "API") must NOT silently become a live reserved slug — reject so the caller
+  // supplies an explicit handle (mirrors validateSlug).
+  if (RESERVED.has(truncated)) {
+    return { ok: false, error: `"${truncated}" is a reserved slug` };
+  }
+
   return { ok: true, value: truncated };
 }
 
@@ -162,6 +174,10 @@ export function deriveSlug(input: string): SlugResult {
  * rather than silently rewriting it via `deriveSlug`.
  */
 export function validateSlug(slug: string): SlugResult {
+  // Audit #158: guard non-string input before touching `.length`/`.test`.
+  if (typeof slug !== "string") {
+    return { ok: false, error: "slug must be a string" };
+  }
   if (slug.length === 0) {
     return { ok: false, error: "slug is empty" };
   }

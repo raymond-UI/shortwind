@@ -47,6 +47,19 @@ describe("deriveSlug (CLOUD-03)", () => {
   it("preserves digits and existing valid slugs unchanged", () => {
     expect(deriveSlug("already-valid-123")).toEqual({ ok: true, value: "already-valid-123" });
   });
+
+  it("rejects input that derives to a reserved word (audit #158)", () => {
+    const r = deriveSlug("API");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/reserved/i);
+  });
+
+  it("returns {ok:false} (not a throw) for non-string input (audit #158)", () => {
+    // @ts-expect-error — exercising the runtime guard against bad callers.
+    expect(deriveSlug(undefined).ok).toBe(false);
+    // @ts-expect-error
+    expect(deriveSlug(42).ok).toBe(false);
+  });
 });
 
 describe("validateSlug (CLOUD-03)", () => {

@@ -1,5 +1,5 @@
 import { v, ConvexError } from "convex/values";
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireWrite } from "./lib/auth_guard.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
@@ -621,8 +621,11 @@ export const reportAbuse = mutation({
   handler: async (ctx, args) => {
     const page = await ctx.db.get(args.pageId);
     if (!page) {
-      // No existence leak beyond "not found" (intake is public).
-      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+      // SECURITY (audit #158): do NOT leak page existence. A public intake that
+      // 404s on an unknown page is an enumeration oracle (probe which page ids
+      // exist). Instead, accept the report uniformly and no-op — the caller can't
+      // distinguish "reported a real page" from "reported a non-existent one".
+      return { state: "reported" as const };
     }
     const now = Date.now();
     await upsertModeration(ctx, {
@@ -682,6 +685,16 @@ export const killPage = mutation({
     }
 
     const isCsam = args.category === "csam";
+    // SECURITY/LEGAL (audit #158): a CSAM kill must carry its NCMEC CyberTipline
+    // report id so the preserved evidence is tied to a filed report (18 U.S.C.
+    // §2258A). Require it rather than recording a dangling preservation clock with
+    // no report reference.
+    if (isCsam && !args.ncmecReportId) {
+      throw new ConvexError({
+        code: "INVALID_ARGUMENT",
+        message: "ncmecReportId is required for a CSAM kill",
+      });
+    }
     const now = Date.now();
 
     // active → quarantined: seal the object + open/advance the case + persist the
@@ -711,5 +724,61 @@ export const killPage = mutation({
       lifecycle: outcome.lifecycle,
       preservedR2Key: outcome.sealedKey,
     };
+  },
+});
+
+// ===========================================================================
+// CLOUD-33 — preservation-window sweep (audit #158, PRD §8.2 / 18 U.S.C. §2258A).
+//
+// A CSAM kill stamps `preservationExpiresAt = now + 60d` on the case, but nothing
+// read that clock — the legal hold was inert. `sweepPreservation` (ticked hourly
+// by crons.ts) ranges cases whose window has ELAPSED and records a
+// `moderation.preservation.window_elapsed` audit event so an operator can action
+// the now-permitted cleanup of the sealed object.
+//
+// DELIBERATELY conservative: it NEVER auto-deletes the sealed evidence (purging
+// reported CSAM via an unattended cron is legally hazardous). It clears the case's
+// `preservationExpiresAt` so the same case isn't re-audited each hour; the audit
+// log retains the full history (pageId, ncmecReportId, sealed key, when it
+// elapsed). Actual sealed-object purge stays an explicit, operator-confirmed step.
+// ===========================================================================
+
+/** Audit + clear cases whose legal preservation window has elapsed. Returns count. */
+export const sweepPreservation = internalMutation({
+  args: { now: v.optional(v.number()) },
+  returns: v.object({ elapsed: v.number() }),
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    // Range cases with a due preservation clock (gt(null) excludes the unset/null
+    // rows that sort before all numbers; lte(now) bounds to elapsed windows).
+    const due = await ctx.db
+      .query("moderation")
+      .withIndex("by_preservation", (q) =>
+        q.gt("preservationExpiresAt", null).lte("preservationExpiresAt", now),
+      )
+      .collect();
+
+    let elapsed = 0;
+    for (const c of due) {
+      await ctx.db.insert("auditLog", {
+        accountId: c.accountId,
+        action: "moderation.preservation.window_elapsed",
+        targetId: c.pageId,
+        actorTokenId: null,
+        metadata: {
+          moderationId: c._id,
+          ncmecReportId: c.ncmecReportId,
+          preservedR2Key: c.preservedR2Key,
+          preservationExpiredAt: c.preservationExpiresAt,
+        },
+        createdAt: now,
+      });
+      // Clear the clock so the elapsed case isn't picked up again next sweep. The
+      // sealed object + case are RETAINED (preserve-not-delete); only the mandatory
+      // hold marker is satisfied. Operator-driven purge is a separate step.
+      await ctx.db.patch(c._id, { preservationExpiresAt: null, updatedAt: now });
+      elapsed += 1;
+    }
+    return { elapsed };
   },
 });

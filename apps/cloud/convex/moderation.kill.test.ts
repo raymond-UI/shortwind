@@ -163,6 +163,33 @@ describe("reportAbuse — reachable intake (PRD §8.2)", () => {
     });
     expect(res.state).toBe("reported");
   });
+
+  it("does NOT leak page existence — a report on an unknown page returns the same `reported` (audit #158)", async () => {
+    const t = convexTest(schema, modules);
+    const { bearer } = await seedAuth(t);
+    const pageId = await publishPage(t, bearer, "gone-page");
+    // Make the id dangling (non-existent) so the intake hits the unknown-page path.
+    await t.run(async (ctx) => {
+      await ctx.db.delete(pageId as never);
+    });
+
+    const res = await t.mutation(api.moderation.reportAbuse, {
+      pageId: pageId as never,
+      reporterContact: null,
+      reason: "looks bad",
+      category: "other",
+    });
+    // Uniform response — no 404/throw that would reveal the id doesn't exist.
+    expect(res.state).toBe("reported");
+    // And no case/audit row was created for the non-existent page.
+    await t.run(async (ctx) => {
+      const cases = await ctx.db
+        .query("moderation")
+        .withIndex("by_page", (q) => q.eq("pageId", pageId as never))
+        .collect();
+      expect(cases).toHaveLength(0);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -353,5 +380,80 @@ describe("killPage — fast global kill (PRD §8.2/§8.4)", () => {
         .collect();
       expect(cases[0]!.preservedR2Key).not.toBeNull();
     });
+  });
+
+  it("rejects a CSAM kill that omits ncmecReportId (audit #158)", async () => {
+    const t = convexTest(schema, modules);
+    const { bearer } = await seedAuth(t);
+    const pageId = await publishPage(t, bearer, "csam-no-report");
+    await expect(
+      t.mutation(api.moderation.killPage, {
+        bearer,
+        pageId: pageId as never,
+        reason: "csam",
+        category: "csam",
+        // no ncmecReportId
+      }),
+    ).rejects.toThrow();
+    // The page is NOT pulled when the kill is rejected for the missing report.
+    await t.run(async (ctx) => {
+      const page = await ctx.db.get(pageId as never);
+      expect((page as { lifecycle: string }).lifecycle).toBe("active");
+    });
+  });
+});
+
+describe("sweepPreservation — honors the legal hold window (audit #158)", () => {
+  it("audits + clears cases whose preservation window has elapsed", async () => {
+    const t = convexTest(schema, modules);
+    const { bearer } = await seedAuth(t);
+    const pageId = await publishPage(t, bearer, "preserve-sweep");
+
+    await t.mutation(api.moderation.killPage, {
+      bearer,
+      pageId: pageId as never,
+      reason: "csam",
+      category: "csam",
+      ncmecReportId: "NCMEC-SWEEP",
+    });
+
+    // Before the window elapses, the sweep finds nothing.
+    const early = await t.mutation(internal.moderation.sweepPreservation, {
+      now: Date.now(),
+    });
+    expect(early.elapsed).toBe(0);
+
+    // Far past the 60-day window: the case is swept.
+    const farFuture = Date.now() + 61 * 24 * 60 * 60 * 1000;
+    const swept = await t.mutation(internal.moderation.sweepPreservation, {
+      now: farFuture,
+    });
+    expect(swept.elapsed).toBe(1);
+
+    await t.run(async (ctx) => {
+      const cases = await ctx.db
+        .query("moderation")
+        .withIndex("by_page", (q) => q.eq("pageId", pageId as never))
+        .collect();
+      // Hold marker cleared; evidence (sealed key) retained (preserve-not-delete).
+      expect(cases[0]!.preservationExpiresAt).toBeNull();
+      expect(cases[0]!.preservedR2Key).not.toBeNull();
+      // The elapsed window is recorded in the audit log.
+      const audits = await ctx.db
+        .query("auditLog")
+        .withIndex("by_account", (q) => q.eq("accountId", cases[0]!.accountId))
+        .collect();
+      expect(
+        audits.some(
+          (a) => a.action === "moderation.preservation.window_elapsed",
+        ),
+      ).toBe(true);
+    });
+
+    // Idempotent: a second sweep finds nothing (the clock was cleared).
+    const again = await t.mutation(internal.moderation.sweepPreservation, {
+      now: farFuture + 1000,
+    });
+    expect(again.elapsed).toBe(0);
   });
 });

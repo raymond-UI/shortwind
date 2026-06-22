@@ -274,7 +274,10 @@ export default defineSchema({
     .index("by_state", ["state"])
     // Perf (audit #157): the oversight queue (dashboard.listModeration) ranges an
     // account's cases instead of full-table scanning + JS-filtering by account.
-    .index("by_account", ["accountId"]),
+    .index("by_account", ["accountId"])
+    // Audit #158: the preservation sweep ranges cases whose legal-hold window
+    // (`preservationExpiresAt`) has elapsed, instead of scanning the whole table.
+    .index("by_preservation", ["preservationExpiresAt"]),
 
   // Mirrors shared `IdempotencyKey`. A retried publish with the same key returns
   // the same result instead of duplicating (PRD 6.2).

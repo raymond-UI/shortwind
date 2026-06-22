@@ -27,4 +27,15 @@ crons.interval(
   {},
 );
 
+// Audit #158: honor the CSAM/abuse legal preservation window. Cases whose
+// `preservationExpiresAt` has elapsed are audited (so an operator can action the
+// now-permitted cleanup) and their hold marker cleared. Never auto-deletes the
+// sealed evidence — see moderation.sweepPreservation.
+crons.interval(
+  "sweep elapsed preservation windows",
+  { hours: 1 },
+  internal.moderation.sweepPreservation,
+  {},
+);
+
 export default crons;

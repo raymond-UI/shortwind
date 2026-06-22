@@ -65,6 +65,13 @@ function toHex(buffer: ArrayBuffer): string {
  * core width. Mirrors the CLI's `computeBodySha`; the only difference is the
  * async Web Crypto digest. Pass a full sealed file: the header line is stripped
  * before hashing, exactly like the CLI.
+ *
+ * SECURITY NOTE (audit #158): `RECIPE_SHA_HEX_LENGTH` truncates the digest (to
+ * ~64 bits at 16 hex chars). This is fine for its purpose — a CHANGE HINT that
+ * decides whether a recipe body was edited (collisions are astronomically
+ * unlikely for honest input). It is NOT a tamper-evidence / security boundary; do
+ * not rely on it to detect adversarial collisions. Use the full digest if this
+ * value ever becomes a trust boundary.
  */
 export async function computeBodySha(source: string): Promise<string> {
   const normalized = normalizeRecipeBody(bodyAfterHeader(source));

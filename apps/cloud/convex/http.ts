@@ -4,6 +4,7 @@ import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { authComponent, createAuth } from "./auth";
+import { checkAbuseLimit } from "./lib/rate_limit.js";
 import {
   API_CATALOG_PATH,
   OAUTH_AS_METADATA_PATH,
@@ -135,6 +136,41 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 }
 
 /**
+ * Validate the shared publish/update body shape BEFORE handing it to the Convex
+ * action (audit #158). The handlers previously cast untrusted fields with
+ * `as string`/`as never`, so a missing/mistyped field surfaced as a 500 (or a
+ * confusing Convex validator throw) instead of a clean 400. Returns an error
+ * message string when invalid, or null when the required fields are well-formed.
+ */
+function validatePageWriteBody(body: Record<string, unknown>): string | null {
+  if (typeof body["html"] !== "string" || body["html"] === "") {
+    return "`html` is required and must be a non-empty string";
+  }
+  const lockfile = body["lockfile"];
+  if (typeof lockfile !== "object" || lockfile === null) {
+    return "`lockfile` is required and must be an object";
+  }
+  const visibility = body["visibility"];
+  if (
+    visibility !== undefined &&
+    visibility !== "public" &&
+    visibility !== "unlisted" &&
+    visibility !== "private"
+  ) {
+    return "`visibility` must be one of public | unlisted | private";
+  }
+  const recipes = body["recipes"];
+  if (recipes !== undefined && !Array.isArray(recipes)) {
+    return "`recipes` must be an array";
+  }
+  const tags = body["tags"];
+  if (tags !== undefined && !Array.isArray(tags)) {
+    return "`tags` must be an array";
+  }
+  return null;
+}
+
+/**
  * POST /v1/pages → create a page (publish). The body is the api-client's
  * `PublishPayload` (html / lockfile / recipes / slug / tags / visibility /
  * idempotencyKey / css); the bearer rides in the Authorization header. The
@@ -145,6 +181,10 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 const publishHandler = httpAction(async (ctx, request) => {
   const bearer = bearerFromRequest(request);
   const body = await readJsonBody(request);
+  const invalid = validatePageWriteBody(body);
+  if (invalid) {
+    return json({ error: { code: "BAD_REQUEST", message: invalid } }, 400);
+  }
   try {
     const outcome = await ctx.runAction(api.pages.publish, {
       bearer,
@@ -197,6 +237,10 @@ const updateHandler = httpAction(async (ctx, request) => {
   const id = url.pathname.split("/").filter(Boolean).pop() ?? "";
   const bearer = bearerFromRequest(request);
   const body = await readJsonBody(request);
+  const invalid = validatePageWriteBody(body);
+  if (invalid) {
+    return json({ error: { code: "BAD_REQUEST", message: invalid } }, 400);
+  }
   try {
     const outcome = await ctx.runAction(api.pages.update, {
       bearer,
@@ -292,6 +336,29 @@ function asAbuseCategory(
  * reason) → 400; an unknown page → 404.
  */
 const abuseHandler = httpAction(async (ctx, request) => {
+  // Audit #158: throttle the public unauthenticated intake per client IP to cap
+  // audit-log / moderation-table flooding. Trip → 429 with Retry-After.
+  const ip =
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-forwarded-for") ??
+    "unknown";
+  const limit = await checkAbuseLimit(ctx, ip);
+  if (!limit.ok) {
+    const retrySec = Math.ceil((limit.retryAfter ?? 1000) / 1000);
+    return new Response(
+      JSON.stringify({
+        error: { code: "RATE_LIMITED", message: "Too many reports" },
+      }),
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": String(retrySec),
+        },
+      },
+    );
+  }
+
   const body = await readJsonBody(request);
   const pageId = body["pageId"];
   const reason = body["reason"];
@@ -308,6 +375,8 @@ const abuseHandler = httpAction(async (ctx, request) => {
   }
   const reporterContact = body["reporterContact"];
   try {
+    // reportAbuse returns a UNIFORM `{ state: "reported" }` even for an unknown
+    // page (audit #158 — no existence-leak 404). Always 202.
     const result = await ctx.runMutation(api.moderation.reportAbuse, {
       pageId: pageId as Id<"pages">,
       reason,
@@ -317,10 +386,6 @@ const abuseHandler = httpAction(async (ctx, request) => {
     });
     return json(result, 202);
   } catch (err) {
-    if (err instanceof ConvexError) {
-      const data = err.data as { code?: string } | undefined;
-      if (data?.code === "NOT_FOUND") return json({ error: data }, 404);
-    }
     return errorResponse(err);
   }
 });
