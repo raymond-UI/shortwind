@@ -10,9 +10,8 @@ name: Cloud — Production (deploy on main)
 #   CONVEX_DEPLOY_KEY       Convex prod deploy key (Convex dashboard → Deploy Keys)
 #   CLOUDFLARE_API_TOKEN    Workers Scripts + R2 + KV edit
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account id (no longer committed, audit #159)
-# Required repo VARIABLES (public prod Convex origins, used by the dashboard build):
-#   VITE_CONVEX_URL         https://<prod>.convex.cloud
-#   VITE_CONVEX_SITE_URL    https://<prod>.convex.site
+#   VITE_CONVEX_URL         https://<prod>.convex.cloud  (dashboard SSR build)
+#   VITE_CONVEX_SITE_URL    https://<prod>.convex.site   (dashboard SSR build)
 on:
   push:
     branches: [main]
@@ -80,8 +79,8 @@ jobs:
         working-directory: apps/cloud/dashboard
         run: pnpm run build
         env:
-          VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
-          VITE_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL }}
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          VITE_CONVEX_SITE_URL: ${{ secrets.VITE_CONVEX_SITE_URL }}
       - name: Deploy dashboard
         uses: cloudflare/wrangler-action@v3
         with:
