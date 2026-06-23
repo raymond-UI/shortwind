@@ -1,8 +1,9 @@
 import { ConvexError } from "convex/values";
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { formatUserCode } from "./lib/device_grant.js";
 import { authComponent, createAuth } from "./auth";
 import { checkAbuseLimit } from "./lib/rate_limit.js";
 import {
@@ -553,6 +554,79 @@ const resolveCustomDomainHandler = httpAction(async (ctx, request) => {
   });
   return json(route, 200);
 });
+
+// --- RFC 8628 device-authorization grant (CLI `login`) -----------------------
+// Served natively (the default better-auth component can't persist device codes;
+// see convex/device.ts). The paths + form-encoded wire format match exactly what
+// the CLI POSTs (cli/src/commands/login.ts) and what the discovery metadata
+// advertises (convex/wellknown.ts), so no client change is needed.
+
+/** Dashboard origin where the human approves a device code. */
+function dashboardBaseUrl(): string {
+  return (process.env.DASHBOARD_URL ?? "http://localhost:3000").replace(
+    /\/+$/,
+    "",
+  );
+}
+
+/** POST /oauth/device/code → device + user code (RFC 8628 §3.2). Form-encoded. */
+const deviceCodeHandler = httpAction(async (ctx, request) => {
+  const form = new URLSearchParams(await request.text());
+  const clientId = form.get("client_id")?.trim() || "shortwind-cli";
+  const scope = form.get("scope")?.trim() ?? "";
+  const res = await ctx.runMutation(internal.device.requestDeviceCode, {
+    clientId,
+    scope,
+  });
+  const base = dashboardBaseUrl();
+  return json(
+    {
+      device_code: res.deviceCode,
+      user_code: formatUserCode(res.userCode),
+      verification_uri: `${base}/device`,
+      verification_uri_complete: `${base}/device?code=${encodeURIComponent(
+        res.userCode,
+      )}`,
+      expires_in: res.expiresInSeconds,
+      interval: res.intervalSeconds,
+    },
+    200,
+  );
+});
+
+/** POST /oauth/token → poll for the token (RFC 8628 §3.4/§3.5). Form-encoded. */
+const oauthTokenHandler = httpAction(async (ctx, request) => {
+  const form = new URLSearchParams(await request.text());
+  if (
+    form.get("grant_type") !== "urn:ietf:params:oauth:grant-type:device_code"
+  ) {
+    return json({ error: "unsupported_grant_type" }, 400);
+  }
+  const deviceCode = form.get("device_code")?.trim() ?? "";
+  if (!deviceCode) return json({ error: "invalid_request" }, 400);
+  const result = await ctx.runMutation(internal.device.pollDeviceToken, {
+    deviceCode,
+  });
+  if (result.ok) {
+    return json(
+      {
+        access_token: result.accessToken,
+        token_type: "bearer",
+        scope: result.scope,
+      },
+      200,
+    );
+  }
+  // RFC 8628 §3.5: pending/slow_down/denied/expired all ride a 400 + error code.
+  return json({ error: result.error }, 400);
+});
+
+http.route({
+  path: "/oauth/device/code",
+  method: "POST",
+  handler: deviceCodeHandler,
+});
+http.route({ path: "/oauth/token", method: "POST", handler: oauthTokenHandler });
 
 http.route({
   path: "/internal/resolve",

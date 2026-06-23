@@ -38,4 +38,14 @@ crons.interval(
   {},
 );
 
+// Sweep elapsed device-authorization codes (the CLI `login` grant). A device
+// code is a transient auth artifact, so this hard-deletes (no tombstone), unlike
+// the page/preservation sweeps above. See device.sweepExpiredDeviceCodes.
+crons.interval(
+  "sweep expired device codes",
+  { hours: 1 },
+  internal.device.sweepExpiredDeviceCodes,
+  {},
+);
+
 export default crons;

@@ -1,7 +1,6 @@
 import { betterAuth } from "better-auth";
 import type { BetterAuthOptions } from "better-auth";
 import { bearer } from "better-auth/plugins";
-import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { getAuthConfigProvider } from "@convex-dev/better-auth/auth-config";
 import {
@@ -60,16 +59,6 @@ const authConfig: AuthConfig = {
 };
 
 /**
- * The device-authorization grant lifetimes. RFC 8628 §3.2: `expiresIn` bounds
- * how long a user code is valid; `interval` is the minimum client poll cadence
- * (the CLI honors `slow_down` on top of it). `userCodeLength` keeps the human
- * code short and typeable.
- */
-const DEVICE_CODE_EXPIRES_IN = "30m";
-const DEVICE_CODE_POLL_INTERVAL = "5s";
-const USER_CODE_LENGTH = 8;
-
-/**
  * Build the Better Auth options for a given Convex ctx. Reads `process.env`
  * directly (not a config helper): `createApi` invokes this at module top-level
  * during Convex's analyze pass, where lazy env getters would throw.
@@ -108,22 +97,14 @@ export const createAuthOptions = (
     emailAndPassword: { enabled: true, requireEmailVerification: false },
     plugins: [
       convex({ authConfig }),
-      // RFC 8628 device authorization grant. The CLI is a public client (no
-      // secret): every client_id is accepted here; the human's approval at the
-      // verification URI is the gate. CLOUD-12's auth guard + tokens.ts scoping
-      // enforce what an approved token may actually do.
-      deviceAuthorization({
-        expiresIn: DEVICE_CODE_EXPIRES_IN,
-        interval: DEVICE_CODE_POLL_INTERVAL,
-        userCodeLength: USER_CODE_LENGTH,
-        validateClient: () => true,
-        // better-auth@1.5.3 declares `schema` as a non-optional field in the
-        // plugin's Zod options validator (device-authorization/index.mjs:29 has
-        // no `.optional()`), so omitting it throws a ZodError during Convex's
-        // module analysis. `mergeSchema(schema, {})` is a no-op, so passing an
-        // empty object satisfies the validator without altering the schema.
-        schema: {},
-      }),
+      // NOTE: the RFC 8628 device-authorization grant is NOT a better-auth plugin
+      // here. The default @convex-dev/better-auth component ships a FIXED adapter
+      // schema with no `deviceCode` model, so `deviceAuthorization()` 500s on
+      // every request (ArgumentValidationError: model "deviceCode" not in the
+      // adapter union). The grant is implemented NATIVELY instead — see
+      // convex/device.ts (table IO), convex/lib/device_grant.ts (pure logic), and
+      // the /oauth/device/code + /oauth/token routes in convex/http.ts. Better
+      // Auth here owns only the human/dashboard email+password session below.
       // Lets a minted bearer token authenticate subsequent API requests.
       bearer(),
     ],

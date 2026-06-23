@@ -222,6 +222,46 @@ export default defineSchema({
     // CLOUD-01: list/revoke an account's tokens.
     .index("by_account", ["accountId"]),
 
+  // RFC 8628 device-authorization grant (the CLI `login` flow). The default
+  // @convex-dev/better-auth component has no `deviceCode` model, so the grant is
+  // implemented natively (see convex/lib/device_grant.ts + convex/device.ts):
+  // the CLI POSTs /oauth/device/code → a `pending` row here; the human approves
+  // it in the dashboard (status→approved + accountId from their session); the CLI
+  // polls /oauth/token → on `approved` we mint a scoped `swc_` token and mark the
+  // row `consumed` (single-use). Short-lived rows, swept hourly by `by_expiry`.
+  deviceCodes: defineTable({
+    // SHA-256 hex of the opaque `device_code` secret the CLI holds + polls with.
+    // The plaintext is returned once at request time and never persisted.
+    deviceCodeHash: v.string(),
+    // Short human `user_code` (normalized, no separator) the human types in the
+    // dashboard to claim + approve this request.
+    userCode: v.string(),
+    // The OAuth client id the CLI presented (informational; the gate is approval).
+    clientId: v.string(),
+    // Space-delimited requested scopes; sanitized to known scopes at mint time.
+    scope: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("denied"),
+      v.literal("consumed"),
+    ),
+    // Set on approval to the approving human's account; null until then.
+    accountId: v.union(v.id("accounts"), v.null()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    // Last token-endpoint poll (for slow_down enforcement); null before first poll.
+    lastPolledAt: v.union(v.number(), v.null()),
+    // Minimum ms between polls (RFC 8628 §3.5 interval, in ms).
+    pollingInterval: v.number(),
+  })
+    // Token polling looks a row up by the hashed device_code in O(1).
+    .index("by_deviceCodeHash", ["deviceCodeHash"])
+    // The dashboard claims/approves by the human-entered user_code.
+    .index("by_userCode", ["userCode"])
+    // Hourly sweep of elapsed codes.
+    .index("by_expiry", ["expiresAt"]),
+
   // Mirrors shared `AuditEvent`. Append-only entry for any consequential
   // mutation (PRD 6.3 audit log).
   auditLog: defineTable({
