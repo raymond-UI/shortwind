@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { initGlobal } from "./init-global.js";
-import { LOCK_FILENAME, LOCK_VERSION, RECIPES_DIRNAME, globalHomeRoot } from "../home.js";
+import { LOCK_FILENAME, LOCK_VERSION, RECIPES_DIRNAME, globalHomeRoot } from "../../home.js";
 
 let sandbox: string;
 beforeEach(() => {

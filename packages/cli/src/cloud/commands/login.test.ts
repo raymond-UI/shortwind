@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { login } from "./login.js";
-import { loadCredentials, readActiveAccount, globalHomeRoot, type HomeEnv } from "../home.js";
+import { loadCredentials, readActiveAccount, globalHomeRoot, type HomeEnv } from "../../home.js";
 import type {
   DeviceAuthorization,
   DeviceFlowIO,

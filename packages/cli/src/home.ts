@@ -26,8 +26,17 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { Lockfile } from "./contract/lockfile-diff.js";
-import type { DeviceToken } from "./device-flow.js";
+// The home is the CLI's single shared identity/palette/lockfile store — used by
+// both the local recipe verbs and `shortwind cloud` — so it draws the canonical
+// lockfile shape + constants from the top-level `lockfile.ts` instead of
+// re-declaring them (one definition; the home's lockfile IS the local lockfile).
+// `DeviceToken` stays a cloud device-flow concept under `cloud/`.
+import { LOCK_FILENAME, LOCK_VERSION, type Lockfile } from "./lockfile.js";
+import type { DeviceToken } from "./cloud/device-flow.js";
+
+// Re-export the lockfile constants so existing importers of these names from
+// `home.js` keep resolving against the single source in `lockfile.ts`.
+export { LOCK_FILENAME, LOCK_VERSION };
 
 // ---------------------------------------------------------------------------
 // Layout constants — the on-disk names. Kept here so init-global, login, and
@@ -39,14 +48,6 @@ export const HOME_DIRNAME = ".shortwind";
 
 /** The recipe palette directory inside a home (`recipes/`). */
 export const RECIPES_DIRNAME = "recipes";
-
-/**
- * The lockfile filename — identical to `packages/cli`'s and the CLOUD-03
- * `Lockfile` shape so a home-written lockfile diffs against the cloud's stored
- * one without translation. Lives *inside* the palette dir, mirroring the local
- * repo layout (`recipes/.shortwind-lock.json`).
- */
-export const LOCK_FILENAME = ".shortwind-lock.json";
 
 /** The multi-account credentials store filename, at the home root. */
 export const CREDENTIALS_FILENAME = "credentials.json";
@@ -338,13 +339,11 @@ export function readActiveAccount(homeRoot: string): Account | null {
 }
 
 // ---------------------------------------------------------------------------
-// Lockfile IO — the CLOUD-03 {@link Lockfile} shape, written into the palette
-// dir. Identical document to `packages/cli`'s `.shortwind-lock.json` so the
+// Lockfile IO — the {@link Lockfile} shape (from `lockfile.ts`), written into
+// the palette dir. The SAME document as the local `.shortwind-lock.json`, so the
 // cloud publish path (CLOUD-25) diffs it with `diffLockfiles` untranslated.
+// `LOCK_VERSION` is imported from `lockfile.ts` (single source) above.
 // ---------------------------------------------------------------------------
-
-/** Lockfile schema version (matches `packages/cli`'s `LOCK_VERSION`). */
-export const LOCK_VERSION = 1;
 
 /** An empty lockfile bound to a registry origin (no families yet). */
 export function emptyLockfile(registry: string): Lockfile {

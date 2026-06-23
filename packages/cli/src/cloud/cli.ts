@@ -29,7 +29,7 @@ import {
   type VisibilityCapableClient,
   type DomainCapableClient,
 } from "./api-client.js";
-import { resolveHome, readActiveAccount } from "./home.js";
+import { resolveHome, readActiveAccount } from "../home.js";
 import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
 
 /**

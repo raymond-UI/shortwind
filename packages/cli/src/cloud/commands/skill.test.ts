@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Registry } from "@shortwind/core";
 import { loadHomePalette, renderCloudSkill, runSkill } from "./skill.js";
-import { homePaths, type ResolvedHome } from "../home.js";
+import { homePaths, type ResolvedHome } from "../../home.js";
 
 /**
  * skill tests — golden SKILL.md for a FIXED palette (stable bytes), plus the

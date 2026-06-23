@@ -6,7 +6,7 @@ import {
   readActiveAccount,
   readHomeLockfile,
   type ResolvedHome,
-} from "../home.js";
+} from "../../home.js";
 import {
   selectTouchedRecipes,
   type CandidateRecipe,

@@ -7,7 +7,7 @@ import {
   type Recipe,
   type Registry,
 } from "@shortwind/core";
-import { resolveHome, type ResolvedHome } from "../home.js";
+import { resolveHome, type ResolvedHome } from "../../home.js";
 
 /**
  * `skill` — emit the Shortwind Cloud SKILL.md (PRD §7.3, the "works-today"
