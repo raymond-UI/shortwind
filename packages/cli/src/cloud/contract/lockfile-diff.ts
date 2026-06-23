@@ -1,29 +1,21 @@
 /**
  * Lockfile diffing for cloud publish (PRD 5.3).
  *
- * A pure plain-data port of the `.shortwind-lock.json` shape from
- * `packages/cli/src/lockfile.ts`. The CLI owns the IO (read/write the file on
- * disk); this module owns only the *comparison*, so the worker / convex publish
- * path and the CLI agree on what "the lockfile changed" means without sharing a
- * Node-flavoured module across the workspace boundary.
+ * Pure plain-data comparison: no IO, no Node built-ins, no classes. The CLI owns
+ * the IO (read/write the file on disk); this module owns only the *comparison*,
+ * so the worker / convex publish path and the CLI agree on what "the lockfile
+ * changed" means.
  *
- * No IO, no Node built-ins, no classes — plain data in, plain data out.
+ * The `Lockfile`/`LockEntry` shape is the CLI's single canonical definition
+ * (`packages/cli/src/lockfile.ts`) — imported here, not re-declared, so the home
+ * lockfile, the local recipe lockfile, and this diff all reference one type.
+ * (The apps/cloud server keeps its own byte-identical copy under
+ * `apps/cloud/shared/`; see ./README.md for why these stay vendored.)
  */
 
-// ---------------------------------------------------------------------------
-// Shape — kept byte-for-byte compatible with packages/cli/src/lockfile.ts so a
-// CLI-written lockfile diffs without any translation.
-// ---------------------------------------------------------------------------
-
-/** One locked recipe family: the resolved version and its body content sha. */
-export type LockEntry = { version: string; sha: string };
-
-/** The `.shortwind-lock.json` document. */
-export type Lockfile = {
-  version: number;
-  registry: string;
-  families: Record<string, LockEntry>;
-};
+import type { Lockfile, LockEntry } from "../../lockfile.js";
+// Re-export so existing importers of these names from this module keep resolving.
+export type { Lockfile, LockEntry };
 
 // ---------------------------------------------------------------------------
 // Diff result — plain serializable data.
