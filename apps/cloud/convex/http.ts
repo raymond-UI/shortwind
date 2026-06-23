@@ -561,12 +561,20 @@ const resolveCustomDomainHandler = httpAction(async (ctx, request) => {
 // the CLI POSTs (cli/src/commands/login.ts) and what the discovery metadata
 // advertises (convex/wellknown.ts), so no client change is needed.
 
-/** Dashboard origin where the human approves a device code. */
-function dashboardBaseUrl(): string {
-  return (process.env.DASHBOARD_URL ?? "http://localhost:3000").replace(
+// The dashboard (TanStack Start) is served under the `/cloud` BASEPATH
+// (dashboard/src/router.tsx `basepath: "/cloud"`), routed at
+// `https://shortwind.dev/cloud/*`. `DASHBOARD_URL` is the path-less ORIGIN
+// (it doubles as a Better Auth trusted origin in auth.ts), so the verification
+// URL must add the basepath: `${DASHBOARD_URL}/cloud/device`.
+const DASHBOARD_BASE_PATH = "/cloud";
+
+/** The device-approval page URL on the operator dashboard. */
+function deviceVerificationUrl(): string {
+  const origin = (process.env.DASHBOARD_URL ?? "http://localhost:3000").replace(
     /\/+$/,
     "",
   );
+  return `${origin}${DASHBOARD_BASE_PATH}/device`;
 }
 
 /** POST /oauth/device/code → device + user code (RFC 8628 §3.2). Form-encoded. */
@@ -578,13 +586,13 @@ const deviceCodeHandler = httpAction(async (ctx, request) => {
     clientId,
     scope,
   });
-  const base = dashboardBaseUrl();
+  const verifyUrl = deviceVerificationUrl();
   return json(
     {
       device_code: res.deviceCode,
       user_code: formatUserCode(res.userCode),
-      verification_uri: `${base}/device`,
-      verification_uri_complete: `${base}/device?code=${encodeURIComponent(
+      verification_uri: verifyUrl,
+      verification_uri_complete: `${verifyUrl}?code=${encodeURIComponent(
         res.userCode,
       )}`,
       expires_in: res.expiresInSeconds,
