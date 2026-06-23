@@ -39,7 +39,63 @@ export async function resolveInitPreset(
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {
+  // `shortwind cloud <verb>` is the Shortwind Cloud namespace (login, publish,
+  // find, …). It is a cohesive cac sub-program (`./cloud/cli.ts`) graduated out
+  // of the former standalone `shortwind-cloud` binary; we delegate the `cloud`
+  // token to it verbatim — strip "cloud" from argv so the sub-program sees its
+  // own verb at argv[2], exactly as it did when invoked directly. Lazy-imported
+  // so the local recipe verbs never pay for the cloud client's module graph.
+  if (argv[2] === "cloud") {
+    const { run: runCloud } = await import("./cloud/cli.js");
+    await runCloud([...argv.slice(0, 2), ...argv.slice(3)]);
+    return;
+  }
+
   const cli = cac("shortwind");
+
+  // Help-only listing for the cloud namespace — actual dispatch is the early
+  // delegation above (which runs before cac ever parses), so this never fires;
+  // it exists purely so `shortwind --help` advertises the namespace.
+  cli.command("cloud <verb>", "Shortwind Cloud — host HTML pages (login, publish, find, deploy, …)");
+
+  // The golden path: build recipes, then publish to Shortwind Cloud in one
+  // step. The deploy orchestrator (and the cloud client graph it pulls) is
+  // lazy-imported in the action so the local recipe verbs never load it.
+  cli
+    .command("deploy <file>", "Build recipes, then publish <file> to Shortwind Cloud (one step)")
+    .option("--domain <slug>", "Desired subdomain/slug")
+    .option("--tag <tag>", "Attach a tag (repeatable)")
+    .option("--visibility <level>", "public | unlisted | private")
+    .option("--idempotency-key <key>", "Idempotency key for safe retries")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--no-build", "Skip the recipe rebuild; publish the file as-is")
+    .option("--json", "Emit machine-readable JSON")
+    .option("--cwd <dir>", "Working directory")
+    .action(
+      async (
+        file: string,
+        opts: {
+          domain?: string;
+          tag?: string | string[];
+          visibility?: string;
+          idempotencyKey?: string;
+          endpoint?: string;
+          build?: boolean;
+          json?: boolean;
+          cwd?: string;
+        },
+      ) => {
+        const { runDeploy, reportDeployError } = await import("./commands/deploy.js");
+        try {
+          const run = await runDeploy(file, { ...opts, cwd: opts.cwd ?? process.cwd() });
+          if (run.buildSummary) process.stderr.write(run.buildSummary + "\n");
+          process.stdout.write(run.publish.output + "\n");
+          if (!run.publish.ok) process.exitCode = 1;
+        } catch (err) {
+          reportDeployError(err);
+        }
+      },
+    );
 
   cli
     .command("init", "Bootstrap Shortwind in this project")
