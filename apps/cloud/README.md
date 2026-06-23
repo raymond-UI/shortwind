@@ -46,9 +46,14 @@ apps/cloud/
   shared/      pure plain-data helpers + types shared across surfaces
   convex/      control plane / system of record (accounts, pages, tokens, audit)
   worker/      Cloudflare Worker serve router (hot path) + edge bindings
-  cli/         the shortwind-cloud CLI (login, publish, find, get, ...)
+  api-proxy/   branded API origin (api.shortwind.dev) reverse-proxy Worker
   dashboard/   human oversight UI (audit log, recipe-edit visibility)
 ```
 
-Most of these directories are stubs at this point; they are filled in by later
-waves of the `shortwind-cloud` plan (`docs/shortwind-cloud/issues.json`).
+The CLI graduated out of this workspace into the published `@shortwind/cli` as
+the `shortwind cloud` namespace (`packages/cli/src/cloud/`) — it is a client of
+this server's HTTP API, distributed with the rest of the toolchain rather than
+deployed here. See `packages/cli`.
+
+These server directories were filled in by the waves of the original cloud plan
+(`docs/shortwind-cloud/issues.json`).

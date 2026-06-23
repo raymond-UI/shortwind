@@ -34,7 +34,7 @@ This split is the whole cost trick: **all the effort happens once at publish, ne
 | Piece | What it does |
 |---|---|
 | **The agent API** | The verbs an agent calls: `find` (do I already have this page?), `publish`, `update`, `get`, `delete`, `visibility`, `bind-domain`. `find` is the most important — it lets a forgetful agent avoid making duplicates. |
-| **The CLI** (`shortwind-cloud`) | The command an agent runs. Logs in once, then publishes from any folder. |
+| **The CLI** (`shortwind cloud`) | The command an agent runs (a namespace in the unified `shortwind` binary). Logs in once, then publishes from any folder. |
 | **Global home** (`~/.shortwind/`) | One setup per machine, not per project. Holds the agent's login + its palette of reusable styles. |
 | **Login** | A "device flow" — the agent shows a short code, a human approves in a browser. Same pattern as the GitHub CLI. |
 | **Control plane** (Convex) | The system of record: who owns what page, every version, every style change, the audit log. |

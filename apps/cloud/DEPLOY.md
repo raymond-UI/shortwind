@@ -133,11 +133,11 @@ cd dashboard && VITE_CONVEX_URL=... VITE_BETTER_AUTH_URL=... pnpm build   # then
 ## 5. Smoke test (end-to-end)
 ```bash
 # from any directory — the global home is machine-wide, no per-repo setup:
-shortwind-cloud login                        # device flow → token in ~/.shortwind/
-shortwind-cloud init --global
-shortwind-cloud publish ./page.html --visibility public   # → { url, version }
+shortwind cloud login                        # device flow → token in ~/.shortwind/
+shortwind cloud init-global
+shortwind cloud publish ./page.html --visibility public   # → { url, version }
 curl -s <url>                                # served from R2 via the edge
-shortwind-cloud find --q page                # stateless re-discovery
+shortwind cloud find --q page                # stateless re-discovery
 ```
 Expected: publish expands server-side, writes the frozen artifact to R2, returns a
 durable URL; the Worker streams it; `find` lists it. Then verify the kill path:
