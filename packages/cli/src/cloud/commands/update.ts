@@ -11,8 +11,8 @@ import {
   readHomeLockfile,
   type ResolvedHome,
 } from "../home.js";
-import type { CandidateRecipe } from "../../../shared/src/fingerprint.js";
-import type { Lockfile } from "../../../shared/src/lockfile-diff.js";
+import type { CandidateRecipe } from "../contract/fingerprint.js";
+import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
   createApiClient,
   resolveBaseUrl,
@@ -102,7 +102,7 @@ export async function updateFromFile(
   const account = readActiveAccount(home.root);
   if (!account) {
     throw new Error(
-      "not logged in — run `shortwind-cloud login` (no active account in the Shortwind home)",
+      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
     );
   }
   const html = readFileSync(file, "utf8");

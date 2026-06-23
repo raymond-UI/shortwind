@@ -30,7 +30,7 @@ export interface DeviceAuthorization {
   /** Where the human goes to enter the user code. */
   verificationUri: string;
   /** Optional URI with the user code pre-filled (RFC 8628 §3.2 `verification_uri_complete`). */
-  verificationUriComplete?: string;
+  verificationUriComplete?: string | undefined;
   /** Seconds until the device code expires. */
   expiresIn: number;
   /** Minimum seconds between polls; defaults to 5 per RFC 8628 §3.5. */
@@ -42,11 +42,11 @@ export interface DeviceToken {
   accessToken: string;
   tokenType: string;
   /** Present when the grant issues refresh tokens. */
-  refreshToken?: string;
+  refreshToken?: string | undefined;
   /** Seconds until the access token expires, if provided. */
-  expiresIn?: number;
+  expiresIn?: number | undefined;
   /** Space-delimited granted scopes, if the server narrowed them. */
-  scope?: string;
+  scope?: string | undefined;
 }
 
 /**
@@ -200,7 +200,7 @@ export interface DeviceFlowIO {
   /** Request a device + user code. */
   requestDeviceAuthorization(input: {
     clientId: string;
-    scope?: string;
+    scope?: string | undefined;
   }): Promise<DeviceAuthorization>;
   /** Poll the token endpoint once with the device code. */
   pollToken(input: {

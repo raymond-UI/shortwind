@@ -5,7 +5,7 @@ import {
   resolveBaseUrl,
   type FetchLike,
 } from "./api-client.js";
-import type { Lockfile } from "../../shared/src/lockfile-diff.js";
+import type { Lockfile } from "./contract/lockfile-diff.js";
 
 /**
  * api-client tests — drive the typed REST client with a recording fake `fetch`

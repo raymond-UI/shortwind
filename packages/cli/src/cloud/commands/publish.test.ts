@@ -7,9 +7,9 @@ import {
   runPublish,
 } from "./publish.js";
 import { ApiError, type ApiClient } from "../api-client.js";
-import { computeBodySha } from "../../../shared/src/fingerprint.js";
-import type { CandidateRecipe } from "../../../shared/src/fingerprint.js";
-import type { Lockfile } from "../../../shared/src/lockfile-diff.js";
+import { computeBodySha } from "../contract/fingerprint.js";
+import type { CandidateRecipe } from "../contract/fingerprint.js";
+import type { Lockfile } from "../contract/lockfile-diff.js";
 
 /**
  * publish handler tests — assemble + render against a MOCKED api-client, no
@@ -115,7 +115,7 @@ describe("renderPublishResult / renderConflict — golden output", () => {
     expect(renderConflict("pg_dup", false)).toBe(
       [
         "a page with this handle already exists (id: pg_dup)",
-        "run: shortwind-cloud update pg_dup <file>",
+        "run: shortwind cloud update pg_dup <file>",
       ].join("\n"),
     );
   });
@@ -163,7 +163,7 @@ describe("runPublish — against a mocked client", () => {
     const run = await runPublish(client, okPayload, false);
     expect(run.ok).toBe(false);
     expect(run.id).toBe("pg_dup");
-    expect(run.output).toContain("shortwind-cloud update pg_dup");
+    expect(run.output).toContain("shortwind cloud update pg_dup");
   });
 
   it("propagates non-conflict ApiErrors (e.g. 401)", async () => {

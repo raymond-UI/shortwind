@@ -26,7 +26,7 @@
  * tests drive the client with a fake without monkey-patching the runtime.
  */
 
-import type { Lockfile } from "../../shared/src/lockfile-diff.js";
+import type { Lockfile } from "./contract/lockfile-diff.js";
 
 // ---------------------------------------------------------------------------
 // Wire shapes — mirror the CLOUD-23/24 contracts as plain serializable data.
@@ -334,9 +334,9 @@ export function resolveBaseUrl(
 
 /** Parse a `{ error: { code, message } }` body, tolerating garbage. */
 function parseErrorBody(body: string): {
-  code?: string;
-  message?: string;
-  existingId?: string;
+  code?: string | undefined;
+  message?: string | undefined;
+  existingId?: string | undefined;
 } {
   try {
     const parsed = JSON.parse(body) as unknown;

@@ -37,7 +37,7 @@ export interface StubResult {
 
 /** Human-readable "not implemented" line printed to stderr. */
 export function notImplementedMessage(result: StubResult): string {
-  return `shortwind-cloud ${result.verb}: not implemented yet (${result.implementedBy})`;
+  return `shortwind cloud ${result.verb}: not implemented yet (${result.implementedBy})`;
 }
 
 /**

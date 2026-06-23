@@ -1,4 +1,4 @@
-import { DEFAULT_SCOPES } from "../../../shared/src/scopes.js";
+import { DEFAULT_SCOPES } from "../contract/scopes.js";
 import {
   createHttpDeviceFlowIO,
   runDeviceFlow,

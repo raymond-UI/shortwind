@@ -26,7 +26,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { Lockfile } from "../../shared/src/lockfile-diff.js";
+import type { Lockfile } from "./contract/lockfile-diff.js";
 import type { DeviceToken } from "./device-flow.js";
 
 // ---------------------------------------------------------------------------

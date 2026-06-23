@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderFind, runFind, toFindQuery } from "./find.js";
 import { assembleUpdatePayload, runUpdate } from "./update.js";
 import type { ApiClient, PageSummary, UpdatePayload } from "../api-client.js";
-import type { Lockfile } from "../../../shared/src/lockfile-diff.js";
+import type { Lockfile } from "../contract/lockfile-diff.js";
 
 /**
  * find tests + the STATELESS agent loop: find → reuse the returned id to
