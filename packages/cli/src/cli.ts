@@ -58,6 +58,45 @@ export async function run(argv: string[] = process.argv): Promise<void> {
   // it exists purely so `shortwind --help` advertises the namespace.
   cli.command("cloud <verb>", "Shortwind Cloud — host HTML pages (login, publish, find, deploy, …)");
 
+  // The golden path: build recipes, then publish to Shortwind Cloud in one
+  // step. The deploy orchestrator (and the cloud client graph it pulls) is
+  // lazy-imported in the action so the local recipe verbs never load it.
+  cli
+    .command("deploy <file>", "Build recipes, then publish <file> to Shortwind Cloud (one step)")
+    .option("--domain <slug>", "Desired subdomain/slug")
+    .option("--tag <tag>", "Attach a tag (repeatable)")
+    .option("--visibility <level>", "public | unlisted | private")
+    .option("--idempotency-key <key>", "Idempotency key for safe retries")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--no-build", "Skip the recipe rebuild; publish the file as-is")
+    .option("--json", "Emit machine-readable JSON")
+    .option("--cwd <dir>", "Working directory")
+    .action(
+      async (
+        file: string,
+        opts: {
+          domain?: string;
+          tag?: string | string[];
+          visibility?: string;
+          idempotencyKey?: string;
+          endpoint?: string;
+          build?: boolean;
+          json?: boolean;
+          cwd?: string;
+        },
+      ) => {
+        const { runDeploy, reportDeployError } = await import("./commands/deploy.js");
+        try {
+          const run = await runDeploy(file, { ...opts, cwd: opts.cwd ?? process.cwd() });
+          if (run.buildSummary) process.stderr.write(run.buildSummary + "\n");
+          process.stdout.write(run.publish.output + "\n");
+          if (!run.publish.ok) process.exitCode = 1;
+        } catch (err) {
+          reportDeployError(err);
+        }
+      },
+    );
+
   cli
     .command("init", "Bootstrap Shortwind in this project")
     .option("--preset <name>", "Preset to install (starter|app|content|all|none)")
