@@ -1,6 +1,6 @@
 {
   "name": "@shortwind/core",
-  "version": "0.1.0-beta.19",
+  "version": "0.1.0-beta.20",
   "description": "Parser, resolver, and expand() — zero Tailwind dependency. Used by every other Shortwind package and the CDN runtime expander.",
   "type": "module",
   "main": "./dist/index.js",
