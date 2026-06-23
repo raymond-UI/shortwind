@@ -3,7 +3,7 @@ import path from "node:path";
 import { toArray, type StubResult } from "./stub.js";
 import {
   resolveHome,
-  readActiveAccount,
+  readActiveCloudAccount,
   readHomeLockfile,
   type ResolvedHome,
 } from "../../home.js";
@@ -444,7 +444,10 @@ export async function publishBundleFromFile(
   // Validate the slug locally first — fail fast before walking the directory.
   assertValidSlug(opts.domain);
   const home = deps.home ?? resolveHome();
-  const account = readActiveAccount(home.root);
+  // Identity is machine-global (login writes the global home); the palette/
+  // lockfile come from `home` (local repo `recipes/` if present). Reading the
+  // token from `home` would falsely fail when publishing from a recipe project.
+  const account = readActiveCloudAccount();
   if (!account) {
     throw new Error(
       "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
@@ -489,7 +492,10 @@ export async function publishFromFile(
   // Validate the slug locally first — fail fast before reading the file/network.
   assertValidSlug(opts.domain);
   const home = deps.home ?? resolveHome();
-  const account = readActiveAccount(home.root);
+  // Identity is machine-global (login writes the global home); the palette/
+  // lockfile come from `home` (local repo `recipes/` if present). Reading the
+  // token from `home` would falsely fail when publishing from a recipe project.
+  const account = readActiveCloudAccount();
   if (!account) {
     throw new Error(
       "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",

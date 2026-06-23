@@ -11,6 +11,7 @@ import {
   homePaths,
   loadCredentials,
   readActiveAccount,
+  readActiveCloudAccount,
   readHomeLockfile,
   resolveHome,
   saveCredentials,
@@ -215,6 +216,47 @@ describe("credentials store — multi-account", () => {
     chmodSync(homePaths(target).credentials, 0o644);
     saveCredentials(target, { version: 1, active: null, accounts: {} });
     expect(statSync(homePaths(target).credentials).mode & 0o777).toBe(0o600);
+  });
+});
+
+describe("readActiveCloudAccount — credentials are machine-global", () => {
+  // Regression: the cloud verbs + `shortwind deploy` must use the GLOBAL login
+  // token even when run from inside a local recipe project. Reading the token
+  // from the local `recipes/` home falsely reported "not logged in" in exactly
+  // the projects deploy targets (those WITH recipes/).
+  it("reads the token from the global home even when cwd is a local recipe project", () => {
+    const globalHome = path.join(sandbox, HOME_DIRNAME);
+    addAccount(globalHome, {
+      id: "acct_alice",
+      label: "alice@example.com",
+      token: { accessToken: "tok_global", tokenType: "bearer" },
+    });
+
+    // A repo with its own recipes/ — resolveHome would pick this as a LOCAL home.
+    const repo = path.join(sandbox, "repo");
+    mkdirSync(path.join(repo, RECIPES_DIRNAME), { recursive: true });
+    const env = { HOME: sandbox };
+    expect(resolveHome({ cwd: repo, env }).kind).toBe("local");
+
+    // …but the credential lookup must still find the global account.
+    const account = readActiveCloudAccount(env);
+    expect(account?.id).toBe("acct_alice");
+    expect(account?.token.accessToken).toBe("tok_global");
+  });
+
+  it("returns null when the global home has no active account", () => {
+    expect(readActiveCloudAccount({ HOME: sandbox })).toBeNull();
+  });
+
+  it("honors SHORTWIND_HOME as the credential home", () => {
+    const pinned = path.join(sandbox, "pinned-home");
+    addAccount(pinned, {
+      id: "acct_pin",
+      label: "pin@example.com",
+      token: { accessToken: "tok_pin", tokenType: "bearer" },
+    });
+    const account = readActiveCloudAccount({ HOME: sandbox, SHORTWIND_HOME: pinned });
+    expect(account?.id).toBe("acct_pin");
   });
 });
 
