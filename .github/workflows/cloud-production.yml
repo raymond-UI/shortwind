@@ -71,6 +71,19 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      # --- 2b. API-proxy Worker (branded origin api.shortwind.dev → Convex) ---
+      # The route (api.shortwind.dev/*) is attached MANUALLY once — the
+      # account-owned CI token can't attach zone routes (see api-proxy/wrangler.toml,
+      # DEPLOY.md). CONVEX_HTTP_URL is a [vars] value, so deploy carries no secrets.
+      - name: Deploy API-proxy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/cloud/api-proxy
+          command: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       # --- 3. Dashboard (TanStack Start SSR + client → wrangler deploy) ---
       - name: Install (dashboard)
         working-directory: apps/cloud/dashboard

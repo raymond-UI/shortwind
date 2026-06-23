@@ -53,6 +53,41 @@ origin trust with the platform. To provision:
    Suffix List** (like `vercel.app`) so each `*.shortwind.app` subdomain is its own
    eTLD+1 and pages can't set cookies readable across each other.
 
+### Platform API origin — `api.shortwind.dev` (branded, vendor-independent)
+The CLI and OAuth clients talk to ONE stable origin, `api.shortwind.dev`, served by
+the **api-proxy Worker** (`apps/cloud/api-proxy`). It reverse-proxies the public
+Convex HTTP surface (`/v1`, `/oauth`, `/.well-known`) and 404s everything else — the
+Worker-only `/internal/*` cold-source endpoints are deliberately NOT reachable from
+this origin.
+
+Why a proxy and not the raw `*.convex.site` slug: the Convex deployment name is an
+immutable vendor identifier. Exposing it as the public origin would bake it into the
+OAuth `issuer`, the discovery doc, the REST catalog, AND the shipped CLI default —
+locking the platform to one deployment forever. The proxy makes `api.shortwind.dev`
+the stable identity; the slug is just `CONVEX_HTTP_URL` in `api-proxy/wrangler.toml`,
+swappable to migrate deployments without a client release.
+
+**Rollout order matters** — bring the origin up BEFORE flipping `SITE_URL`, or
+discovery will advertise a dead origin:
+1. Deploy the Worker (CI does this on merge, or `cd api-proxy && wrangler deploy`).
+2. **DNS + route, attached manually once** (account-owned token can't attach zone
+   routes — same limitation as the serve Worker). Easiest is a **Custom Domain**,
+   which creates the DNS record + route together:
+   Cloudflare dash → Workers & Pages → `shortwind-cloud-api` → Settings → Domains &
+   Routes → Add → **Custom Domain** → `api.shortwind.dev`.
+   (Or add a proxied DNS record for `api` in the `shortwind.dev` zone + a Route
+   `api.shortwind.dev/*`.)
+3. Verify it proxies (still advertises the slug at this point — fine):
+   `curl -s https://api.shortwind.dev/.well-known/oauth-authorization-server`
+4. **Flip the issuer** so discovery, the catalog, the `issuer`, and the CLI default
+   all converge on the branded origin:
+   ```bash
+   npx convex env set SITE_URL https://api.shortwind.dev --prod
+   ```
+   Re-check the curl above — `issuer` + endpoints now read `api.shortwind.dev`.
+5. The CLI default is already `https://api.shortwind.dev` (api-client.ts). No
+   `SHORTWIND_CLOUD_API` override is needed in normal use; it remains for dev/staging.
+
 ## 2. Deploy Convex (control plane)
 ```bash
 npx convex deploy           # regenerates convex/_generated against the live deployment,

@@ -48,9 +48,9 @@ describe("resolveBaseUrl", () => {
     expect(resolveBaseUrl(undefined, { SHORTWIND_CLOUD_API: "https://env.test/" })).toBe(
       "https://env.test",
     );
-    expect(resolveBaseUrl(undefined, {})).toBe("https://shortwind.dev");
+    expect(resolveBaseUrl(undefined, {})).toBe("https://api.shortwind.dev");
     expect(resolveBaseUrl("", { SHORTWIND_CLOUD_API: "" })).toBe(
-      "https://shortwind.dev",
+      "https://api.shortwind.dev",
     );
   });
 });
