@@ -3,15 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Shortwind Cloud — agent-native HTML hosting. Self-contained workspace, never published.",
-  "bin": {
-    "shortwind-cloud": "./dist/cli/src/bin.js"
-  },
+  "description": "Shortwind Cloud server — Convex control plane + Cloudflare Workers/R2/KV + dashboard. Self-contained workspace, never published. (The cloud CLI graduated to @shortwind/cli `shortwind cloud` — see packages/cli/src/cloud.)",
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc --noEmit -p cli/tsconfig.json",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "echo \"build wired up in a later wave (worker bundle + convex deploy)\" && exit 0",
-    "build:cli": "rm -rf dist && tsc -p cli/tsconfig.build.json"
+    "build": "echo \"build wired up in a later wave (worker bundle + convex deploy)\" && exit 0"
   },
   "dependencies": {
     "@convex-dev/better-auth": "0.11.4",

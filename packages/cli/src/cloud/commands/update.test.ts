@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { assembleUpdatePayload, runUpdate } from "./update.js";
-import { computeBodySha } from "../../../shared/src/fingerprint.js";
-import type { CandidateRecipe } from "../../../shared/src/fingerprint.js";
+import { computeBodySha } from "../contract/fingerprint.js";
+import type { CandidateRecipe } from "../contract/fingerprint.js";
 import type { ApiClient } from "../api-client.js";
-import type { Lockfile } from "../../../shared/src/lockfile-diff.js";
+import type { Lockfile } from "../contract/lockfile-diff.js";
 
 /**
  * update handler tests — same touched-bodies-only assembly as publish, but the

@@ -10,9 +10,9 @@ import {
 import {
   selectTouchedRecipes,
   type CandidateRecipe,
-} from "../../../shared/src/fingerprint.js";
-import { validateSlug } from "../../../shared/src/slug.js";
-import type { Lockfile } from "../../../shared/src/lockfile-diff.js";
+} from "../contract/fingerprint.js";
+import { validateSlug } from "../contract/slug.js";
+import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
   ApiError,
   createApiClient,
@@ -181,7 +181,7 @@ export function renderConflict(existingId: string | undefined, json: boolean): s
   }
   return [
     `a page with this handle already exists (id: ${id})`,
-    `run: shortwind-cloud update ${id} <file>`,
+    `run: shortwind cloud update ${id} <file>`,
   ].join("\n");
 }
 
@@ -436,9 +436,9 @@ export async function publishBundleFromFile(
   file: string,
   opts: PublishOptions,
   deps: {
-    home?: ResolvedHome;
-    client?: BundleCapableClient;
-    baseUrl?: string;
+    home?: ResolvedHome | undefined;
+    client?: BundleCapableClient | undefined;
+    baseUrl?: string | undefined;
   } = {},
 ): Promise<PublishRun> {
   // Validate the slug locally first — fail fast before walking the directory.
@@ -447,7 +447,7 @@ export async function publishBundleFromFile(
   const account = readActiveAccount(home.root);
   if (!account) {
     throw new Error(
-      "not logged in — run `shortwind-cloud login` (no active account in the Shortwind home)",
+      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
     );
   }
   const { files, entryPath } = readBundleDir(file);
@@ -492,7 +492,7 @@ export async function publishFromFile(
   const account = readActiveAccount(home.root);
   if (!account) {
     throw new Error(
-      "not logged in — run `shortwind-cloud login` (no active account in the Shortwind home)",
+      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
     );
   }
   const html = readFileSync(file, "utf8");

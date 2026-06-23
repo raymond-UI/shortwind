@@ -119,7 +119,7 @@ This is your machine-wide Shortwind home at \`${root}\`.
   on the next publish.
 - \`recipes/.shortwind-lock.json\` — the lockfile pinning family versions + shas.
 - \`credentials.json\` — your cloud account binding(s); the active account is the
-  one publishes go to. \`shortwind-cloud login\` switches accounts.
+  one publishes go to. \`shortwind cloud login\` switches accounts.
 
 ## Resolution
 
@@ -130,7 +130,7 @@ machine-wide consequences.
 
 ## Publishing
 
-\`shortwind-cloud publish ./page.html\` is the only action you need. It reads the
+\`shortwind cloud publish ./page.html\` is the only action you need. It reads the
 lockfile + fingerprints from this home and carries any locally-touched recipe
 bodies with the page — the publish *is* the sync. There is no watcher and no
 separate sync command. Published pages are frozen; a recipe edit only affects

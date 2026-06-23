@@ -8,7 +8,8 @@ export default defineConfig({
     include: [
       "shared/**/*.test.ts",
       "convex/**/*.test.ts",
-      "cli/**/*.test.ts",
+      // The cloud CLI graduated to @shortwind/cli (`shortwind cloud`); its tests
+      // run under packages/cli now. This workspace tests only the server.
       // api-proxy's routing core is pure (no fetch) → runs in the Node pool.
       "api-proxy/**/*.test.ts",
     ],

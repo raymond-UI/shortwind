@@ -39,7 +39,24 @@ export async function resolveInitPreset(
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {
+  // `shortwind cloud <verb>` is the Shortwind Cloud namespace (login, publish,
+  // find, …). It is a cohesive cac sub-program (`./cloud/cli.ts`) graduated out
+  // of the former standalone `shortwind-cloud` binary; we delegate the `cloud`
+  // token to it verbatim — strip "cloud" from argv so the sub-program sees its
+  // own verb at argv[2], exactly as it did when invoked directly. Lazy-imported
+  // so the local recipe verbs never pay for the cloud client's module graph.
+  if (argv[2] === "cloud") {
+    const { run: runCloud } = await import("./cloud/cli.js");
+    await runCloud([...argv.slice(0, 2), ...argv.slice(3)]);
+    return;
+  }
+
   const cli = cac("shortwind");
+
+  // Help-only listing for the cloud namespace — actual dispatch is the early
+  // delegation above (which runs before cac ever parses), so this never fires;
+  // it exists purely so `shortwind --help` advertises the namespace.
+  cli.command("cloud <verb>", "Shortwind Cloud — host HTML pages (login, publish, find, deploy, …)");
 
   cli
     .command("init", "Bootstrap Shortwind in this project")

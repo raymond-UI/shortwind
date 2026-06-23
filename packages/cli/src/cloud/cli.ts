@@ -33,7 +33,7 @@ import { resolveHome, readActiveAccount } from "./home.js";
 import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
 
 /**
- * Shortwind Cloud CLI — `shortwind-cloud <verb>`.
+ * Shortwind Cloud CLI — `shortwind cloud <verb>`.
  *
  * Mirrors `packages/cli/src/cli.ts`: build a cac program, register one command
  * per verb, then `parse(..., { run: false })` + `runMatchedCommand()` so an
@@ -53,9 +53,11 @@ import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
  * REAL program via {@link buildRealCli}, which calls the actual handlers.
  */
 
-// The `bin` name an end user types. The verbs (publish, find, …) are spoken
-// as subcommands: `shortwind-cloud publish ./page.html`.
-const BIN = "shortwind-cloud";
+// The command path an end user types. The cloud verbs are a namespace under the
+// unified `shortwind` binary: `shortwind cloud publish ./page.html`. The main
+// CLI (`packages/cli/src/cli.ts`) delegates the `cloud` token to this program's
+// `run()`, so help/usage reads `shortwind cloud <verb>`.
+const BIN = "shortwind cloud";
 
 /**
  * Build the cac program with every verb registered. Each action runs the pure
@@ -424,7 +426,7 @@ function makeClient(endpoint?: string) {
   const account = readActiveAccount(home.root);
   if (!account) {
     throw new Error(
-      "not logged in — run `shortwind-cloud login` (no active account in the Shortwind home)",
+      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
     );
   }
   return createApiClient({

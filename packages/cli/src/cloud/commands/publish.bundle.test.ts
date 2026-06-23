@@ -6,9 +6,9 @@ import {
   type BundleCapableClient,
 } from "./publish.js";
 import type { BundlePayload, BundleResult } from "../api-client.js";
-import { computeBodySha } from "../../../shared/src/fingerprint.js";
-import type { CandidateRecipe } from "../../../shared/src/fingerprint.js";
-import type { Lockfile } from "../../../shared/src/lockfile-diff.js";
+import { computeBodySha } from "../contract/fingerprint.js";
+import type { CandidateRecipe } from "../contract/fingerprint.js";
+import type { Lockfile } from "../contract/lockfile-diff.js";
 
 /**
  * CLOUD-50 `publish --bundle` handler tests — assemble + render + run against a

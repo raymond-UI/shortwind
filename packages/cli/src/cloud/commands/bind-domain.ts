@@ -1,6 +1,6 @@
 import { type StubResult } from "./stub.js";
-import { SCOPE_DOMAINS_BIND } from "../../../shared/src/scopes.js";
-import { validateHostname } from "../../../shared/src/slug.js";
+import { SCOPE_DOMAINS_BIND } from "../contract/scopes.js";
+import { validateHostname } from "../contract/slug.js";
 import { ApiError, type DomainBindResult, type DomainCapableClient } from "../api-client.js";
 
 /**
@@ -72,7 +72,7 @@ export class InvalidHostnameError extends Error {
 export class StepUpDeniedError extends Error {
   constructor(public readonly reason: "denied" | "expired") {
     super(
-      `domain bind needs the ${BIND_SCOPE} scope, but the step-up grant was ${reason} — re-run \`shortwind-cloud login --scope ${BIND_SCOPE}\` to authorize`,
+      `domain bind needs the ${BIND_SCOPE} scope, but the step-up grant was ${reason} — re-run \`shortwind cloud login --scope ${BIND_SCOPE}\` to authorize`,
     );
     this.name = "StepUpDeniedError";
   }
