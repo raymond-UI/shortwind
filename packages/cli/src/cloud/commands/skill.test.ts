@@ -84,7 +84,7 @@ describe("renderCloudSkill — golden", () => {
   it("lists every cloud verb and every recipe in the palette", () => {
     const out = renderCloudSkill(FIXED_REGISTRY);
     for (const verb of ["find", "publish", "update", "get", "delete", "visibility", "bind-domain"]) {
-      expect(out).toContain(`shortwind-cloud ${verb}`);
+      expect(out).toContain(`shortwind cloud ${verb}`);
     }
     expect(out).toContain("@card");
     expect(out).toContain("@btn");
@@ -96,7 +96,7 @@ describe("renderCloudSkill — empty palette", () => {
   it("still advertises the verbs and notes no recipes installed", () => {
     const out = renderCloudSkill({ flattened: {}, families: {} });
     expect(out).toContain("## Verbs");
-    expect(out).toContain("shortwind-cloud publish");
+    expect(out).toContain("shortwind cloud publish");
     expect(out).toContain("No families installed yet");
   });
 });
