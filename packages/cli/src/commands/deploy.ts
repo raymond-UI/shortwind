@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { build, BuildError, type BuildResult } from "./build.js";
 import { readConfig } from "../project.js";
-import { resolveHome, readActiveAccount } from "../home.js";
+import { resolveHome, readActiveAccount, type ResolvedHome } from "../home.js";
 import {
   publishFromFile,
   InvalidSlugError,
@@ -60,13 +60,8 @@ export interface DeployDeps {
   publish?: typeof publishFromFile;
   /** Predicate: does the project have a recipes dir? (defaults to a config read). */
   recipesDirExists?: (cwd: string) => boolean | Promise<boolean>;
-  /** Is an account logged in? (defaults to reading the shared home credentials). */
-  isLoggedIn?: () => boolean;
-}
-
-/** Is an account logged into the shared `~/.shortwind` home? */
-function defaultIsLoggedIn(): boolean {
-  return readActiveAccount(resolveHome().root) !== null;
+  /** Is an account logged into this home? (defaults to reading its credentials). */
+  isLoggedIn?: (home: ResolvedHome) => boolean;
 }
 
 export interface DeployRun {
@@ -96,10 +91,15 @@ export async function runDeploy(
   const buildFn = deps.build ?? build;
   const publishFn = deps.publish ?? publishFromFile;
   const hasRecipes = deps.recipesDirExists ?? defaultHasRecipes;
-  const isLoggedIn = deps.isLoggedIn ?? defaultIsLoggedIn;
+
+  // Resolve the shared home ONCE (honoring --cwd) and reuse it for the login
+  // preflight AND the publish, so the build, the login check, and the publish
+  // can never resolve different roots.
+  const home = resolveHome({ cwd });
+  const isLoggedIn = deps.isLoggedIn ?? ((h: ResolvedHome) => readActiveAccount(h.root) !== null);
 
   // Fail fast on the most common first-run error, before spending a rebuild.
-  if (!isLoggedIn()) throw new NotLoggedInError();
+  if (!isLoggedIn(home)) throw new NotLoggedInError();
 
   let buildSummary: string | null = null;
   // Default-on: only --no-build (opts.build === false) opts out.
@@ -112,6 +112,7 @@ export async function runDeploy(
   }
 
   const publish = await publishFn(file, opts, {
+    home,
     baseUrl: resolveBaseUrl(opts.endpoint),
   });
   return { buildSummary, publish };
