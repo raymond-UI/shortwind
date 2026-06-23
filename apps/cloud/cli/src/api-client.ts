@@ -304,8 +304,16 @@ export interface ApiClientConfig {
   fetch?: FetchLike;
 }
 
-/** The production base URL when neither config nor env overrides it. */
-export const DEFAULT_BASE_URL = "https://shortwind.dev";
+/**
+ * The production base URL when neither config nor env overrides it. This is the
+ * BRANDED, vendor-independent API origin served by the api-proxy Worker
+ * (apps/cloud/api-proxy) — NOT the Convex deployment slug and NOT the
+ * marketing/docs apex (`shortwind.dev`, a Cloudflare Pages site that does not
+ * route the API). It matches the OAuth `issuer` the discovery doc advertises
+ * (Convex `SITE_URL`), so login's discovery and these REST calls agree on one
+ * origin. `SHORTWIND_CLOUD_API` still overrides for dev/staging.
+ */
+export const DEFAULT_BASE_URL = "https://api.shortwind.dev";
 
 /**
  * Resolve the API origin from an explicit value, then env, then the default.

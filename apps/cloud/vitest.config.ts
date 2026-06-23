@@ -5,7 +5,13 @@ import { defineConfig } from "vitest/config";
 // need the @cloudflare/vitest-pool-workers runtime.
 export default defineConfig({
   test: {
-    include: ["shared/**/*.test.ts", "convex/**/*.test.ts", "cli/**/*.test.ts"],
+    include: [
+      "shared/**/*.test.ts",
+      "convex/**/*.test.ts",
+      "cli/**/*.test.ts",
+      // api-proxy's routing core is pure (no fetch) → runs in the Node pool.
+      "api-proxy/**/*.test.ts",
+    ],
     // Default environment for the pure unit tests. The convex-test integration
     // file (CLOUD-30a) opts INTO `edge-runtime` per-file via a
     // `// @vitest-environment edge-runtime` docblock, since convex-test runs the
