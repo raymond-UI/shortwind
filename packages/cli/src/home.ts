@@ -338,6 +338,25 @@ export function readActiveAccount(homeRoot: string): Account | null {
   return creds.accounts[creds.active] ?? null;
 }
 
+/**
+ * The active **cloud** account — the identity every `shortwind cloud` verb (and
+ * `shortwind deploy`) authenticates with.
+ *
+ * Credentials ALWAYS resolve from the GLOBAL home ({@link globalHomeRoot},
+ * honoring `SHORTWIND_HOME`), because that is the only place {@link login}
+ * writes them. This is deliberately NOT `readActiveAccount(resolveHome().root)`:
+ * {@link resolveHome} prefers a local repo `recipes/` folder for the *palette /
+ * lockfile*, but the login token is machine-global — your account is the same
+ * whether you publish from a recipe project or a bare directory. Reading the
+ * token from the local home would falsely report "not logged in" whenever a
+ * `recipes/` dir is present — which is the exact case `shortwind deploy` targets
+ * (build local recipes, then publish), so the golden path would never see the
+ * token. Identity is global; the palette is local.
+ */
+export function readActiveCloudAccount(env: HomeEnv = process.env as HomeEnv): Account | null {
+  return readActiveAccount(globalHomeRoot(env));
+}
+
 // ---------------------------------------------------------------------------
 // Lockfile IO — the {@link Lockfile} shape (from `lockfile.ts`), written into
 // the palette dir. The SAME document as the local `.shortwind-lock.json`, so the

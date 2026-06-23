@@ -29,7 +29,8 @@ import {
   type VisibilityCapableClient,
   type DomainCapableClient,
 } from "./api-client.js";
-import { resolveHome, readActiveAccount } from "../home.js";
+import { readActiveCloudAccount } from "../home.js";
+import { cliVersion } from "../init.js";
 import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
 
 /**
@@ -177,7 +178,7 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
     });
 
   cli.help();
-  cli.version("0.0.0");
+  cli.version(cliVersion() ?? "0.0.0");
   return cli;
 }
 
@@ -395,7 +396,7 @@ export function buildRealCli(): CAC {
     });
 
   cli.help();
-  cli.version("0.0.0");
+  cli.version(cliVersion() ?? "0.0.0");
   return cli;
 }
 
@@ -422,8 +423,9 @@ const stdinConfirm: Confirm = (id: string): Promise<boolean> => {
  * also need the home palette), so this is the read-verb seam only.
  */
 function makeClient(endpoint?: string) {
-  const home = resolveHome();
-  const account = readActiveAccount(home.root);
+  // Credentials are machine-global (login writes the global home); the local
+  // `recipes/` palette must not change which account a read verb uses.
+  const account = readActiveCloudAccount();
   if (!account) {
     throw new Error(
       "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
@@ -440,8 +442,7 @@ function makeClient(endpoint?: string) {
  * recorded scopes). Drives the bind-domain pre-flight step-up decision.
  */
 function activeScopes(): readonly string[] {
-  const home = resolveHome();
-  const account = readActiveAccount(home.root);
+  const account = readActiveCloudAccount();
   return account?.scopes ?? [];
 }
 

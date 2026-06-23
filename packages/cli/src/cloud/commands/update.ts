@@ -7,7 +7,7 @@ import {
 } from "./publish.js";
 import {
   resolveHome,
-  readActiveAccount,
+  readActiveCloudAccount,
   readHomeLockfile,
   type ResolvedHome,
 } from "../../home.js";
@@ -99,7 +99,8 @@ export async function updateFromFile(
   deps: { home?: ResolvedHome; client?: ApiClient; baseUrl?: string } = {},
 ): Promise<{ output: string; result: PublishResult }> {
   const home = deps.home ?? resolveHome();
-  const account = readActiveAccount(home.root);
+  // Identity is machine-global; palette/lockfile come from `home` (see publish).
+  const account = readActiveCloudAccount();
   if (!account) {
     throw new Error(
       "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
