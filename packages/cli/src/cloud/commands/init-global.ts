@@ -7,7 +7,7 @@ import {
   homePaths,
   writeHomeLockfile,
   type HomeEnv,
-} from "../home.js";
+} from "../../home.js";
 
 /**
  * `init --global` — one-time setup of the singular global Shortwind home

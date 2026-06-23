@@ -5,7 +5,7 @@ import {
   type DeviceFlowIO,
   type DeviceToken,
 } from "../device-flow.js";
-import { addAccount, globalHomeRoot, type Account, type HomeEnv } from "../home.js";
+import { addAccount, globalHomeRoot, type Account, type HomeEnv } from "../../home.js";
 import { toArray } from "./stub.js";
 
 /**

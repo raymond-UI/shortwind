@@ -10,7 +10,7 @@ import {
   readActiveAccount,
   readHomeLockfile,
   type ResolvedHome,
-} from "../home.js";
+} from "../../home.js";
 import type { CandidateRecipe } from "../contract/fingerprint.js";
 import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
