@@ -5,6 +5,7 @@ import {
   type DeviceFlowIO,
   type PollResponse,
   type PollState,
+  createHttpDeviceFlowIO,
   initialPollState,
   nextPollState,
   parseDeviceAuthorization,
@@ -12,6 +13,20 @@ import {
   runDeviceFlow,
   shouldKeepPolling,
 } from "./device-flow.js";
+
+/** Build a fake `fetch` returning one canned response (status + body text). */
+function fakeFetch(status: number, bodyText: string): typeof fetch {
+  return (async () =>
+    new Response(bodyText, {
+      status,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+}
+
+const ENDPOINTS = {
+  deviceAuthorizationUrl: "https://api.shortwind.dev/oauth/device/code",
+  tokenUrl: "https://api.shortwind.dev/oauth/token",
+};
 
 const AUTH: DeviceAuthorization = {
   deviceCode: "dev-code-xyz",
@@ -342,5 +357,48 @@ describe("parseDeviceAuthorization", () => {
 
   it("throws on a malformed body (missing required fields)", () => {
     expect(() => parseDeviceAuthorization({ user_code: "x" })).toThrow();
+  });
+});
+
+describe("createHttpDeviceFlowIO — response hardening (regression: empty body crashed login)", () => {
+  it("requestDeviceAuthorization throws a CLEAR error (not a raw SyntaxError) on an empty 404", async () => {
+    // Exactly the beta.21 failure: hitting the marketing apex 404s with no body.
+    const io = createHttpDeviceFlowIO(ENDPOINTS, { fetchImpl: fakeFetch(404, "") });
+    await expect(
+      io.requestDeviceAuthorization({ clientId: "shortwind-cli" }),
+    ).rejects.toThrow(/device authorization request failed: HTTP 404/);
+  });
+
+  it("requestDeviceAuthorization parses a valid 200 body", async () => {
+    const io = createHttpDeviceFlowIO(ENDPOINTS, {
+      fetchImpl: fakeFetch(
+        200,
+        JSON.stringify({
+          device_code: "d",
+          user_code: "AB-CD",
+          verification_uri: "https://shortwind.dev/cloud/device",
+          expires_in: 1800,
+          interval: 5,
+        }),
+      ),
+    });
+    const auth = await io.requestDeviceAuthorization({ clientId: "shortwind-cli" });
+    expect(auth.userCode).toBe("AB-CD");
+  });
+
+  it("pollToken maps an empty/non-JSON body to a transient unknown (keep polling), not a crash", async () => {
+    const io = createHttpDeviceFlowIO(ENDPOINTS, { fetchImpl: fakeFetch(502, "") });
+    await expect(
+      io.pollToken({ clientId: "shortwind-cli", deviceCode: "d" }),
+    ).resolves.toEqual({ kind: "error", code: "unknown" });
+  });
+
+  it("pollToken parses a pending error body normally", async () => {
+    const io = createHttpDeviceFlowIO(ENDPOINTS, {
+      fetchImpl: fakeFetch(400, JSON.stringify({ error: "authorization_pending" })),
+    });
+    await expect(
+      io.pollToken({ clientId: "shortwind-cli", deviceCode: "d" }),
+    ).resolves.toEqual({ kind: "error", code: "authorization_pending" });
   });
 });

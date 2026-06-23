@@ -348,6 +348,22 @@ export function parseDeviceAuthorization(body: unknown): DeviceAuthorization {
  * Build the production {@link DeviceFlowIO} backed by `fetch`, real timers, and
  * a console presenter. The CLI command wires this; tests use a fake instead.
  */
+/**
+ * Read a response body as JSON, tolerating an empty or non-JSON body. Returns
+ * `null` when the body is empty or unparseable instead of throwing a raw
+ * `SyntaxError` from `res.json()` — so a wrong origin / proxy error page / 5xx
+ * surfaces as a handled outcome, not a stack dump (the original login crash).
+ */
+async function readJsonSafe(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (text.trim() === "") return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 export function createHttpDeviceFlowIO(
   endpoints: DeviceFlowEndpoints,
   opts?: {
@@ -365,7 +381,19 @@ export function createHttpDeviceFlowIO(
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: params.toString(),
       });
-      return parseDeviceAuthorization(await res.json());
+      const body = await readJsonSafe(res);
+      if (!res.ok || body === null) {
+        // A clear, actionable error beats a raw JSON SyntaxError: name the URL
+        // and status so a misconfigured origin is obvious.
+        throw new Error(
+          `device authorization request failed: HTTP ${res.status} from ` +
+            `${endpoints.deviceAuthorizationUrl}` +
+            (body === null
+              ? " — empty or non-JSON response (is SHORTWIND_CLOUD_API pointing at the API origin?)"
+              : ""),
+        );
+      }
+      return parseDeviceAuthorization(body);
     },
     async pollToken({ clientId, deviceCode }) {
       const params = new URLSearchParams({
@@ -378,7 +406,12 @@ export function createHttpDeviceFlowIO(
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: params.toString(),
       });
-      return parseTokenResponse(await res.json());
+      const body = await readJsonSafe(res);
+      // An empty/non-JSON poll body is a transient blip (proxy hiccup / 5xx):
+      // map to `unknown`, which the state machine treats as keep-polling-with-
+      // backoff. The deadline still bounds the loop.
+      if (body === null) return { kind: "error", code: "unknown" };
+      return parseTokenResponse(body);
     },
     onUserCode:
       opts?.present ??
