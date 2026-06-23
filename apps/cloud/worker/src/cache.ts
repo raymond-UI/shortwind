@@ -23,7 +23,16 @@ export function cacheArtifactResponse(
   artifact: ArtifactObject,
   init?: { cacheSeconds?: number },
 ): Response {
-  const seconds = init?.cacheSeconds ?? 60 * 60 * 24; // 1 day default
+  // Short edge TTL (60s), NOT a day. The edge cache (caches.default) sits in
+  // FRONT of the KV route lookup, so a long TTL means a deleted/updated/killed
+  // page keeps serving its stale cached artifact for the whole TTL even after the
+  // lifecycle path eagerly evicts the KV route (edge_kv.ts) — the eviction can't
+  // reach an already-cached entry. 60s bounds that staleness (takedowns, updates,
+  // visibility flips) to ~a minute. The instant fix — a Cloudflare zone
+  // purge-by-URL on delete/kill — is a follow-up (it needs a zone-scoped token;
+  // the account-owned CI token can't purge zones). Artifacts are immutable per
+  // version, so re-fetching on miss is cheap (R2 read + fast KV resolve).
+  const seconds = init?.cacheSeconds ?? 60; // 60s edge TTL (see above)
   const headers = new Headers();
   headers.set("content-type", "text/html; charset=utf-8");
   headers.set("cache-control", `public, max-age=${seconds}`);
