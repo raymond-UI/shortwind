@@ -77,13 +77,22 @@ function registerAuthVerbs(cli: CAC): void {
     .option("--scope <scope>", "Request a scope (repeatable; e.g. domains:bind for step-up)")
     .option("--endpoint <url>", "Cloud API origin")
     .action(async (opts: { scope?: string | string[]; endpoint?: string }) => {
-      const result = await login(opts);
-      if (result.ok) {
+      try {
+        const result = await login(opts);
+        if (result.ok) {
+          process.stderr.write(
+            `logged in as ${result.account.label} (active account: ${result.account.id})\n`,
+          );
+        } else {
+          process.stderr.write(`login ${result.reason}\n`);
+          process.exitCode = 1;
+        }
+      } catch (err) {
+        // Device-flow network/origin failures throw; surface one clean line
+        // instead of bin.ts's raw stack dump.
         process.stderr.write(
-          `logged in as ${result.account.label} (active account: ${result.account.id})\n`,
+          `error: login failed: ${err instanceof Error ? err.message : String(err)}\n`,
         );
-      } else {
-        process.stderr.write(`login ${result.reason}\n`);
         process.exitCode = 1;
       }
     });

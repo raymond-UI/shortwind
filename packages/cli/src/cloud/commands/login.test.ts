@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { login } from "./login.js";
+import { login, loginEndpoints } from "./login.js";
 import { loadCredentials, readActiveAccount, globalHomeRoot, type HomeEnv } from "../../home.js";
 import type {
   DeviceAuthorization,
@@ -55,6 +55,28 @@ const TOKEN_BOB: PollResponse = {
   kind: "token",
   token: { accessToken: "tok_bob", tokenType: "bearer" },
 };
+
+describe("loginEndpoints — origin resolution (regression: beta.21 hit shortwind.dev)", () => {
+  it("defaults to the branded API origin, NOT the marketing apex", () => {
+    const eps = loginEndpoints({}, {});
+    expect(eps.deviceAuthorizationUrl).toBe("https://api.shortwind.dev/oauth/device/code");
+    expect(eps.tokenUrl).toBe("https://api.shortwind.dev/oauth/token");
+  });
+
+  it("honors SHORTWIND_CLOUD_API for dev/staging", () => {
+    const eps = loginEndpoints({}, { SHORTWIND_CLOUD_API: "https://staging.example.com/" });
+    expect(eps.deviceAuthorizationUrl).toBe("https://staging.example.com/oauth/device/code");
+    expect(eps.tokenUrl).toBe("https://staging.example.com/oauth/token");
+  });
+
+  it("an explicit --endpoint wins over env and the default", () => {
+    const eps = loginEndpoints(
+      { endpoint: "http://localhost:8787" },
+      { SHORTWIND_CLOUD_API: "https://staging.example.com" },
+    );
+    expect(eps.deviceAuthorizationUrl).toBe("http://localhost:8787/oauth/device/code");
+  });
+});
 
 describe("login — happy path", () => {
   it("runs the device flow and stores the token bound to the account, active", async () => {

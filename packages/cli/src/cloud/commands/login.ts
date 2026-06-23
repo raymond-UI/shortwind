@@ -6,6 +6,7 @@ import {
   type DeviceToken,
 } from "../device-flow.js";
 import { addAccount, globalHomeRoot, type Account, type HomeEnv } from "../../home.js";
+import { resolveBaseUrl } from "../api-client.js";
 import { toArray } from "./stub.js";
 
 /**
@@ -71,11 +72,19 @@ export type LoginResult =
 /** Public client id for the device flow (no secret — RFC 8628 public client). */
 export const CLIENT_ID = "shortwind-cli";
 
-/** Default Cloud auth origin when `--endpoint` is not given. */
-export const DEFAULT_ENDPOINT = "https://shortwind.dev";
-
-function endpoints(origin: string) {
-  const base = origin.replace(/\/+$/, "");
+/**
+ * Resolve the device-flow endpoints from the SAME origin every other cloud verb
+ * uses ({@link resolveBaseUrl}: `--endpoint` → `SHORTWIND_CLOUD_API` → the
+ * branded `https://api.shortwind.dev`). This is deliberately NOT a separate
+ * `shortwind.dev` default: that is the marketing/docs apex, which 404s
+ * `/oauth/*` with an empty body — and `res.json()` on an empty body throws a raw
+ * `SyntaxError`, which is exactly how login broke when the two origins diverged.
+ */
+export function loginEndpoints(
+  opts: { endpoint?: string },
+  env: { SHORTWIND_CLOUD_API?: string | undefined } = process.env,
+) {
+  const base = resolveBaseUrl(opts.endpoint, env);
   return {
     deviceAuthorizationUrl: `${base}/oauth/device/code`,
     tokenUrl: `${base}/oauth/token`,
@@ -94,8 +103,11 @@ export async function login(
   ctx: LoginContext = {},
 ): Promise<LoginResult> {
   const env = ctx.env ?? (process.env as HomeEnv);
-  const origin = opts.endpoint ?? DEFAULT_ENDPOINT;
-  const io = ctx.io ?? createHttpDeviceFlowIO(endpoints(origin));
+  const io =
+    ctx.io ??
+    createHttpDeviceFlowIO(
+      loginEndpoints({ ...(opts.endpoint ? { endpoint: opts.endpoint } : {}) }),
+    );
   const scope = scopeString(opts.scope);
 
   const outcome = await runDeviceFlow(io, { clientId: CLIENT_ID, scope });
