@@ -46,7 +46,7 @@ describe("assembleUpdatePayload", () => {
 
 describe("runUpdate", () => {
   it("PATCHes the given id and renders the bumped version", async () => {
-    let seen: { id?: string } = {};
+    const seen: { id?: string } = {};
     const client: ApiClient = {
       findPages: async () => ({ pages: [] }),
       getPage: async () => {

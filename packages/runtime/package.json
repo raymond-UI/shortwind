@@ -24,7 +24,8 @@
     "build": "pnpm gen && tsc && pnpm bundle",
     "typecheck": "pnpm gen && tsc --noEmit",
     "test": "pnpm gen && vitest run",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@shortwind/core": "workspace:*"

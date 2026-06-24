@@ -10,7 +10,8 @@
     "build": "tsx build.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "lint": "eslint build.ts test"
   },
   "dependencies": {
     "@shortwind/core": "workspace:*"

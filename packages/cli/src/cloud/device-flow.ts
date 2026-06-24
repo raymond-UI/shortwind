@@ -133,7 +133,9 @@ export function initialPollState(
 export function nextPollState(
   state: PollState,
   response: PollResponse,
-  nowMs: number,
+  // Part of the contract for symmetry with the poll loop, but the time-based
+  // expiry (nowMs >= deadline) is enforced by the loop, not this pure transition.
+  _nowMs: number,
 ): PollState {
   // Terminal states never move.
   if (
@@ -418,7 +420,6 @@ export function createHttpDeviceFlowIO(
       ((auth) => {
         // Default presenter: the short code is the human-load-bearing part.
         const target = auth.verificationUriComplete ?? auth.verificationUri;
-        // eslint-disable-next-line no-console
         console.log(
           `\nTo authorize this device, visit:\n  ${target}\n` +
             `and enter the code:\n  ${auth.userCode}\n`,
