@@ -4,12 +4,8 @@
  * layout (see SkeletonCards for the Overview grid).
  */
 export function Skeleton({ className = "" }: { className?: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={"animate-pulse rounded bg-muted " + className}
-    />
-  );
+  // `@skeleton` = the catalog's pulsing block (animate-pulse rounded bg-muted).
+  return <div aria-hidden="true" className={"@skeleton " + className} />;
 }
 
 /** A grid of card-shaped skeletons matching the Overview page-card layout. */
@@ -17,6 +13,9 @@ export function SkeletonCards({ count = 6 }: { count?: number }) {
   return (
     <div
       data-testid="pages-loading"
+      role="status"
+      aria-label="Loading pages"
+      aria-busy="true"
       className="@grid-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
     >
       {Array.from({ length: count }).map((_, i) => (

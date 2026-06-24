@@ -23,7 +23,7 @@ export function ModerationView() {
 
   if (moderation === undefined) {
     return (
-      <div className="text-sm text-muted-foreground">
+      <div className="@muted">
         Loading moderation queue…
       </div>
     );
@@ -39,11 +39,11 @@ export function ModerationView() {
   }
 
   return (
-    <div data-testid="moderation-view" className="space-y-2">
+    <ul data-testid="moderation-view" className="list-none space-y-2">
       {moderation.map((m) => {
         const danger = m.state === "reported" || m.state === "quarantined";
         return (
-          <div
+          <li
             key={m.id}
             data-testid="moderation-row"
             className="@card flex gap-3 !p-3 text-sm"
@@ -53,26 +53,26 @@ export function ModerationView() {
             </Badge>
             <div className="flex-1 space-y-0.5">
               <div className="font-medium">{m.pageId}</div>
-              <div className="text-xs text-muted-foreground">
+              <div className="@caption">
                 {m.reason ?? "—"}
               </div>
               {m.preservedR2Key ? (
-                <div className="text-xs text-muted-foreground tabular-nums">
+                <div className="@caption tabular-nums">
                   sealed: {m.preservedR2Key}
                 </div>
               ) : null}
               {m.ncmecReportId ? (
-                <div className="text-xs text-muted-foreground tabular-nums">
+                <div className="@caption tabular-nums">
                   ncmec: {m.ncmecReportId}
                 </div>
               ) : null}
             </div>
-            <span className="text-xs text-muted-foreground tabular-nums">
+            <span className="@caption tabular-nums">
               {formatTime(m.updatedAt)}
             </span>
-          </div>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }

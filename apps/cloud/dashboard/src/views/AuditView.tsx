@@ -11,23 +11,17 @@ export function AuditView() {
   const { auditLog } = useDashboardData();
 
   if (auditLog === undefined) {
-    return <div className="text-sm text-muted-foreground">Loading audit log…</div>;
+    return <div className="@muted">Loading audit log…</div>;
   }
   if (auditLog.length === 0) {
     return <EmptyState icon="◷" title="No audit events yet" />;
   }
 
   return (
-    <div
-      data-testid="audit-view"
-      className="overflow-hidden rounded-lg border border-border"
-    >
+    <ul data-testid="audit-view" className="@list-bordered list-none">
       {auditLog.map((e) => (
-        <div
-          key={e.id}
-          data-testid="audit-row"
-          className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
-        >
+        <li key={e.id} data-testid="audit-row" className="@list-item gap-3">
+
           <span className="w-44 shrink-0 text-xs text-muted-foreground tabular-nums">
             {formatTime(e.createdAt)}
           </span>
@@ -35,8 +29,8 @@ export function AuditView() {
           <span className="truncate text-xs text-muted-foreground">
             {e.targetId ?? "—"}
           </span>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

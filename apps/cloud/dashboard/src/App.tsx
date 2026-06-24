@@ -50,13 +50,13 @@ function ActivitySection() {
   return (
     <div className="space-y-8">
       <section className="space-y-3">
-        <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+        <h2 className="@eyebrow">
           Audit log
         </h2>
         <AuditView />
       </section>
       <section className="space-y-3">
-        <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+        <h2 className="@eyebrow">
           Recipe edits
         </h2>
         <RecipeEditsView />
@@ -111,23 +111,28 @@ export function App({
           <span className="text-xs text-muted-foreground">Cloud</span>
         </div>
 
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2" aria-label="Dashboard">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              aria-current={s.id === section}
-              onClick={() => go(s.id)}
-              className={
-                "block w-full rounded-md px-3 py-1.5 text-left text-sm transition-colors " +
-                (s.id === section
-                  ? "bg-secondary font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground")
-              }
-            >
-              {s.label}
-            </button>
-          ))}
+        <nav
+          className="flex-1 overflow-y-auto px-3 py-2"
+          aria-label="Dashboard sections"
+        >
+          <ul className="list-none space-y-0.5">
+            {SECTIONS.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  aria-current={s.id === section ? "page" : undefined}
+                  onClick={() => go(s.id)}
+                  className={
+                    s.id === section
+                      ? "@nav-link-active w-full justify-start"
+                      : "@nav-link w-full justify-start"
+                  }
+                >
+                  {s.label}
+                </button>
+              </li>
+            ))}
+          </ul>
         </nav>
 
         <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
@@ -154,7 +159,7 @@ export function App({
           >
             ☰
           </button>
-          <h1 className="text-sm font-semibold tracking-tight">{active.label}</h1>
+          <h1 className="@heading-sm">{active.label}</h1>
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-6">{active.render()}</main>
       </div>
