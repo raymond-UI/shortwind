@@ -112,7 +112,10 @@ export async function run(argv: string[] = process.argv): Promise<void> {
 
   cli
     .command("init", "Bootstrap Shortwind in this project")
-    .option("--preset <name>", "Preset to install (starter|app|content|all|none)")
+    .option(
+      "--preset <name>",
+      "Preset to install: starter (5 basics) | app (dashboards/internal tools — badge, table, stat, switch, menu…) | content | all | none",
+    )
     .option("-y, --yes", `Skip prompts and use the default preset (${DEFAULT_PRESET})`)
     .option("--registry <url>", "Registry origin", { default: DEFAULT_REGISTRY })
     .option("--cwd <dir>", "Working directory", { default: process.cwd() })
