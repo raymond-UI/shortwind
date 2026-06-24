@@ -16,6 +16,26 @@ export function shortHash(hash: string): string {
 }
 
 /**
+ * Epoch-ms → a compact relative phrase ("just now", "3h ago", "2d ago"), for
+ * card meta where an absolute timestamp is too heavy. `now` is injectable for
+ * deterministic tests. Falls back to a date for anything older than ~30 days.
+ */
+export function relativeTime(ms: number, now: number = Date.now()): string {
+  const diff = now - ms;
+  if (!Number.isFinite(diff)) return "—";
+  if (diff < 0) return "just now";
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
  * Bytes → a short human size for the storage meter (CLOUD-43). Binary units
  * (1024-step) since storage is measured in bytes; one decimal past KiB. `0 B`
  * for an empty/never-published account. Deterministic — golden-testable.

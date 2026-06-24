@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PagesView } from "./views/PagesView";
+import { ProjectDetail } from "./views/ProjectDetail";
 import { AuditView } from "./views/AuditView";
 import { RecipeEditsView } from "./views/RecipeEditsView";
 import { ModerationView } from "./views/ModerationView";
@@ -24,7 +25,7 @@ import { ThemeToggle } from "./components/ThemeToggle";
  * section shows only the signed-in account's own data.
  */
 const SECTIONS = [
-  { id: "overview", label: "Overview", render: () => <PagesView /> },
+  { id: "overview", label: "Overview", render: () => <OverviewSection /> },
   { id: "analytics", label: "Analytics", render: () => <AnalyticsView /> },
   { id: "domains", label: "Domains", render: () => <DomainsView /> },
   { id: "usage", label: "Usage", render: () => <UsageView /> },
@@ -34,6 +35,15 @@ const SECTIONS = [
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
+
+/** Overview: the page-card grid, drilling into a single page's detail. */
+function OverviewSection() {
+  const [selected, setSelected] = useState<string | null>(null);
+  if (selected) {
+    return <ProjectDetail pageId={selected} onBack={() => setSelected(null)} />;
+  }
+  return <PagesView onOpen={setSelected} />;
+}
 
 /** Activity = the audit feed + the distinct recipe-edit feed (PRD §5.4). */
 function ActivitySection() {
