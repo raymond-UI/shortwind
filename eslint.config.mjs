@@ -23,4 +23,13 @@ export default defineConfig(
       ],
     },
   },
+  {
+    // `.cts` modules are CommonJS by design (e.g. the TS-plugin entry that TS's
+    // loader `require()`s and re-exports via `export =`). `import = require()` is
+    // the correct, verbatimModuleSyntax-safe form there, not a lint violation.
+    files: ["**/*.cts"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 );

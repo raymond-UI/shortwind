@@ -12,7 +12,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.typetest.json",
     "test": "vitest run",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "lint": "eslint src"
   },
   "peerDependencies": {
     "next": ">=14.0.0"

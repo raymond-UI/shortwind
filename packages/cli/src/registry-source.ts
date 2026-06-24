@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// Type-only alias for the lazily-imported generated catalog. Using a type import
+// (not a `typeof import(...)` annotation) satisfies consistent-type-imports; the
+// VALUE is still loaded lazily via the dynamic import in `bundledSource`.
+import type * as CatalogGenerated from "./catalog.generated.js";
 
 export type Presets = Record<string, string[] | "*">;
 
@@ -95,8 +99,8 @@ export const BUNDLED_ORIGIN = "bundled:@shortwind/catalog";
 export function bundledSource(): RegistrySource {
   // Imported lazily so the (large) generated module only loads when the bundled
   // catalog is actually used, not for every CLI invocation.
-  let cache: Promise<typeof import("./catalog.generated.js")> | null = null;
-  const load = (): Promise<typeof import("./catalog.generated.js")> => {
+  let cache: Promise<typeof CatalogGenerated> | null = null;
+  const load = (): Promise<typeof CatalogGenerated> => {
     cache ??= import("./catalog.generated.js");
     return cache;
   };

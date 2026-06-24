@@ -27,7 +27,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@clack/prompts": "^1.4.0",
