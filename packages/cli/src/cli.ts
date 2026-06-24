@@ -26,6 +26,19 @@ import { reseal } from "./commands/reseal.js";
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
 export const DEFAULT_PRESET = "starter";
 
+/**
+ * Format a fatal CLI error for the top-level handler (bin.ts). By default we
+ * print only the message: a raw `err.stack` leaks internal file paths and (for
+ * the cloud client) request context into the operator's terminal/logs (audit
+ * #156). Set `SHORTWIND_DEBUG=1` to surface the full stack when diagnosing.
+ */
+export function formatFatalError(err: unknown, debug: boolean): string {
+  if (err instanceof Error) {
+    return debug ? (err.stack ?? err.message) : err.message;
+  }
+  return String(err);
+}
+
 // Decide the init preset without forcing a TTY: an explicit --preset wins,
 // --yes/-y takes the default, and only the bare interactive call prompts —
 // agents and CI run `init --yes` unattended (#68).
