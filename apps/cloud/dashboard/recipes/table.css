@@ -1,0 +1,37 @@
+/* shortwind: table@0.0.1 sha:4f3295935b2a647c — DO NOT EDIT THIS LINE */
+
+/* @guide
+   Wrap the table in @table-container for horizontal overflow, then put @table
+   (or @table-zebra for striped rows) on the <table>. Cells are @th (header) and
+   @td (body); add @tr-hover to a <tr> for row highlighting.
+*/
+
+/* Scroll container for a wide table — keeps overflow horizontal. */
+@recipe table-container {
+  w-full overflow-x-auto rounded-md border border-border
+}
+
+/* Data table base. */
+@recipe table {
+  w-full border-collapse text-left text-sm text-foreground
+}
+
+/* Table header cell. */
+@recipe th {
+  border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground
+}
+
+/* Table body cell. */
+@recipe td {
+  border-b border-border px-3 py-2
+}
+
+/* Row hover state. */
+@recipe tr-hover {
+  transition-colors hover:bg-muted
+}
+
+/* Table with zebra striping on alternating rows. */
+@recipe table-zebra {
+  w-full border-collapse text-left text-sm text-foreground [&_tbody_tr:nth-child(odd)]:bg-muted
+}

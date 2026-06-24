@@ -1,0 +1,117 @@
+/* shortwind: button@0.0.2 sha:b0b08652cd757b90 — DO NOT EDIT THIS LINE */
+
+/* @guide
+   Name order is @button-<intent>[-<size>]: intent first (primary/secondary/
+   ghost/danger/outline), size second (sm/lg; omit for default). One intent per
+   button — never combine @button-primary with @button-danger. @button-ghost is
+   text-only, @button-outline is bordered with no fill, @button-icon is a square
+   icon button. @button-base is the shared shell; don't use it on its own.
+   The short @btn-<intent> forms are aliases that expand identically; the
+   full-word @button-* names are canonical — prefer them.
+*/
+
+/* Shared button base — sizing, focus ring, disabled state. */
+@recipe btn-base {
+  inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* Primary call-to-action button. */
+@recipe btn-primary {
+  @btn-base bg-primary text-primary-foreground hover:bg-primary/90
+}
+
+/* Small primary button. */
+@recipe btn-primary-sm {
+  @btn-primary px-3 py-1.5 text-xs
+}
+
+/* Large primary button. */
+@recipe btn-primary-lg {
+  @btn-primary px-6 py-3 text-base
+}
+
+/* Secondary button — bordered surface tone. */
+@recipe btn-secondary {
+  @btn-base border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80
+}
+
+/* Small secondary button. */
+@recipe btn-secondary-sm {
+  @btn-secondary px-3 py-1.5 text-xs
+}
+
+/* Large secondary button. */
+@recipe btn-secondary-lg {
+  @btn-secondary px-6 py-3 text-base
+}
+
+/* Ghost button — text only, no background. */
+@recipe btn-ghost {
+  @btn-base text-foreground hover:bg-muted
+}
+
+/* Small ghost button. */
+@recipe btn-ghost-sm {
+  @btn-ghost px-3 py-1.5 text-xs
+}
+
+/* Large ghost button. */
+@recipe btn-ghost-lg {
+  @btn-ghost px-6 py-3 text-base
+}
+
+/* Destructive button. */
+@recipe btn-danger {
+  @btn-base bg-destructive text-destructive-foreground hover:bg-destructive/90
+}
+
+/* Outline button — bordered without fill. */
+@recipe btn-outline {
+  @btn-base border border-primary text-primary hover:bg-primary/10
+}
+
+/* Square icon-only button. */
+@recipe btn-icon {
+  inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+}
+
+/* Full-word canonical aliases — expand identically to the @btn-* short forms. */
+
+/* Shared button shell (alias of @btn-base). */
+@recipe button-base { @btn-base }
+
+/* Primary call-to-action button (alias of @btn-primary). */
+@recipe button-primary { @btn-primary }
+
+/* Small primary button (alias of @btn-primary-sm). */
+@recipe button-primary-sm { @btn-primary-sm }
+
+/* Large primary button (alias of @btn-primary-lg). */
+@recipe button-primary-lg { @btn-primary-lg }
+
+/* Secondary button (alias of @btn-secondary). */
+@recipe button-secondary { @btn-secondary }
+
+/* Small secondary button (alias of @btn-secondary-sm). */
+@recipe button-secondary-sm { @btn-secondary-sm }
+
+/* Large secondary button (alias of @btn-secondary-lg). */
+@recipe button-secondary-lg { @btn-secondary-lg }
+
+/* Ghost button (alias of @btn-ghost). */
+@recipe button-ghost { @btn-ghost }
+
+/* Small ghost button (alias of @btn-ghost-sm). */
+@recipe button-ghost-sm { @btn-ghost-sm }
+
+/* Large ghost button (alias of @btn-ghost-lg). */
+@recipe button-ghost-lg { @btn-ghost-lg }
+
+/* Destructive button (alias of @btn-danger). */
+@recipe button-danger { @btn-danger }
+
+/* Outline button (alias of @btn-outline). */
+@recipe button-outline { @btn-outline }
+
+/* Square icon-only button (alias of @btn-icon). */
+@recipe button-icon { @btn-icon }

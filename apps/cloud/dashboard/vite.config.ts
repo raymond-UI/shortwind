@@ -6,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import path from "node:path";
 import fs from "node:fs";
+import { shortwind } from "@shortwind/vite";
 
 /**
  * The app is served under `/cloud` (Vite `base` below), so the SSR HTML
@@ -79,7 +80,7 @@ export default defineConfig({
       "@convex": path.resolve(__dirname, "../convex"),
     },
   },
-  plugins: [
+  plugins: [shortwind(), 
     cloudflare({ viteEnvironment: { name: "ssr" } }),
     tsconfigPaths(),
     tanstackStart(),

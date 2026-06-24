@@ -199,7 +199,7 @@ function DeploymentRow({
   return (
     <div className="flex items-center gap-3 border-b border-border px-4 py-3 text-sm last:border-0">
       <span className="font-medium">v{version.version}</span>
-      {current ? <Badge tone="accent">current</Badge> : null}
+      {current ? <Badge tone="success">current</Badge> : null}
       <span className="text-xs text-muted-foreground">
         src {shortHash(version.sourceHash)} · out {shortHash(version.expandedHash)}
       </span>

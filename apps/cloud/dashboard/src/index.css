@@ -442,3 +442,27 @@ a {
   color: var(--fg);
   text-decoration: underline;
 }
+
+/* shortwind:theme-supplement — placeholder values for tokens your theme didn't define. Tune them to your palette. */
+:root {
+  --success: oklch(0.51 0.12 165);
+  --warning: oklch(0.83 0.15 84);
+}
+.dark {
+  --success: oklch(0.59 0.14 163);
+  --warning: oklch(0.77 0.16 70);
+}
+@theme inline {
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+}
+/* end shortwind theme-supplement */
+
+/* shortwind:tones — semantic tones for tone-aware recipes (@badge, …). Set on an element:
+   <span class="@badge" data-tone="success">. Add your own: [data-tone="sev1"] { --tone-bg: …; --tone-fg: … } */
+[data-tone="neutral"] { --tone-bg: var(--muted); --tone-fg: var(--muted-foreground); }
+[data-tone="success"] { --tone-bg: color-mix(in oklab, var(--success) 15%, transparent); --tone-fg: var(--success); }
+[data-tone="warning"] { --tone-bg: color-mix(in oklab, var(--warning) 15%, transparent); --tone-fg: var(--warning); }
+[data-tone="danger"] { --tone-bg: color-mix(in oklab, var(--destructive) 15%, transparent); --tone-fg: var(--destructive); }
+[data-tone="info"] { --tone-bg: color-mix(in oklab, var(--primary) 15%, transparent); --tone-fg: var(--primary); }
+/* end shortwind tones */

@@ -1,0 +1,47 @@
+/* shortwind: feedback@0.0.1 sha:818868f6af179bcf — DO NOT EDIT THIS LINE */
+
+/* @guide
+   Inline messages use @alert (neutral) or a tone variant @alert-success/
+   warning/danger/info — one tone each. @callout is a left-accent inline note,
+   @toast is a floating notification, @banner spans the full viewport width.
+*/
+
+/* Default informational alert. */
+@recipe alert {
+  flex items-start gap-3 rounded-md border border-border bg-card p-4 text-sm text-card-foreground
+}
+
+/* Success alert. */
+@recipe alert-success {
+  flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-100
+}
+
+/* Warning alert. */
+@recipe alert-warning {
+  flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100
+}
+
+/* Danger alert. */
+@recipe alert-danger {
+  flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive
+}
+
+/* Informational alert. */
+@recipe alert-info {
+  flex items-start gap-3 rounded-md border border-primary/30 bg-primary/10 p-4 text-sm text-primary
+}
+
+/* Inline callout — flush left edge accent. */
+@recipe callout {
+  border-l-4 border-primary bg-primary/10 p-4 text-sm text-foreground
+}
+
+/* Floating toast notification. */
+@recipe toast {
+  pointer-events-auto flex items-start gap-3 rounded-md border border-border bg-popover p-4 text-sm text-popover-foreground shadow-lg
+}
+
+/* Full-width banner spanning the viewport. */
+@recipe banner {
+  w-full bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground
+}
