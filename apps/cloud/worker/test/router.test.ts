@@ -131,6 +131,42 @@ describe("CLOUD-22 router: public page", () => {
     // Streamed: the original response body is still readable independently.
     expect(await res.text()).toBe(HTML);
   });
+
+  it("edge read-through: a cached public page serves WITHOUT a KV lookup or cold call (audit #154)", async () => {
+    const r = route({ pageId: "page_rt" });
+    await putRoute(E, "rt.example.com", "/r", r);
+    await seedArtifact(r);
+
+    // Prime the edge cache with a first serve.
+    await run(req("rt.example.com", "/r"), deps());
+    expect(await edgeCache().match("https://rt.example.com/r")).not.toBeUndefined();
+
+    // Remove the KV route entirely. Without the read-through the next request would
+    // miss KV, call the (null-returning) cold source, and 404. If it still returns
+    // the page, it can only have come from the edge cache — proving the read-through
+    // short-circuits the KV+cold path.
+    await deleteRoute(E, "rt.example.com", "/r");
+    expect(await lookupRoute(E, "rt.example.com", "/r")).toBeNull();
+
+    const cold = vi.fn<ColdRouteSource>(async () => null);
+    const res2 = await run(req("rt.example.com", "/r"), deps({ coldRoute: cold }));
+    expect(res2.status).toBe(200);
+    expect(await res2.text()).toBe(HTML);
+    expect(cold).not.toHaveBeenCalled();
+  });
+
+  it("edge read-through is GET-only: a POST re-resolves and is not answered from cache (audit #154)", async () => {
+    const r = route({ pageId: "page_rt_post" });
+    await putRoute(E, "rtp.example.com", "/r", r);
+    await seedArtifact(r);
+    await run(req("rtp.example.com", "/r"), deps()); // prime the edge entry
+
+    // Remove the route; a POST must NOT be served from the (GET-keyed) edge entry.
+    await deleteRoute(E, "rtp.example.com", "/r");
+    const post = new Request("https://rtp.example.com/r", { method: "POST" });
+    const res = await run(post, deps({ coldRoute: vi.fn<ColdRouteSource>(async () => null) }));
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("CLOUD-22 router: visibility", () => {

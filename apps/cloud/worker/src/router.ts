@@ -47,7 +47,7 @@ import {
   type ColdRouteSource,
 } from "./kv.js";
 import { getArtifact } from "./r2.js";
-import { cacheArtifactResponse, edgeCacheKey } from "./cache.js";
+import { cacheArtifactResponse, edgeCacheKey, edgeCacheMatch } from "./cache.js";
 
 /**
  * Validates a bearer token against a private route. Injected so the router has
@@ -187,6 +187,18 @@ export async function handleRequest(
   //    normal resolution → 404.
   const redirect = reservedHostRedirect(host);
   if (redirect !== null) return redirect;
+
+  // 0b. Edge read-through (audit #154): serve a hot PUBLIC page straight from
+  //     caches.default, skipping the KV route lookup AND the R2 read. Only public
+  //     artifacts are ever written to the edge (step 4 guards on visibility), so a
+  //     hit is always auth-free and safe to return verbatim; staleness is bounded
+  //     by the 60s TTL + eager edge purge on delete/kill (cache.ts). GET only —
+  //     the Cache API is GET-keyed and non-idempotent methods must never be
+  //     answered from cache.
+  if (request.method === "GET") {
+    const cached = await edgeCacheMatch(request.url);
+    if (cached !== null) return cached;
+  }
 
   // 1. Resolve host/path → route. KV hot, Convex cold (injected). A KV hit does
   //    NOT call the cold source (asserted by tests + kv.ts contract).

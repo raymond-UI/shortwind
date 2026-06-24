@@ -19,9 +19,22 @@ allowBuilds:
 # only (not in any shipped package). 0.28.1 is newer than the 72h release-age
 # window, so esbuild is added to minimumReleaseAgeExclude below to take the
 # security patch immediately. Drop both once vite/vitest pin >=0.28.1.
+#
+# Force the patched ws: happy-dom (test DOM, dev-only) pulls a ws <8.21.0 with a
+# high-severity memory-exhaustion DoS (GHSA-3h5v-q93c-6h6q). >=8.21.0 is the
+# patch. Drop once happy-dom pins it.
+#
+# Force the patched vite: the astro (>=7) and vitest (>=8) dev toolchains pull
+# vite versions with a high-severity `server.fs.deny` Windows-altdatastream
+# bypass (GHSA-fx2h-pf6j-xcff). Dev-server only, not in any shipped package.
+# Two ranged overrides keep each major on its own patched line (no cross-major
+# bump that would break astro's vite-7 peer). Drop once astro/vitest pin them.
 overrides:
   devalue: ">=5.8.1"
   postcss: ">=8.5.10"
   esbuild: ">=0.28.1"
+  "ws@>=8.0.0 <8.21.0": ">=8.21.0"
+  "vite@>=7.0.0 <=7.3.4": ">=7.3.5"
+  "vite@>=8.0.0 <=8.0.15": ">=8.0.16"
 minimumReleaseAgeExclude:
   - esbuild
