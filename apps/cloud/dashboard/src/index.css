@@ -1,38 +1,134 @@
 @import "tailwindcss";
 
 /*
- * Shortwind Cloud oversight dashboard — dark mono "index" aesthetic.
- * Ported verbatim from the prior SPA's styles.css (the `.recipe-edit` distinct
- * styling is load-bearing per PRD §5.4 and asserted by the view tests).
+ * Shortwind Cloud dashboard — shares the docs-site theme + branding (CLOUD epic
+ * #184). The token system below is ported verbatim from `site/src/index.css`
+ * (oklch neutral palette + `--term` green accent, JetBrains Mono / Inter,
+ * sharp 0.25rem "dev-raw" radius) so the hosting console and the docs site read
+ * as one product. Full light + dark via the `.dark` class (toggle persisted).
+ *
+ * The legacy oversight class layer (`.shell`, `.panel`, `.row`, `.badge`,
+ * `.meter`, `.auth-*`, …) is kept so existing views/auth pages render unchanged;
+ * their old `--bg/--panel/--fg/--muted/--accent` names are aliased to the new
+ * tokens below, so they become theme-aware (light + dark) with zero view edits.
+ * Later epic-#184 issues restyle the views into the card-based hosting UI.
  */
 
+/* shortwind:theme — default tokens (ported from the docs site). */
+@custom-variant dark (&:is(.dark *));
+
 :root {
-  color-scheme: dark;
-  --bg: #0a0a0a;
-  --panel: #111111;
-  --border: #262626;
-  --fg: #ededed;
-  --muted: #8a8a8a;
-  --accent: #e5e5e5;
+  /* dev-raw: sharp corners, near-square UI */
+  --radius: 0.25rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  /* terminal accent — active markers, links, status */
+  --term: oklch(0.62 0.17 150);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+
+  /* Legacy aliases — resolved at use-time, so they track the active theme. */
+  --bg: var(--background);
+  --panel: var(--card);
+  --fg: var(--foreground);
   /* Recipe-edit events are visually DISTINCT (PRD §5.4) — amber rail. */
-  --recipe: #d99e3f;
-  --recipe-bg: rgba(217, 158, 63, 0.08);
-  --danger: #e05252;
-  --danger-bg: rgba(224, 82, 82, 0.08);
-  font-family:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --recipe: oklch(0.7 0.13 75);
+  --recipe-bg: color-mix(in oklch, var(--recipe) 10%, transparent);
+  --danger: var(--destructive);
+  --danger-bg: color-mix(in oklch, var(--destructive) 10%, transparent);
 }
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --term: oklch(0.78 0.18 150);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-term: var(--term);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+  /* dev-raw type system: mono-forward UI, clean sans for prose */
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html {
+    /* Mono reads wide; drop the root so the console feels tool-dense. */
+    font-size: 14px;
+  }
+  body {
+    @apply bg-background text-foreground font-mono antialiased;
+    margin: 0;
+    line-height: 1.5;
+    font-feature-settings: "calt", "liga";
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-mono tracking-tight;
+  }
+  ::selection {
+    @apply bg-foreground text-background;
+  }
+}
+/* end shortwind theme */
 
 * {
   box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-size: 13px;
-  line-height: 1.5;
 }
 
 a {
@@ -62,7 +158,7 @@ a {
 }
 
 .masthead .sub {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 12px;
 }
 
@@ -80,7 +176,7 @@ a {
 .tab {
   background: transparent;
   border: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--muted-foreground);
   padding: 6px 12px;
   font: inherit;
   cursor: pointer;
@@ -101,7 +197,7 @@ a {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--muted);
+  color: var(--muted-foreground);
   margin: 0 0 10px;
 }
 
@@ -118,7 +214,7 @@ a {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .badge {
@@ -126,7 +222,7 @@ a {
   border: 1px solid var(--border);
   padding: 0 6px;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .badge.danger {
@@ -140,7 +236,7 @@ a {
 
 .empty {
   padding: 24px 12px;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 /* Recipe-edit feed: amber left rail + tint so the human notices it as a
@@ -226,7 +322,7 @@ a {
 }
 
 .auth-card .sub {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 12px;
   margin: 0 0 20px;
 }
@@ -241,7 +337,7 @@ a {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--muted);
+  color: var(--muted-foreground);
   margin-bottom: 6px;
 }
 
@@ -256,7 +352,7 @@ a {
 
 .field input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--ring);
 }
 
 .btn {
@@ -338,7 +434,7 @@ a {
 .auth-foot {
   margin-top: 16px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--muted-foreground);
   text-align: center;
 }
 
