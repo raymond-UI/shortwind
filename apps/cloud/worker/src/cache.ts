@@ -73,6 +73,20 @@ export function edgeCacheKey(url: string | URL): string {
 }
 
 /**
+ * Edge read-through (audit #154): look up a previously-cached response for this
+ * URL, or null on a miss. ONLY public artifacts are ever written to the edge
+ * (the router puts behind a `visibility === "public"` guard), so a hit is always
+ * an auth-free public page — safe to return as-is, skipping the KV route lookup
+ * and R2 read entirely. Staleness is bounded by the 60s artifact TTL and the
+ * eager `invalidateRoute` on delete/kill/visibility-flip. Same normalized
+ * `(host, pathname)` key as put/delete (audit #4 — query stripped).
+ */
+export async function edgeCacheMatch(url: string | URL): Promise<Response | null> {
+  const hit = await edgeCache().match(edgeCacheKey(url));
+  return hit ?? null;
+}
+
+/**
  * Purge the edge cache entry for a URL. Called by publish/update/delete to
  * invalidate a route so the next request re-resolves and re-streams the new (or
  * absent) artifact. Returns whether an entry was actually deleted. Uses the same
