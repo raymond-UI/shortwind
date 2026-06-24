@@ -1,39 +1,41 @@
 import { useDashboardData } from "../lib/data";
 import { describeRecipeEdit, formatTime, shortHash } from "../lib/format";
+import { EmptyState } from "../components/EmptyState";
 
 /**
- * Recipe-edits view (CLOUD-35, PRD §5.4) — THE distinct feed.
- *
- * This is the key dashboard feature: a recipe-family edit that an agent rode up
- * on a publish is shown as its OWN kind of event — visually distinct from an
- * ordinary page edit (amber rail + "recipe edit" tag + the "affects N pages on
- * next publish" warning) — so the human notices it and can roll back. The
- * `.recipe-edit` class + `data-recipe-edit` marker are the load-bearing distinct
- * styling the component test asserts on.
+ * Recipe-edits view (CLOUD-35, PRD §5.4) — THE distinct feed, restyled
+ * (epic #184, #189). A recipe-family edit that rode up on a publish is shown as
+ * its OWN kind of event (amber rail + "recipe edit" tag + "affects N pages"
+ * warning) so the human notices and can roll back. The `.recipe-edit` class +
+ * `data-recipe-edit` marker are the load-bearing distinct styling the tests pin.
  */
 export function RecipeEditsView() {
   const { recipeEdits } = useDashboardData();
 
   if (recipeEdits === undefined) {
-    return <div className="empty">Loading recipe edits…</div>;
+    return (
+      <div className="text-sm text-muted-foreground">Loading recipe edits…</div>
+    );
   }
   if (recipeEdits.length === 0) {
-    return <div className="empty">No recipe edits yet.</div>;
+    return <EmptyState icon="✎" title="No recipe edits yet" />;
   }
 
   return (
-    <div className="panel" data-testid="recipe-edits-view">
+    <div data-testid="recipe-edits-view" className="space-y-2">
       {recipeEdits.map((e) => (
         <div
-          className="row recipe-edit"
           key={e.id}
           data-testid="recipe-edit-row"
           data-recipe-edit="true"
+          className="recipe-edit flex gap-3 rounded-lg border border-border p-3"
         >
-          <span className="badge recipe-kind">recipe edit</span>
-          <div style={{ flex: 1 }}>
-            <div>{describeRecipeEdit(e)}</div>
-            <div className="muted mono">
+          <span className="badge recipe-kind shrink-0 self-start">
+            recipe edit
+          </span>
+          <div className="flex-1">
+            <div className="text-sm">{describeRecipeEdit(e)}</div>
+            <div className="text-xs text-muted-foreground tabular-nums">
               body {shortHash(e.bodySha)} · {formatTime(e.createdAt)}
             </div>
           </div>

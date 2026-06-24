@@ -3,17 +3,16 @@ import { useDashboardData } from "../lib/data";
 import { formatTime } from "../lib/format";
 
 /**
- * Policy view (CLOUD-35, PRD §3/§7.2): operator policy toggles. The one place
- * the dashboard WRITES — flipping a toggle calls `setAccountPolicy`. Today's
- * single toggle is `customDomainNeedsApproval` (the human-gated custom-domain
- * bind). Read-mostly everywhere else; this is the operator's lever.
+ * Policy toggles (CLOUD-35, PRD §7.2) — restyled and folded into Settings
+ * (epic #184). The one place the dashboard WRITES: flipping a toggle calls
+ * `setAccountPolicy`. Today's single toggle is `customDomainNeedsApproval`.
  */
 export function PolicyView() {
   const { policy, setPolicy } = useDashboardData();
   const [saving, setSaving] = useState(false);
 
   if (policy === undefined) {
-    return <div className="empty">Loading policy…</div>;
+    return <div className="text-sm text-muted-foreground">Loading policy…</div>;
   }
 
   async function toggleCustomDomain() {
@@ -28,37 +27,45 @@ export function PolicyView() {
     }
   }
 
+  const on = policy.customDomainNeedsApproval;
+
   return (
-    <div className="panel" data-testid="policy-view">
-      <div className="toggle">
+    <div
+      data-testid="policy-view"
+      className="rounded-lg border border-border bg-card"
+    >
+      <div className="flex items-center gap-4 p-4">
         <span
-          className={`badge${policy.customDomainNeedsApproval ? "" : " danger"}`}
           data-testid="custom-domain-state"
+          className={
+            "inline-flex w-10 shrink-0 justify-center rounded border px-1.5 py-0.5 text-[11px] font-medium " +
+            (on ? "border-term/40 text-term" : "border-border text-muted-foreground")
+          }
         >
-          {policy.customDomainNeedsApproval ? "ON" : "OFF"}
+          {on ? "ON" : "OFF"}
         </span>
-        <div style={{ flex: 1 }}>
-          <div>Custom domain needs approval</div>
-          <div className="muted">
+        <div className="flex-1">
+          <div className="text-sm font-medium">Custom domain needs approval</div>
+          <div className="text-xs text-muted-foreground">
             When on, a custom-domain bind waits for human approval before going
             live (PRD §7.2).
           </div>
         </div>
         <button
+          type="button"
           onClick={toggleCustomDomain}
           disabled={saving}
           data-testid="toggle-custom-domain"
+          className="rounded-md border border-border px-3 py-1.5 text-xs transition-colors hover:bg-secondary disabled:opacity-50"
         >
-          {saving
-            ? "Saving…"
-            : policy.customDomainNeedsApproval
-              ? "Turn off"
-              : "Turn on"}
+          {saving ? "Saving…" : on ? "Turn off" : "Turn on"}
         </button>
       </div>
-      <div className="row muted mono">
+      <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground tabular-nums">
         last set:{" "}
-        {policy.updatedAt === null ? "never (defaults)" : formatTime(policy.updatedAt)}
+        {policy.updatedAt === null
+          ? "never (defaults)"
+          : formatTime(policy.updatedAt)}
       </div>
     </div>
   );
