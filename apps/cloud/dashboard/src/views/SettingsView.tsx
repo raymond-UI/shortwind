@@ -18,8 +18,8 @@ export function SettingsView() {
     <div className="max-w-2xl space-y-10" data-testid="settings-view">
       <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold">Policy</h2>
-          <p className="text-xs text-muted-foreground">
+          <h2 className="@heading-sm">Policy</h2>
+          <p className="@caption">
             Account-wide controls applied to every page.
           </p>
         </div>
@@ -28,8 +28,8 @@ export function SettingsView() {
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold">API tokens</h2>
-          <p className="text-xs text-muted-foreground">
+          <h2 className="@heading-sm">API tokens</h2>
+          <p className="@caption">
             Scoped bearer tokens used by the CLI and agents. Revoke any you no
             longer trust.
           </p>
@@ -44,7 +44,7 @@ function TokenList() {
   const { tokens } = useDashboardData();
 
   if (tokens === undefined) {
-    return <div className="text-sm text-muted-foreground">Loading tokens…</div>;
+    return <div className="@muted">Loading tokens…</div>;
   }
   if (tokens.length === 0) {
     return (
@@ -58,14 +58,12 @@ function TokenList() {
   }
 
   return (
-    <div
-      data-testid="tokens-view"
-      className="divide-y divide-border overflow-hidden rounded-lg border border-border"
-    >
+    <ul data-testid="tokens-view" className="@list-bordered list-none">
+
       {tokens.map((t) => (
         <TokenRowItem key={t.tokenId} token={t} />
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -84,10 +82,8 @@ function TokenRowItem({ token }: { token: TokenRow }) {
   }
 
   return (
-    <div
-      data-testid="token-row"
-      className="flex items-center gap-3 px-4 py-3 text-sm"
-    >
+    <li data-testid="token-row" className="@list-item items-start gap-3">
+
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-medium">
@@ -118,6 +114,6 @@ function TokenRowItem({ token }: { token: TokenRow }) {
           {busy ? "Revoking…" : "Revoke"}
         </button>
       )}
-    </div>
+    </li>
   );
 }

@@ -10,7 +10,7 @@ describe("ProjectDetail", () => {
     expect(screen.getByRole("heading", { name: "launch" })).toBeInTheDocument();
 
     // Deployments tab carries the version history (moved from the old inline expand).
-    fireEvent.click(screen.getByRole("button", { name: "deployments" }));
+    fireEvent.click(screen.getByRole("tab", { name: "deployments" }));
     const deploys = screen.getByTestId("deployments");
     expect(deploys.textContent).toContain("v3");
     expect(deploys.textContent).toContain("v2");
@@ -33,7 +33,7 @@ describe("ProjectDetail", () => {
     renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />, {
       setVisibility,
     });
-    fireEvent.click(screen.getByRole("button", { name: "settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "settings" }));
     // Open the visibility menu, then pick private (fixture page_1 is public).
     fireEvent.click(screen.getByRole("button", { name: "Change visibility" }));
     fireEvent.click(screen.getByTestId("visibility-private"));
@@ -46,7 +46,7 @@ describe("ProjectDetail", () => {
     renderWithData(<ProjectDetail pageId="page_1" onBack={onBack} />, {
       deletePage,
     });
-    fireEvent.click(screen.getByRole("button", { name: "settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "settings" }));
     // delete-page opens the dialog; confirm-delete lives inside it.
     fireEvent.click(screen.getByTestId("delete-page"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();

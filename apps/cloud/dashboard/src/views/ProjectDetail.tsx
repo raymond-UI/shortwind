@@ -35,7 +35,7 @@ export function ProjectDetail({
   const [tab, setTab] = useState<DetailTab>("overview");
 
   if (pages === undefined) {
-    return <div className="text-sm text-muted-foreground">Loading…</div>;
+    return <div className="@muted">Loading…</div>;
   }
   const entry = pages.find((p) => p.page.id === pageId);
   if (!entry) {
@@ -58,14 +58,14 @@ export function ProjectDetail({
       <div className="space-y-3">
         <BackButton onBack={onBack} />
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-semibold tracking-tight">{page.slug}</h2>
+          <h2 className="@heading-md">{page.slug}</h2>
           <LifecycleStatus lifecycle={page.lifecycle} />
           <VisibilityBadge visibility={page.visibility} />
           <a
             href={url}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-muted-foreground hover:text-term"
+            className="@link @caption"
           >
             {pageHost(page.slug, page.customDomain)} ↗
           </a>
@@ -73,41 +73,49 @@ export function ProjectDetail({
         </div>
       </div>
 
-      <nav className="flex gap-1 border-b border-border" aria-label="Project">
+      <div
+        role="tablist"
+        aria-label="Project sections"
+        className="flex gap-1 border-b border-border"
+      >
         {(["overview", "deployments", "settings"] as DetailTab[]).map((t) => (
           <button
             key={t}
             type="button"
-            aria-current={t === tab}
+            role="tab"
+            id={`tab-${t}`}
+            aria-selected={t === tab}
+            aria-controls={`panel-${t}`}
             onClick={() => setTab(t)}
             className={
-              "-mb-px border-b-2 px-3 py-2 text-sm capitalize transition-colors " +
-              (t === tab
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground")
+              t === tab ? "@tab-active -mb-px capitalize" : "@tab -mb-px capitalize"
             }
           >
             {t}
           </button>
         ))}
-      </nav>
+      </div>
 
-      {tab === "overview" ? <OverviewTab entry={entry} /> : null}
-      {tab === "deployments" ? <DeploymentsTab entry={entry} /> : null}
-      {tab === "settings" ? (
-        <SettingsTab entry={entry} onBack={onBack} />
-      ) : null}
+      <div
+        role="tabpanel"
+        id={`panel-${tab}`}
+        aria-labelledby={`tab-${tab}`}
+        tabIndex={0}
+        className="focus:outline-none"
+      >
+        {tab === "overview" ? <OverviewTab entry={entry} /> : null}
+        {tab === "deployments" ? <DeploymentsTab entry={entry} /> : null}
+        {tab === "settings" ? (
+          <SettingsTab entry={entry} onBack={onBack} />
+        ) : null}
+      </div>
     </div>
   );
 }
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onBack}
-      className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-    >
+    <button type="button" onClick={onBack} className="@btn-ghost-sm">
       ← All pages
     </button>
   );
@@ -123,52 +131,57 @@ function CopyButton({ value }: { value: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1200);
       }}
-      className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+      className="@btn-ghost-sm"
     >
       {copied ? "copied" : "copy URL"}
     </button>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex justify-between gap-4 border-b border-border/60 py-2 text-sm last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right">{children}</span>
-    </div>
-  );
-}
-
 function OverviewTab({ entry }: { entry: PageWithVersions }) {
   const { page } = entry;
+  // Semantic description list — the @dl / @dt / @dd recipes (label | value grid).
   return (
-    <div className="@card max-w-xl !py-0">
-      <Field label="Slug">{page.slug}</Field>
-      <Field label="Live URL">
+    <dl className="@card @dl max-w-xl">
+      <dt className="@dt">Slug</dt>
+      <dd className="@dd">{page.slug}</dd>
+
+      <dt className="@dt">Live URL</dt>
+      <dd className="@dd">
         <a
           href={pageUrl(page.slug, page.customDomain)}
           target="_blank"
           rel="noreferrer"
-          className="hover:text-term"
+          className="@link"
         >
           {pageHost(page.slug, page.customDomain)}
         </a>
-      </Field>
-      <Field label="Visibility">
+      </dd>
+
+      <dt className="@dt">Visibility</dt>
+      <dd className="@dd">
         <VisibilityBadge visibility={page.visibility} />
-      </Field>
-      <Field label="Status">
+      </dd>
+
+      <dt className="@dt">Status</dt>
+      <dd className="@dd">
         <LifecycleStatus lifecycle={page.lifecycle} />
-      </Field>
-      <Field label="Current version">v{page.currentVersion}</Field>
-      <Field label="Tags">
-        {page.tags.length ? page.tags.join(", ") : "—"}
-      </Field>
-      <Field label="Created">{formatTime(page.createdAt)}</Field>
-      <Field label="Updated">
+      </dd>
+
+      <dt className="@dt">Current version</dt>
+      <dd className="@dd">v{page.currentVersion}</dd>
+
+      <dt className="@dt">Tags</dt>
+      <dd className="@dd">{page.tags.length ? page.tags.join(", ") : "—"}</dd>
+
+      <dt className="@dt">Created</dt>
+      <dd className="@dd">{formatTime(page.createdAt)}</dd>
+
+      <dt className="@dt">Updated</dt>
+      <dd className="@dd">
         {formatTime(page.updatedAt)} ({relativeTime(page.updatedAt)})
-      </Field>
-    </div>
+      </dd>
+    </dl>
   );
 }
 
@@ -180,14 +193,11 @@ function DeploymentsTab({ entry }: { entry: PageWithVersions }) {
     );
   }
   return (
-    <div
-      data-testid="deployments"
-      className="overflow-hidden rounded-lg border border-border"
-    >
+    <ul data-testid="deployments" className="@list-bordered list-none">
       {versions.map((v, i) => (
         <DeploymentRow key={v.id} version={v} current={i === 0} />
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -199,16 +209,16 @@ function DeploymentRow({
   current: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border px-4 py-3 text-sm last:border-0">
+    <li className="@list-item gap-3">
       <span className="font-medium">v{version.version}</span>
       {current ? <Badge tone="success">current</Badge> : null}
-      <span className="text-xs text-muted-foreground">
+      <span className="@caption">
         src {shortHash(version.sourceHash)} · out {shortHash(version.expandedHash)}
       </span>
       <span className="ml-auto text-xs text-muted-foreground">
         {relativeTime(version.createdAt)}
       </span>
-    </div>
+    </li>
   );
 }
 
@@ -279,7 +289,7 @@ function SettingsTab({
       {dead ? null : (
         <div className="space-y-3 rounded-lg border border-destructive/40 p-4">
           <div className="text-sm font-medium text-destructive">Danger zone</div>
-          <p className="text-xs text-muted-foreground">
+          <p className="@caption">
             Deleting tombstones the page — it stops serving (410) but its versions
             are retained (§8.2).
           </p>
@@ -306,7 +316,7 @@ function SettingsTab({
           <h3 id="delete-dialog-title" className="text-sm font-semibold">
             Delete {page.slug}?
           </h3>
-          <p className="text-xs text-muted-foreground">
+          <p className="@caption">
             This tombstones the page — it stops serving (410). Its versions are
             retained (§8.2) and it cannot be re-published at this URL.
           </p>

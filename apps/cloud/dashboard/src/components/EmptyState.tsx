@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
 /**
- * Shared empty / placeholder state — a bordered card with a glyph, title, and
- * supporting copy. Used for "nothing here yet" and for not-yet-wired surfaces
- * (e.g. Analytics, which has a designed empty state until edge telemetry lands).
+ * Shared empty / placeholder state — the catalog's `@empty` recipes
+ * (`@empty` / `@empty-icon` / `@empty-title` / `@empty-description`). Used for
+ * "nothing here yet" and for not-yet-wired surfaces.
  */
 export function EmptyState({
   icon,
@@ -19,22 +19,15 @@ export function EmptyState({
   testId?: string;
 }) {
   return (
-    <div
-      data-testid={testId}
-      className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/30 px-6 py-16 text-center"
-    >
+    <div data-testid={testId} className="@empty">
       {icon ? (
-        <div className="mb-3 text-2xl text-muted-foreground" aria-hidden="true">
+        <div className="@empty-icon" aria-hidden="true">
           {icon}
         </div>
       ) : null}
-      <h3 className="text-sm font-medium text-foreground">{title}</h3>
-      {description ? (
-        <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-          {description}
-        </p>
-      ) : null}
-      {children ? <div className="mt-4">{children}</div> : null}
+      <h3 className="@empty-title">{title}</h3>
+      {description ? <p className="@empty-description">{description}</p> : null}
+      {children ? <div>{children}</div> : null}
     </div>
   );
 }

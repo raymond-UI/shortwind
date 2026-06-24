@@ -10,7 +10,7 @@ export function DomainsView() {
   const { pages } = useDashboardData();
 
   if (pages === undefined) {
-    return <div className="text-sm text-muted-foreground">Loading domains…</div>;
+    return <div className="@muted">Loading domains…</div>;
   }
 
   const domains = pages
@@ -33,19 +33,14 @@ export function DomainsView() {
   }
 
   return (
-    <div
-      data-testid="domains-view"
-      className="divide-y divide-border overflow-hidden rounded-lg border border-border"
-    >
+    <ul data-testid="domains-view" className="@list-bordered list-none">
       {domains.map((d) => (
-        <div
-          key={d.id}
-          className="flex items-center justify-between px-4 py-3 text-sm"
-        >
+        <li key={d.id} className="@list-item justify-between">
+
           <span className="font-medium">{d.domain}</span>
-          <span className="text-xs text-muted-foreground">/{d.slug}</span>
-        </div>
+          <span className="@caption">/{d.slug}</span>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

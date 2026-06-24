@@ -36,14 +36,16 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
   }
 
   return (
-    <div
+    <ul
       data-testid="pages-view"
-      className="@grid-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+      className="@grid-3 grid list-none gap-4 sm:grid-cols-2 xl:grid-cols-3"
     >
       {pages.map((p) => (
-        <PageCard key={p.page.id} entry={p} onOpen={onOpen} />
+        <li key={p.page.id}>
+          <PageCard entry={p} onOpen={onOpen} />
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -58,27 +60,33 @@ function PageCard({
   const host = pageHost(page.slug, page.customDomain);
   const interactive = Boolean(onOpen);
 
+  // Accessible clickable card: the title is a real <button> whose hit area is
+  // stretched over the whole card (`after:absolute after:inset-0`); the Visit
+  // link sits above it (`relative z-10`). Real focusable controls + no nested
+  // interactives (button and link are siblings) — unlike a `div role="button"`.
   return (
-    <div
+    <article
       data-testid={`page-card-${page.slug}`}
-      role={interactive ? "button" : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onClick={interactive ? () => onOpen?.(page.id) : undefined}
-      onKeyDown={
-        interactive
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") onOpen?.(page.id);
-            }
-          : undefined
+      className={
+        (interactive ? "@card-interactive" : "@card") +
+        " @stack-sm relative focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
       }
-      // @card-interactive = the catalog's clickable card (hover shadow + focus
-      // ring); @stack-sm stacks the inner rows.
-      className={interactive ? "@card-interactive @stack-sm" : "@card @stack-sm"}
     >
       <div className="@row-between flex items-start gap-2">
-        <span className="truncate font-medium" title={page.slug}>
-          {page.slug}
-        </span>
+        <h3 className="truncate font-medium">
+          {interactive ? (
+            <button
+              type="button"
+              onClick={() => onOpen?.(page.id)}
+              title={page.slug}
+              className="after:absolute after:inset-0 after:rounded-lg focus:outline-none"
+            >
+              {page.slug}
+            </button>
+          ) : (
+            <span title={page.slug}>{page.slug}</span>
+          )}
+        </h3>
         <LifecycleStatus lifecycle={page.lifecycle} />
       </div>
 
@@ -86,14 +94,13 @@ function PageCard({
         href={pageUrl(page.slug, page.customDomain)}
         target="_blank"
         rel="noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className="@link truncate text-xs text-muted-foreground hover:text-term"
+        className="@link relative z-10 truncate text-xs text-muted-foreground hover:text-term"
         title={host}
       >
         {host} ↗
       </a>
 
-      <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+      <div className="relative z-10 mt-auto flex flex-wrap items-center gap-2 pt-1">
         <VisibilityBadge visibility={page.visibility} />
         <Badge>v{page.currentVersion}</Badge>
         {page.tags.map((t) => (
@@ -103,6 +110,6 @@ function PageCard({
           {relativeTime(page.updatedAt)}
         </span>
       </div>
-    </div>
+    </article>
   );
 }

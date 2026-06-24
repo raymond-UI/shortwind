@@ -12,10 +12,11 @@ describe("PagesView (Overview cards)", () => {
     expect(screen.getByText("tombstoned")).toBeInTheDocument();
   });
 
-  it("calls onOpen when a card is activated", () => {
+  it("calls onOpen when the card's title button is activated", () => {
     const onOpen = vi.fn();
     renderWithData(<PagesView onOpen={onOpen} />);
-    fireEvent.click(screen.getByTestId("page-card-launch"));
+    // The title is a real <button> (stretched over the card), not a div role.
+    fireEvent.click(screen.getByRole("button", { name: "launch" }));
     expect(onOpen).toHaveBeenCalledWith("page_1");
   });
 

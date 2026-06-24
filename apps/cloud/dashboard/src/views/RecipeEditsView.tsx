@@ -14,7 +14,7 @@ export function RecipeEditsView() {
 
   if (recipeEdits === undefined) {
     return (
-      <div className="text-sm text-muted-foreground">Loading recipe edits…</div>
+      <div className="@muted">Loading recipe edits…</div>
     );
   }
   if (recipeEdits.length === 0) {
@@ -22,9 +22,9 @@ export function RecipeEditsView() {
   }
 
   return (
-    <div data-testid="recipe-edits-view" className="space-y-2">
+    <ul data-testid="recipe-edits-view" className="list-none space-y-2">
       {recipeEdits.map((e) => (
-        <div
+        <li
           key={e.id}
           data-testid="recipe-edit-row"
           data-recipe-edit="true"
@@ -35,12 +35,12 @@ export function RecipeEditsView() {
           </span>
           <div className="flex-1">
             <div className="text-sm">{describeRecipeEdit(e)}</div>
-            <div className="text-xs text-muted-foreground tabular-nums">
+            <div className="@caption tabular-nums">
               body {shortHash(e.bodySha)} · {formatTime(e.createdAt)}
             </div>
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

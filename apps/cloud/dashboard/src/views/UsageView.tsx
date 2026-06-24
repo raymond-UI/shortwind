@@ -11,7 +11,7 @@ export function UsageView() {
   const { usage } = useDashboardData();
 
   if (usage === undefined) {
-    return <div className="text-sm text-muted-foreground">Loading usage…</div>;
+    return <div className="@muted">Loading usage…</div>;
   }
 
   const meters = [
@@ -37,7 +37,7 @@ export function UsageView() {
 
   return (
     <div className="space-y-4" data-testid="usage-view">
-      <p className="text-xs text-muted-foreground" data-testid="usage-cost-note">
+      <p className="@caption" data-testid="usage-cost-note">
         Metered to what costs money (PRD §6.4): publishes, custom domains, and
         storage. Page views are not billed — a viral page costs nothing.
       </p>
@@ -53,11 +53,11 @@ export function UsageView() {
               {m.value}
             </div>
             <div className="@stat-label">{m.label}</div>
-            <div className="text-xs text-muted-foreground">{m.hint}</div>
+            <div className="@caption">{m.hint}</div>
           </div>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground tabular-nums">
+      <p className="@caption tabular-nums">
         period:{" "}
         {usage.periodStart === null
           ? "since account start"

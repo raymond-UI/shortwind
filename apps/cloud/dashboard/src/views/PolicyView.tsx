@@ -12,7 +12,7 @@ export function PolicyView() {
   const [saving, setSaving] = useState(false);
 
   if (policy === undefined) {
-    return <div className="text-sm text-muted-foreground">Loading policy…</div>;
+    return <div className="@muted">Loading policy…</div>;
   }
 
   async function toggleCustomDomain() {
@@ -41,7 +41,7 @@ export function PolicyView() {
         </span>
         <div className="flex-1">
           <div className="text-sm font-medium">Custom domain needs approval</div>
-          <div className="text-xs text-muted-foreground">
+          <div className="@caption">
             When on, a custom-domain bind waits for human approval before going
             live (PRD §7.2).
           </div>
@@ -56,7 +56,7 @@ export function PolicyView() {
           {saving ? "Saving…" : on ? "Turn off" : "Turn on"}
         </button>
       </div>
-      <div className="text-xs text-muted-foreground tabular-nums">
+      <div className="@caption tabular-nums">
         last set:{" "}
         {policy.updatedAt === null
           ? "never (defaults)"
