@@ -13,6 +13,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import type { ConvexQueryClient } from "@convex-dev/react-query";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import appCss from "../index.css?url";
 
 /**
@@ -38,7 +39,7 @@ export const Route = createRootRouteWithContext<{
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "robots", content: "noindex, nofollow" },
-      { title: "Shortwind Cloud — Oversight" },
+      { title: "Shortwind Cloud" },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
   }),
@@ -71,8 +72,13 @@ function RootComponent() {
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className="dark">
+    // `suppressHydrationWarning`: the pre-hydration script below sets the `.dark`
+    // class from the saved/OS preference, so the class is intentionally not
+    // managed by React (next-themes pattern) — don't warn on the mismatch.
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Apply the theme before first paint to avoid a flash (epic #184). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

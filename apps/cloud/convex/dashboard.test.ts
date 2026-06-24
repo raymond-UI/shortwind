@@ -374,3 +374,77 @@ describe("dashboard policy (getAccountPolicy / setAccountPolicy)", () => {
     expect(bPolicy.customDomainNeedsApproval).toBe(true);
   });
 });
+
+describe("dashboard API tokens (operator-gated, account-scoped — epic #184)", () => {
+  it("listTokens returns only the operator's own tokens, hash omitted", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedAccount(t, "acct_tok_a");
+    await seedAccount(t, "acct_tok_b");
+
+    const aTokens = await t.query(api.dashboard.listTokens, {
+      bearer: a.readBearer,
+    });
+    // seedAccount mints exactly two tokens per account (read + write bearers).
+    expect(aTokens).toHaveLength(2);
+    for (const tk of aTokens) expect(tk).not.toHaveProperty("tokenHash");
+  });
+
+  it("revokeToken revokes the operator's own token (account-scoped)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedAccount(t, "acct_tok_rev");
+    const issued = await t.mutation(internal.tokens.issueToken, {
+      accountId: a.accountId as never,
+      scopes: ["pages:read"],
+      label: "extra",
+    });
+
+    const res = await t.mutation(api.dashboard.revokeToken, {
+      bearer: a.writeBearer,
+      tokenId: issued.tokenId,
+    });
+    expect(res.revoked).toBe(true);
+
+    const after = await t.query(api.dashboard.listTokens, {
+      bearer: a.readBearer,
+    });
+    expect(after.find((tk) => tk.tokenId === issued.tokenId)?.revokedAt).not.toBeNull();
+  });
+
+  it("cannot revoke another account's token (no cross-account reach)", async () => {
+    const t = convexTest(schema, modules);
+    const attacker = await seedAccount(t, "acct_tok_attacker");
+    const victim = await seedAccount(t, "acct_tok_victim");
+    const issued = await t.mutation(internal.tokens.issueToken, {
+      accountId: victim.accountId as never,
+      scopes: ["pages:read"],
+    });
+
+    await expect(
+      t.mutation(api.dashboard.revokeToken, {
+        bearer: attacker.writeBearer,
+        tokenId: issued.tokenId,
+      }),
+    ).rejects.toThrow();
+
+    // The victim's token is untouched.
+    const vTokens = await t.query(api.dashboard.listTokens, {
+      bearer: victim.readBearer,
+    });
+    expect(vTokens.find((tk) => tk.tokenId === issued.tokenId)?.revokedAt).toBeNull();
+  });
+
+  it("rejects revokeToken from a read-only bearer (pages:write required)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedAccount(t, "acct_tok_ro");
+    const issued = await t.mutation(internal.tokens.issueToken, {
+      accountId: a.accountId as never,
+      scopes: ["pages:read"],
+    });
+    await expect(
+      t.mutation(api.dashboard.revokeToken, {
+        bearer: a.readBearer,
+        tokenId: issued.tokenId,
+      }),
+    ).rejects.toThrow();
+  });
+});

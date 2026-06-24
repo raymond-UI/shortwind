@@ -64,7 +64,11 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
   );
   const policy = useQuery(api.dashboard.getAccountPolicy, skip ? "skip" : args);
   const usage = useQuery(api.billing.getUsage, skip ? "skip" : args);
+  const tokens = useQuery(api.dashboard.listTokens, skip ? "skip" : args);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
+  const setVisibilityMutation = useMutation(api.pages.setVisibility);
+  const deletePageMutation = useMutation(api.pages.deletePage);
+  const revokeTokenMutation = useMutation(api.dashboard.revokeToken);
 
   const value = useMemo<DashboardData>(
     () => ({
@@ -74,11 +78,34 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       moderation,
       policy,
       usage,
+      tokens,
       setPolicy: async (next) => {
         await setPolicyMutation(next);
       },
+      setVisibility: async (id, visibility) => {
+        // Bearer omitted → operator-session path (requireWriteOperator).
+        await setVisibilityMutation({ id: id as never, visibility });
+      },
+      deletePage: async (id) => {
+        await deletePageMutation({ id: id as never });
+      },
+      revokeToken: async (tokenId) => {
+        await revokeTokenMutation({ tokenId: tokenId as never });
+      },
     }),
-    [pages, auditLog, recipeEdits, moderation, policy, usage, setPolicyMutation],
+    [
+      pages,
+      auditLog,
+      recipeEdits,
+      moderation,
+      policy,
+      usage,
+      tokens,
+      setPolicyMutation,
+      setVisibilityMutation,
+      deletePageMutation,
+      revokeTokenMutation,
+    ],
   );
 
   return <DashboardDataProvider value={value}>{children}</DashboardDataProvider>;

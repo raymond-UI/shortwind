@@ -9,6 +9,7 @@ import {
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireRead, requireWrite } from "./lib/auth_guard.js";
+import { requireWriteOperator } from "./lib/operator_auth.js";
 import { applyLifecycle } from "./moderation.js";
 import {
   classifyContent,
@@ -1778,10 +1779,15 @@ export const sweepExpired = internalMutation({
  * its metadata for audit, marked by its `lifecycle`.
  */
 export const deletePage = mutation({
-  args: { bearer: v.string(), id: v.id("pages") },
+  // bearer OPTIONAL: REST passes a pages:write bearer; the dashboard calls this
+  // via the logged-in operator session (no bearer). `requireWriteOperator`
+  // accepts either and resolves the same `{ accountId, tokenId }` — the
+  // account-ownership check below is unchanged, so neither path can touch
+  // another account's page.
+  args: { bearer: v.optional(v.string()), id: v.id("pages") },
   returns: lifecycleResultValidator,
   handler: async (ctx, args) => {
-    const auth = await requireWrite(ctx, args.bearer);
+    const auth = await requireWriteOperator(ctx, args.bearer);
     const page = await ctx.db.get(args.id);
     if (!page || page.accountId !== auth.accountId) {
       // Account-scoped not-found (no existence leak): mirror `get`/`update`.
@@ -1821,14 +1827,15 @@ const visibilityArg = v.union(
  * serves the artifact to), and audit. Returns the new visibility.
  */
 export const setVisibility = mutation({
+  // bearer OPTIONAL — REST (bearer) or dashboard operator session. See deletePage.
   args: {
-    bearer: v.string(),
+    bearer: v.optional(v.string()),
     id: v.id("pages"),
     visibility: visibilityArg,
   },
   returns: v.object({ visibility: visibilityArg }),
   handler: async (ctx, args) => {
-    const auth = await requireWrite(ctx, args.bearer);
+    const auth = await requireWriteOperator(ctx, args.bearer);
     const page = await ctx.db.get(args.id);
     if (!page || page.accountId !== auth.accountId) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });

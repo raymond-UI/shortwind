@@ -5,6 +5,7 @@ import type {
   PageWithVersions,
   RecipeEditRow,
   AccountPolicy,
+  TokenRow,
   UsageMeters,
 } from "../lib/types";
 
@@ -123,6 +124,25 @@ export const mockPolicy: AccountPolicy = {
   updatedAt: 1_700_000_000_000,
 };
 
+export const mockTokens: TokenRow[] = [
+  {
+    tokenId: "tok_active",
+    scopes: ["pages:read", "pages:write"],
+    label: "laptop CLI",
+    createdAt: 1_700_000_000_000,
+    revokedAt: null,
+    expiresAt: null,
+  },
+  {
+    tokenId: "tok_revoked",
+    scopes: ["pages:read"],
+    label: "old token",
+    createdAt: 1_699_000_000_000,
+    revokedAt: 1_699_500_000_000,
+    expiresAt: null,
+  },
+];
+
 /** Mock metered-billing usage (CLOUD-43). Shapes `billing.getUsage` returns. */
 export const mockUsage: UsageMeters = {
   publishes: 42,
@@ -146,7 +166,11 @@ export function makeData(
     moderation: mockModeration,
     policy: mockPolicy,
     usage: mockUsage,
+    tokens: mockTokens,
     setPolicy: async () => {},
+    setVisibility: async () => {},
+    deletePage: async () => {},
+    revokeToken: async () => {},
     ...overrides,
   };
 }

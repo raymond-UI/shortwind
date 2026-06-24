@@ -1,87 +1,113 @@
-import { useState } from "react";
 import { useDashboardData } from "../lib/data";
-import { formatTime, shortHash } from "../lib/format";
+import { relativeTime } from "../lib/format";
+import { pageHost, pageUrl } from "../lib/urls";
+import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
+import { EmptyState } from "../components/EmptyState";
 import type { PageWithVersions } from "../lib/types";
 
 /**
- * Pages view (CLOUD-35): list every page + expandable per-page version history.
- * Read-only oversight — the operator confirms what exists and what it points at,
- * they do not author here (PRD §3).
+ * Overview (epic #184, issue #2) — the owner's hosted pages as a card grid
+ * (Vercel/Cloudflare Pages style). Each card surfaces the live URL, visibility,
+ * lifecycle status, current version, and last-deploy time. `onOpen` (wired by
+ * the shell) drills into the project detail; the "Visit" link opens the live
+ * page without triggering the drill-in.
  */
-export function PagesView() {
+export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
   const { pages } = useDashboardData();
 
   if (pages === undefined) {
-    return <div className="empty">Loading pages…</div>;
+    return <div className="text-sm text-muted-foreground">Loading pages…</div>;
   }
   if (pages.length === 0) {
-    return <div className="empty">No pages published yet.</div>;
+    return (
+      <EmptyState
+        icon="◳"
+        title="No pages published yet"
+        description={
+          <>
+            Publish your first page with{" "}
+            <code className="rounded bg-muted px-1 py-0.5">
+              shortwind deploy &lt;file&gt;
+            </code>
+            .
+          </>
+        }
+        testId="pages-empty"
+      />
+    );
   }
 
   return (
-    <div className="panel" data-testid="pages-view">
+    <div
+      data-testid="pages-view"
+      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+    >
       {pages.map((p) => (
-        <PageRowItem key={p.page.id} entry={p} />
+        <PageCard key={p.page.id} entry={p} onOpen={onOpen} />
       ))}
     </div>
   );
 }
 
-function PageRowItem({ entry }: { entry: PageWithVersions }) {
-  const [open, setOpen] = useState(false);
-  const { page, versions } = entry;
+function PageCard({
+  entry,
+  onOpen,
+}: {
+  entry: PageWithVersions;
+  onOpen?: (id: string) => void;
+}) {
+  const { page } = entry;
+  const host = pageHost(page.slug, page.customDomain);
+  const interactive = Boolean(onOpen);
+
   return (
-    <div className="row" style={{ flexDirection: "column" }}>
-      <div style={{ display: "flex", gap: 12, width: "100%" }}>
-        <button
-          className="tab"
-          aria-expanded={open}
-          aria-label={`Toggle version history for ${page.slug}`}
-          onClick={() => setOpen((o) => !o)}
-          style={{ minWidth: 28 }}
-        >
-          {open ? "−" : "+"}
-        </button>
-        <div style={{ flex: 1 }}>
-          <div>
-            <strong>/{page.slug}</strong>{" "}
-            <span className="muted mono">v{page.currentVersion}</span>
-          </div>
-          <div className="muted">
-            <span className="badge">{page.visibility}</span>{" "}
-            <span
-              className={`badge${page.lifecycle !== "active" ? " danger" : ""}`}
-            >
-              {page.lifecycle}
-            </span>{" "}
-            {page.customDomain ? (
-              <span className="mono">{page.customDomain}</span>
-            ) : null}{" "}
-            {page.tags.length > 0 ? (
-              <span className="mono">[{page.tags.join(", ")}]</span>
-            ) : null}
-          </div>
-        </div>
-        <div className="muted mono">{formatTime(page.updatedAt)}</div>
+    <div
+      data-testid={`page-card-${page.slug}`}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? () => onOpen?.(page.id) : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onOpen?.(page.id);
+            }
+          : undefined
+      }
+      className={
+        "flex flex-col gap-3 rounded-lg border border-border bg-card p-4 transition-colors " +
+        (interactive
+          ? "cursor-pointer hover:border-foreground/25 focus:border-foreground/25 focus:outline-none"
+          : "")
+      }
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="truncate font-medium" title={page.slug}>
+          {page.slug}
+        </span>
+        <LifecycleStatus lifecycle={page.lifecycle} />
       </div>
-      {open ? (
-        <div
-          data-testid={`versions-${page.slug}`}
-          style={{ width: "100%", marginTop: 8, paddingLeft: 40 }}
-        >
-          <div className="section-title">Version history</div>
-          {versions.length === 0 ? (
-            <div className="muted">No published versions.</div>
-          ) : (
-            versions.map((v) => (
-              <div key={v.id} className="muted mono">
-                v{v.version} · src {shortHash(v.sourceHash)} · out{" "}
-                {shortHash(v.expandedHash)} · {formatTime(v.createdAt)}
-              </div>
-            ))
-          )}
-        </div>
-      ) : null}
+
+      <a
+        href={pageUrl(page.slug, page.customDomain)}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="truncate text-xs text-muted-foreground hover:text-term"
+        title={host}
+      >
+        {host} ↗
+      </a>
+
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+        <VisibilityBadge visibility={page.visibility} />
+        <Badge>v{page.currentVersion}</Badge>
+        {page.tags.map((t) => (
+          <Badge key={t}>{t}</Badge>
+        ))}
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          {relativeTime(page.updatedAt)}
+        </span>
+      </div>
     </div>
   );
 }

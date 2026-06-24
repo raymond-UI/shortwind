@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { isScope, type Scope } from "../shared/src/scopes.js";
 
@@ -202,8 +207,14 @@ export const validateToken = query({
 /**
  * Revoke a token by flipping `revokedAt`. Idempotent: re-revoking keeps the
  * original revocation timestamp. Returns whether a change was made.
+ *
+ * SECURITY (epic #184): `internalMutation`, NOT public. It revokes ANY token by
+ * id with no caller check — a public surface let anyone with the deployment URL
+ * revoke any account's token. The dashboard revokes through the operator-gated,
+ * account-scoped `dashboard.revokeToken`; server/admin use this via
+ * `internal.tokens.revokeToken` / `npx convex run`.
  */
-export const revokeToken = mutation({
+export const revokeToken = internalMutation({
   args: { tokenId: v.id("tokens") },
   returns: v.object({ revoked: v.boolean() }),
   handler: async (ctx, args) => {
@@ -215,8 +226,14 @@ export const revokeToken = mutation({
   },
 });
 
-/** List an account's tokens (hash omitted). For the dashboard/CLI `tokens ls`. */
-export const listTokensForAccount = query({
+/**
+ * List an account's tokens (hash omitted). For server/admin use.
+ *
+ * SECURITY (epic #184): `internalQuery`, NOT public — a public query let anyone
+ * enumerate any account's token metadata by id. The dashboard lists through the
+ * operator-gated, account-scoped `dashboard.listTokens`.
+ */
+export const listTokensForAccount = internalQuery({
   args: { accountId: v.id("accounts") },
   handler: async (ctx, args) => {
     const rows = await ctx.db
