@@ -39,7 +39,11 @@ declare const process: { env: Record<string, string | undefined> };
  * different deployment retarget; the hardcoded fallback mirrors `pageRootDomain`.
  */
 export function rootDomain(): string {
-  return process.env.PAGES_ROOT_DOMAIN ?? "shortwind.dev";
+  // Fallback MUST mirror `pageRootDomain()` (convex/pages.ts), which moved to the
+  // dedicated user-content apex `shortwind.app` (audit #153). A stale `.dev`
+  // fallback here would build eviction keys for a host the publish side never
+  // registered, so deletes/kills would silently miss the route.
+  return process.env.PAGES_ROOT_DOMAIN ?? "shortwind.app";
 }
 
 /**
