@@ -82,6 +82,16 @@ export interface AccountPolicy {
   updatedAt: number | null;
 }
 
+/** A scoped API token (hash omitted). Mirrors `dashboard.listTokens` returns. */
+export interface TokenRow {
+  tokenId: string;
+  scopes: string[];
+  label: string | null;
+  createdAt: number;
+  revokedAt: number | null;
+  expiresAt: number | null;
+}
+
 /**
  * The metered-billing usage the dashboard renders (CLOUD-43). Mirrors the
  * `getUsage` `returns` validator in `convex/billing.ts` exactly. The three
@@ -109,6 +119,14 @@ export interface DashboardData {
   policy: AccountPolicy | undefined;
   /** Metered billing usage (CLOUD-43): the three cost-aligned meters. */
   usage: UsageMeters | undefined;
+  /** The operator's own API tokens (epic #184). `undefined` = loading. */
+  tokens: TokenRow[] | undefined;
   /** Persist a policy toggle. Resolves to the new policy. */
   setPolicy: (next: { customDomainNeedsApproval?: boolean }) => Promise<void>;
+  /** Change a page's visibility (operator session). */
+  setVisibility: (id: string, visibility: Visibility) => Promise<void>;
+  /** Tombstone a page (operator session). */
+  deletePage: (id: string) => Promise<void>;
+  /** Revoke one of the operator's own API tokens. */
+  revokeToken: (tokenId: string) => Promise<void>;
 }

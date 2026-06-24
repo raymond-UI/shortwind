@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { ProjectDetail } from "./ProjectDetail";
 import { renderWithData } from "../test/render";
 
@@ -26,5 +26,30 @@ describe("ProjectDetail", () => {
   it("handles an unknown page id", () => {
     renderWithData(<ProjectDetail pageId="nope" onBack={() => {}} />);
     expect(screen.getByText("Page not found")).toBeInTheDocument();
+  });
+
+  it("changes visibility from the Settings tab", async () => {
+    const setVisibility = vi.fn().mockResolvedValue(undefined);
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />, {
+      setVisibility,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "settings" }));
+    // Fixture page_1 is public → switch to private.
+    fireEvent.click(screen.getByTestId("visibility-private"));
+    expect(setVisibility).toHaveBeenCalledWith("page_1", "private");
+  });
+
+  it("deletes a page (confirm) and navigates back", async () => {
+    const deletePage = vi.fn().mockResolvedValue(undefined);
+    const onBack = vi.fn();
+    renderWithData(<ProjectDetail pageId="page_1" onBack={onBack} />, {
+      deletePage,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "settings" }));
+    // Two-step: reveal confirm, then confirm.
+    fireEvent.click(screen.getByTestId("delete-page"));
+    fireEvent.click(screen.getByTestId("confirm-delete"));
+    await waitFor(() => expect(deletePage).toHaveBeenCalledWith("page_1"));
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
   });
 });

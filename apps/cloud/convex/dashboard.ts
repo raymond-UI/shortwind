@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireReadOperator, requireWriteOperator } from "./lib/operator_auth.js";
@@ -402,6 +402,64 @@ export const setAccountPolicy = mutation({
       customDomainNeedsApproval: merged.customDomainNeedsApproval,
       updatedAt: inserted?._creationTime ?? Date.now(),
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// API tokens (epic #184) — operator-gated, ACCOUNT-SCOPED list + revoke.
+//
+// The raw `tokens.listTokensForAccount` / `tokens.revokeToken` are internal
+// (they take an arbitrary accountId/tokenId with no caller check — a public
+// surface was a cross-account hole). These wrappers derive the account from the
+// operator's session/bearer and never trust a caller-supplied account, so an
+// operator only ever sees / revokes their OWN tokens.
+// ---------------------------------------------------------------------------
+
+const tokenRowValidator = v.object({
+  tokenId: v.id("tokens"),
+  scopes: v.array(v.string()),
+  label: v.union(v.string(), v.null()),
+  createdAt: v.number(),
+  revokedAt: v.union(v.number(), v.null()),
+  expiresAt: v.union(v.number(), v.null()),
+});
+
+/** List the operator's own account tokens (hash omitted). */
+export const listTokens = query({
+  args: { bearer: v.optional(v.string()) },
+  returns: v.array(tokenRowValidator),
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const rows = await ctx.db
+      .query("tokens")
+      .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+      .collect();
+    return rows.map((r: Doc<"tokens">) => ({
+      tokenId: r._id,
+      scopes: r.scopes,
+      label: r.label,
+      createdAt: r.createdAt,
+      revokedAt: r.revokedAt,
+      expiresAt: r.expiresAt,
+    }));
+  },
+});
+
+/** Revoke one of the operator's OWN tokens. Idempotent; account-scoped. */
+export const revokeToken = mutation({
+  args: { bearer: v.optional(v.string()), tokenId: v.id("tokens") },
+  returns: v.object({ revoked: v.boolean() }),
+  handler: async (ctx, args) => {
+    const auth = await requireWriteOperator(ctx, args.bearer);
+    const row = await ctx.db.get(args.tokenId);
+    // Account-scoped not-found: another account's token is "not found" here —
+    // no existence leak, and no cross-account revocation.
+    if (!row || row.accountId !== auth.accountId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Token not found" });
+    }
+    if (row.revokedAt !== null) return { revoked: true };
+    await ctx.db.patch(args.tokenId, { revokedAt: Date.now() });
+    return { revoked: true };
   },
 });
 

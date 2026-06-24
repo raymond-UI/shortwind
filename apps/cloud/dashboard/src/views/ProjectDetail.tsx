@@ -4,7 +4,11 @@ import { formatTime, relativeTime, shortHash } from "../lib/format";
 import { pageHost, pageUrl } from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
-import type { PageVersionRow, PageWithVersions } from "../lib/types";
+import type {
+  PageVersionRow,
+  PageWithVersions,
+  Visibility,
+} from "../lib/types";
 
 type DetailTab = "overview" | "deployments" | "settings";
 
@@ -88,7 +92,9 @@ export function ProjectDetail({
 
       {tab === "overview" ? <OverviewTab entry={entry} /> : null}
       {tab === "deployments" ? <DeploymentsTab entry={entry} /> : null}
-      {tab === "settings" ? <SettingsTab entry={entry} /> : null}
+      {tab === "settings" ? (
+        <SettingsTab entry={entry} onBack={onBack} />
+      ) : null}
     </div>
   );
 }
@@ -204,26 +210,109 @@ function DeploymentRow({
   );
 }
 
-function SettingsTab({ entry }: { entry: PageWithVersions }) {
+const VISIBILITIES: Visibility[] = ["public", "unlisted", "private"];
+
+function SettingsTab({
+  entry,
+  onBack,
+}: {
+  entry: PageWithVersions;
+  onBack: () => void;
+}) {
+  const { setVisibility, deletePage } = useDashboardData();
   const { page } = entry;
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const dead = page.lifecycle !== "active";
+
+  async function changeVisibility(next: Visibility) {
+    if (next === page.visibility || busy) return;
+    setBusy(true);
+    try {
+      await setVisibility(page.id, next);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDelete() {
+    setBusy(true);
+    try {
+      await deletePage(page.id);
+      onBack();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="max-w-xl space-y-4">
-      <div className="rounded-lg border border-border bg-card px-4">
-        <Field label="Visibility">
-          <VisibilityBadge visibility={page.visibility} />
-        </Field>
-        <Field label="Tags">
-          {page.tags.length ? page.tags.join(", ") : "—"}
-        </Field>
+    <div className="max-w-xl space-y-6">
+      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div className="text-sm font-medium">Visibility</div>
+        <div className="flex gap-2" role="group" aria-label="Visibility">
+          {VISIBILITIES.map((vis) => {
+            const current = vis === page.visibility;
+            return (
+              <button
+                key={vis}
+                type="button"
+                disabled={busy || dead}
+                aria-pressed={current}
+                data-testid={`visibility-${vis}`}
+                onClick={() => changeVisibility(vis)}
+                className={
+                  "rounded-md border px-3 py-1.5 text-xs capitalize transition-colors disabled:opacity-50 " +
+                  (current
+                    ? "border-foreground bg-secondary text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground")
+                }
+              >
+                {vis}
+              </button>
+            );
+          })}
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Changing visibility and deleting a page are coming to the dashboard (#190).
-        For now, manage them from the CLI:{" "}
-        <code className="rounded bg-muted px-1 py-0.5">
-          shortwind cloud visibility {page.slug} &lt;level&gt;
-        </code>
-        .
-      </p>
+
+      {dead ? null : (
+        <div className="space-y-3 rounded-lg border border-destructive/40 p-4">
+          <div className="text-sm font-medium text-destructive">Danger zone</div>
+          <p className="text-xs text-muted-foreground">
+            Deleting tombstones the page — it stops serving (410) but its versions
+            are retained (§8.2).
+          </p>
+          {confirming ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={busy}
+                data-testid="confirm-delete"
+                className="rounded-md border border-destructive bg-destructive px-3 py-1.5 text-xs text-destructive-foreground disabled:opacity-50"
+              >
+                {busy ? "Deleting…" : "Confirm delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={busy}
+                className="rounded-md border border-border px-3 py-1.5 text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              data-testid="delete-page"
+              className="rounded-md border border-destructive/60 px-3 py-1.5 text-xs text-destructive transition-colors hover:bg-destructive/10"
+            >
+              Delete page
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
