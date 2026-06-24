@@ -3,20 +3,21 @@ import { relativeTime } from "../lib/format";
 import { pageHost, pageUrl } from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
+import { SkeletonCards } from "../components/Skeleton";
 import type { PageWithVersions } from "../lib/types";
 
 /**
- * Overview (epic #184, issue #2) — the owner's hosted pages as a card grid
- * (Vercel/Cloudflare Pages style). Each card surfaces the live URL, visibility,
- * lifecycle status, current version, and last-deploy time. `onOpen` (wired by
- * the shell) drills into the project detail; the "Visit" link opens the live
- * page without triggering the drill-in.
+ * Overview (epic #184) — the owner's hosted pages as a card grid, authored in
+ * Shortwind `@recipe` shorthand (`@card-interactive`, `@stack-sm`, `@row-between`,
+ * text recipes) dogfooded through the build. Each card surfaces the live URL,
+ * visibility, lifecycle, version, and last-deploy. `onOpen` drills into detail;
+ * the Visit link opens the live page without triggering the drill-in.
  */
 export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
   const { pages } = useDashboardData();
 
   if (pages === undefined) {
-    return <div className="text-sm text-muted-foreground">Loading pages…</div>;
+    return <SkeletonCards />;
   }
   if (pages.length === 0) {
     return (
@@ -26,10 +27,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
         description={
           <>
             Publish your first page with{" "}
-            <code className="rounded bg-muted px-1 py-0.5">
-              shortwind deploy &lt;file&gt;
-            </code>
-            .
+            <code className="@code-inline">shortwind deploy &lt;file&gt;</code>.
           </>
         }
         testId="pages-empty"
@@ -40,7 +38,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
   return (
     <div
       data-testid="pages-view"
-      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+      className="@grid-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
     >
       {pages.map((p) => (
         <PageCard key={p.page.id} entry={p} onOpen={onOpen} />
@@ -73,14 +71,11 @@ function PageCard({
             }
           : undefined
       }
-      className={
-        "flex flex-col gap-3 rounded-lg border border-border bg-card p-4 transition-colors " +
-        (interactive
-          ? "cursor-pointer hover:border-foreground/25 focus:border-foreground/25 focus:outline-none"
-          : "")
-      }
+      // @card-interactive = the catalog's clickable card (hover shadow + focus
+      // ring); @stack-sm stacks the inner rows.
+      className={interactive ? "@card-interactive @stack-sm" : "@card @stack-sm"}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="@row-between flex items-start gap-2">
         <span className="truncate font-medium" title={page.slug}>
           {page.slug}
         </span>
@@ -92,7 +87,7 @@ function PageCard({
         target="_blank"
         rel="noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className="truncate text-xs text-muted-foreground hover:text-term"
+        className="@link truncate text-xs text-muted-foreground hover:text-term"
         title={host}
       >
         {host} ↗

@@ -19,7 +19,12 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "plugins": [
+      {
+        "name": "@shortwind/cli/ts-plugin"
+      }
+    ]
   },
   "include": ["src", "vite.config.ts", "vitest.setup.ts"]
 }

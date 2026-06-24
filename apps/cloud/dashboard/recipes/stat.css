@@ -1,0 +1,30 @@
+/* shortwind: stat@0.0.1 sha:445f1f7abfebc0b1 — DO NOT EDIT THIS LINE */
+
+/* @guide
+   A dashboard metric tile. @stat is the container; inside it @stat-label names
+   the metric, @stat-value is the big number, and @stat-trend is the delta.
+   Colour the trend with the tone system — set data-tone on @stat-trend
+   (success for up, danger for down): `<span class="@stat-trend"
+   data-tone="success">`. Same --tone-fg mechanism as @badge; define tones once
+   in CSS (init scaffolds them).
+*/
+
+/* Metric tile container. */
+@recipe stat {
+  flex flex-col gap-1 rounded-lg border border-border bg-card p-4 text-card-foreground
+}
+
+/* Metric name. */
+@recipe stat-label {
+  text-sm font-medium text-muted-foreground
+}
+
+/* The metric's primary value. */
+@recipe stat-value {
+  text-2xl font-semibold tracking-tight text-foreground tabular-nums
+}
+
+/* Trend delta — tone-aware; set data-tone (success up / danger down). */
+@recipe stat-trend {
+  inline-flex items-center gap-1 text-xs font-medium text-[var(--tone-fg,var(--muted-foreground))]
+}

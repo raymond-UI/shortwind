@@ -28,7 +28,7 @@ const STEPS = [
   {
     n: "1",
     title: "Agent authors HTML",
-    body: "Your agent writes a page in Shortwind shorthand — compact recipes like @stat, @chip and @panel instead of long utility-class strings.",
+    body: "Your agent writes a page in Shortwind shorthand — compact recipe tokens like a stat, a chip, a panel — instead of long utility-class strings.",
   },
   {
     n: "2",

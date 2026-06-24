@@ -30,17 +30,12 @@ export function PolicyView() {
   const on = policy.customDomainNeedsApproval;
 
   return (
-    <div
-      data-testid="policy-view"
-      className="rounded-lg border border-border bg-card"
-    >
-      <div className="flex items-center gap-4 p-4">
+    <div data-testid="policy-view" className="@card @stack-sm">
+      <div className="@row flex items-center gap-4">
         <span
           data-testid="custom-domain-state"
-          className={
-            "inline-flex w-10 shrink-0 justify-center rounded border px-1.5 py-0.5 text-[11px] font-medium " +
-            (on ? "border-term/40 text-term" : "border-border text-muted-foreground")
-          }
+          className="@badge"
+          {...(on ? { "data-tone": "success" } : {})}
         >
           {on ? "ON" : "OFF"}
         </span>
@@ -56,12 +51,12 @@ export function PolicyView() {
           onClick={toggleCustomDomain}
           disabled={saving}
           data-testid="toggle-custom-domain"
-          className="rounded-md border border-border px-3 py-1.5 text-xs transition-colors hover:bg-secondary disabled:opacity-50"
+          className="@btn-outline shrink-0"
         >
           {saving ? "Saving…" : on ? "Turn off" : "Turn on"}
         </button>
       </div>
-      <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground tabular-nums">
+      <div className="text-xs text-muted-foreground tabular-nums">
         last set:{" "}
         {policy.updatedAt === null
           ? "never (defaults)"

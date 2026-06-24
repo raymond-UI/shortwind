@@ -73,11 +73,33 @@ export function App({
   onSignOut?: () => void;
 }) {
   const [section, setSection] = useState<SectionId>(initialSection);
+  const [navOpen, setNavOpen] = useState(false);
   const active = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0];
+
+  function go(id: SectionId) {
+    setSection(id);
+    setNavOpen(false); // close the mobile drawer on navigation
+  }
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-card/40">
+      {/* Mobile drawer backdrop. */}
+      {navOpen ? (
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={() => setNavOpen(false)}
+          className="fixed inset-0 z-40 bg-foreground/30 md:hidden"
+        />
+      ) : null}
+
+      {/* Sidebar: a slide-in drawer below md, a static rail at md+. */}
+      <aside
+        className={
+          "fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col border-r border-border bg-card transition-transform md:static md:z-auto md:translate-x-0 " +
+          (navOpen ? "translate-x-0" : "-translate-x-full")
+        }
+      >
         <div className="flex items-center gap-2 px-5 py-4">
           <span
             aria-hidden="true"
@@ -89,13 +111,13 @@ export function App({
           <span className="text-xs text-muted-foreground">Cloud</span>
         </div>
 
-        <nav className="flex-1 space-y-0.5 px-3 py-2" aria-label="Dashboard">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2" aria-label="Dashboard">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
               type="button"
               aria-current={s.id === section}
-              onClick={() => setSection(s.id)}
+              onClick={() => go(s.id)}
               className={
                 "block w-full rounded-md px-3 py-1.5 text-left text-sm transition-colors " +
                 (s.id === section
@@ -123,10 +145,18 @@ export function App({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center border-b border-border px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 md:px-6">
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={() => setNavOpen(true)}
+            className="-ml-1 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
+          >
+            ☰
+          </button>
           <h1 className="text-sm font-semibold tracking-tight">{active.label}</h1>
         </header>
-        <main className="flex-1 overflow-auto p-6">{active.render()}</main>
+        <main className="flex-1 overflow-auto p-4 md:p-6">{active.render()}</main>
       </div>
     </div>
   );

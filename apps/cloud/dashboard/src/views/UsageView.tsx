@@ -41,23 +41,19 @@ export function UsageView() {
         Metered to what costs money (PRD §6.4): publishes, custom domains, and
         storage. Page views are not billed — a viral page costs nothing.
       </p>
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* @stat / @stat-value / @stat-label — the catalog stat recipes. */}
+      <div className="@grid-3 grid gap-4 sm:grid-cols-3">
         {meters.map((m) => (
           <div
             key={m.key}
             data-testid={`usage-meter-${m.key}`}
-            className="rounded-lg border border-border bg-card p-5"
+            className="@stat"
           >
-            <div
-              className="text-3xl font-semibold tabular-nums"
-              data-testid={`usage-value-${m.key}`}
-            >
+            <div className="@stat-value" data-testid={`usage-value-${m.key}`}>
               {m.value}
             </div>
-            <div className="mt-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              {m.label}
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">{m.hint}</div>
+            <div className="@stat-label">{m.label}</div>
+            <div className="text-xs text-muted-foreground">{m.hint}</div>
           </div>
         ))}
       </div>
