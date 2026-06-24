@@ -4,6 +4,8 @@ import { formatTime, relativeTime, shortHash } from "../lib/format";
 import { pageHost, pageUrl } from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
+import { Dialog } from "../components/Dialog";
+import { Menu, MenuItem } from "../components/Menu";
 import type {
   PageVersionRow,
   PageWithVersions,
@@ -222,7 +224,7 @@ function SettingsTab({
   const { setVisibility, deletePage } = useDashboardData();
   const { page } = entry;
   const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const dead = page.lifecycle !== "active";
 
   async function changeVisibility(next: Visibility) {
@@ -249,28 +251,29 @@ function SettingsTab({
     <div className="max-w-xl space-y-6">
       <div className="@card @stack-sm">
         <div className="text-sm font-medium">Visibility</div>
-        <div className="flex gap-2" role="group" aria-label="Visibility">
-          {VISIBILITIES.map((vis) => {
-            const current = vis === page.visibility;
-            return (
-              <button
+        {/* Dropdown (Menu = @menu recipes) instead of a segmented row. */}
+        <Menu
+          label="Change visibility"
+          trigger={
+            <span className="@btn-outline capitalize">{page.visibility} ▾</span>
+          }
+        >
+          {(close) =>
+            VISIBILITIES.map((vis) => (
+              <MenuItem
                 key={vis}
-                type="button"
-                disabled={busy || dead}
-                aria-pressed={current}
-                data-testid={`visibility-${vis}`}
-                onClick={() => changeVisibility(vis)}
-                className={
-                  current
-                    ? "@btn-secondary-sm capitalize"
-                    : "@btn-ghost-sm capitalize"
-                }
+                testId={`visibility-${vis}`}
+                active={vis === page.visibility}
+                onSelect={() => {
+                  close();
+                  void changeVisibility(vis);
+                }}
               >
-                {vis}
-              </button>
-            );
-          })}
-        </div>
+                <span className="capitalize">{vis}</span>
+              </MenuItem>
+            ))
+          }
+        </Menu>
       </div>
 
       {dead ? null : (
@@ -280,38 +283,54 @@ function SettingsTab({
             Deleting tombstones the page — it stops serving (410) but its versions
             are retained (§8.2).
           </p>
-          {confirming ? (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={busy}
-                data-testid="confirm-delete"
-                className="@btn-danger"
-              >
-                {busy ? "Deleting…" : "Confirm delete"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                disabled={busy}
-                className="@btn-outline"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              data-testid="delete-page"
-              className="rounded-md border border-destructive/60 px-3 py-1.5 text-xs text-destructive transition-colors hover:bg-destructive/10"
-            >
-              Delete page
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            data-testid="delete-page"
+            className="@btn-outline text-destructive"
+          >
+            Delete page
+          </button>
         </div>
       )}
+
+      {/* Delete confirmation — the Dialog component (@dialog recipes). */}
+      <Dialog
+        open={confirmOpen}
+        onClose={() => {
+          if (!busy) setConfirmOpen(false);
+        }}
+        labelledBy="delete-dialog-title"
+      >
+        <div className="@dialog-header">
+          <h3 id="delete-dialog-title" className="text-sm font-semibold">
+            Delete {page.slug}?
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            This tombstones the page — it stops serving (410). Its versions are
+            retained (§8.2) and it cannot be re-published at this URL.
+          </p>
+        </div>
+        <div className="@dialog-footer">
+          <button
+            type="button"
+            className="@btn-outline"
+            disabled={busy}
+            onClick={() => setConfirmOpen(false)}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="confirm-delete"
+            className="@btn-danger"
+            disabled={busy}
+            onClick={onDelete}
+          >
+            {busy ? "Deleting…" : "Delete page"}
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 }

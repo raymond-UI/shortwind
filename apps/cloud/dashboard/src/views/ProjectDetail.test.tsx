@@ -28,26 +28,28 @@ describe("ProjectDetail", () => {
     expect(screen.getByText("Page not found")).toBeInTheDocument();
   });
 
-  it("changes visibility from the Settings tab", async () => {
+  it("changes visibility via the dropdown menu", async () => {
     const setVisibility = vi.fn().mockResolvedValue(undefined);
     renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />, {
       setVisibility,
     });
     fireEvent.click(screen.getByRole("button", { name: "settings" }));
-    // Fixture page_1 is public → switch to private.
+    // Open the visibility menu, then pick private (fixture page_1 is public).
+    fireEvent.click(screen.getByRole("button", { name: "Change visibility" }));
     fireEvent.click(screen.getByTestId("visibility-private"));
     expect(setVisibility).toHaveBeenCalledWith("page_1", "private");
   });
 
-  it("deletes a page (confirm) and navigates back", async () => {
+  it("deletes a page via the confirm dialog and navigates back", async () => {
     const deletePage = vi.fn().mockResolvedValue(undefined);
     const onBack = vi.fn();
     renderWithData(<ProjectDetail pageId="page_1" onBack={onBack} />, {
       deletePage,
     });
     fireEvent.click(screen.getByRole("button", { name: "settings" }));
-    // Two-step: reveal confirm, then confirm.
+    // delete-page opens the dialog; confirm-delete lives inside it.
     fireEvent.click(screen.getByTestId("delete-page"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("confirm-delete"));
     await waitFor(() => expect(deletePage).toHaveBeenCalledWith("page_1"));
     await waitFor(() => expect(onBack).toHaveBeenCalled());
