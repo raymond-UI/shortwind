@@ -140,7 +140,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function OverviewTab({ entry }: { entry: PageWithVersions }) {
   const { page } = entry;
   return (
-    <div className="max-w-xl rounded-lg border border-border bg-card px-4">
+    <div className="@card max-w-xl !py-0">
       <Field label="Slug">{page.slug}</Field>
       <Field label="Live URL">
         <a
@@ -247,7 +247,7 @@ function SettingsTab({
 
   return (
     <div className="max-w-xl space-y-6">
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <div className="@card @stack-sm">
         <div className="text-sm font-medium">Visibility</div>
         <div className="flex gap-2" role="group" aria-label="Visibility">
           {VISIBILITIES.map((vis) => {
@@ -261,10 +261,9 @@ function SettingsTab({
                 data-testid={`visibility-${vis}`}
                 onClick={() => changeVisibility(vis)}
                 className={
-                  "rounded-md border px-3 py-1.5 text-xs capitalize transition-colors disabled:opacity-50 " +
-                  (current
-                    ? "border-foreground bg-secondary text-foreground"
-                    : "border-border text-muted-foreground hover:text-foreground")
+                  current
+                    ? "@btn-secondary-sm capitalize"
+                    : "@btn-ghost-sm capitalize"
                 }
               >
                 {vis}
@@ -288,7 +287,7 @@ function SettingsTab({
                 onClick={onDelete}
                 disabled={busy}
                 data-testid="confirm-delete"
-                className="rounded-md border border-destructive bg-destructive px-3 py-1.5 text-xs text-destructive-foreground disabled:opacity-50"
+                className="@btn-danger"
               >
                 {busy ? "Deleting…" : "Confirm delete"}
               </button>
@@ -296,7 +295,7 @@ function SettingsTab({
                 type="button"
                 onClick={() => setConfirming(false)}
                 disabled={busy}
-                className="rounded-md border border-border px-3 py-1.5 text-xs"
+                className="@btn-outline"
               >
                 Cancel
               </button>

@@ -46,7 +46,7 @@ export function ModerationView() {
           <div
             key={m.id}
             data-testid="moderation-row"
-            className="flex gap-3 rounded-lg border border-border bg-card p-3 text-sm"
+            className="@card flex gap-3 !p-3 text-sm"
           >
             <Badge tone={danger ? "danger" : "neutral"}>
               {STATE_LABEL[m.state]}
