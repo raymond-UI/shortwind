@@ -1,46 +1,93 @@
+import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { EmptyState } from "../components/EmptyState";
+import type { DomainStatus } from "../lib/types";
 
 /**
- * Domains (epic #184, issue #4 — initial). Custom hostnames bound across the
- * account's pages. The page record carries the bound `customDomain`; richer
- * bind-status (pending-cert / active / failed) + a bind action land in #4 proper.
+ * Domains — ACCOUNT-level custom domains. A domain is an alias of the whole
+ * account: every page serves at `<hostname>/<slug>` (plus its
+ * `<slug>.shortwind.app` vanity URL). Binding is an agent/CLI action (needs a
+ * `domains:bind` token); the operator's job here is to VIEW status and APPROVE a
+ * domain parked in `pending-human` by the approval policy.
  */
-export function DomainsView() {
-  const { pages } = useDashboardData();
 
-  if (pages === undefined) {
+const STATUS_LABEL: Record<DomainStatus, string> = {
+  "pending-human": "Awaiting your approval",
+  queued: "Queued (Cloudflare rate limit)",
+  "pending-cert": "Issuing certificate…",
+  active: "Active",
+  failed: "Failed",
+};
+
+export function DomainsView() {
+  const { accountDomains, approveDomain } = useDashboardData();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  if (accountDomains === undefined) {
     return <div className="@muted">Loading domains…</div>;
   }
 
-  const domains = pages
-    .filter((p) => p.page.customDomain)
-    .map((p) => ({
-      domain: p.page.customDomain as string,
-      slug: p.page.slug,
-      id: p.page.id,
-    }));
-
-  if (domains.length === 0) {
+  if (accountDomains.length === 0) {
     return (
       <EmptyState
         icon="🌐"
-        title="No custom domains yet"
-        description="Bind a custom hostname to a page to serve it on your own domain."
+        title="No custom domain yet"
+        description="Bind a subdomain you own (e.g. pages.example.com) from the CLI. Every page then serves at your-domain/slug."
         testId="domains-empty"
       />
     );
   }
 
-  return (
-    <ul data-testid="domains-view" className="@list-bordered list-none">
-      {domains.map((d) => (
-        <li key={d.id} className="@list-item justify-between">
+  async function onApprove(hostname: string) {
+    setBusy(hostname);
+    try {
+      await approveDomain(hostname);
+    } finally {
+      setBusy(null);
+    }
+  }
 
-          <span className="font-medium">{d.domain}</span>
-          <span className="@caption">/{d.slug}</span>
-        </li>
-      ))}
-    </ul>
+  return (
+    <div className="space-y-3" data-testid="domains-view">
+      <p className="@caption">
+        A custom domain is account-wide — every page also serves at{" "}
+        <span className="tabular-nums">your-domain/&lt;slug&gt;</span>.
+      </p>
+      <ul className="@list-bordered list-none">
+        {accountDomains.map((d) => (
+          <li
+            key={d.id}
+            data-testid={`domain-${d.hostname}`}
+            className="@list-item justify-between"
+          >
+            <span className="flex flex-col">
+              <span className="font-medium">{d.hostname}</span>
+              <span className="@caption">{STATUS_LABEL[d.status]}</span>
+            </span>
+            {d.status === "pending-human" ? (
+              <button
+                type="button"
+                className="@btn-outline shrink-0"
+                disabled={busy !== null}
+                onClick={() => onApprove(d.hostname)}
+                data-testid={`domain-approve-${d.hostname}`}
+              >
+                {busy === d.hostname ? "Approving…" : "Approve"}
+              </button>
+            ) : (
+              <span
+                className={
+                  d.status === "active"
+                    ? "@badge text-term"
+                    : "@caption tabular-nums"
+                }
+              >
+                {d.status}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

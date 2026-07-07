@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useQuery, useMutation, useConvexAuth } from "convex/react";
+import { useQuery, useMutation, useAction, useConvexAuth } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { DashboardDataProvider } from "../lib/data";
 import type { DashboardData } from "../lib/types";
@@ -64,11 +64,24 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
   );
   const policy = useQuery(api.dashboard.getAccountPolicy, skip ? "skip" : args);
   const usage = useQuery(api.billing.getUsage, skip ? "skip" : args);
+  const billing = useQuery(
+    api.billingStripe.queries.summary,
+    skip ? "skip" : args,
+  );
+  const accountDomains = useQuery(
+    api.domains.listAccountDomains,
+    skip ? "skip" : args,
+  );
   const tokens = useQuery(api.dashboard.listTokens, skip ? "skip" : args);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
   const setVisibilityMutation = useMutation(api.pages.setVisibility);
   const deletePageMutation = useMutation(api.pages.deletePage);
   const revokeTokenMutation = useMutation(api.dashboard.revokeToken);
+  const createCheckoutAction = useAction(
+    api.billingStripe.actions.createCheckoutSession,
+  );
+  const portalUrlAction = useAction(api.billingStripe.actions.portalUrl);
+  const approveDomainAction = useAction(api.domains.approveAccountDomain);
 
   const value = useMemo<DashboardData>(
     () => ({
@@ -78,6 +91,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       moderation,
       policy,
       usage,
+      billing,
+      accountDomains,
       tokens,
       setPolicy: async (next) => {
         await setPolicyMutation(next);
@@ -92,6 +107,17 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       revokeToken: async (tokenId) => {
         await revokeTokenMutation({ tokenId: tokenId as never });
       },
+      startCheckout: async (plan) => {
+        // Bearer omitted → operator-session path (requireWriteOperator).
+        return await createCheckoutAction({ plan });
+      },
+      openPortal: async () => {
+        return await portalUrlAction({});
+      },
+      approveDomain: async (hostname) => {
+        // Bearer omitted → operator-session path (requireReadOperator).
+        await approveDomainAction({ hostname });
+      },
     }),
     [
       pages,
@@ -100,11 +126,16 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       moderation,
       policy,
       usage,
+      billing,
+      accountDomains,
       tokens,
       setPolicyMutation,
       setVisibilityMutation,
       deletePageMutation,
       revokeTokenMutation,
+      createCheckoutAction,
+      portalUrlAction,
+      approveDomainAction,
     ],
   );
 

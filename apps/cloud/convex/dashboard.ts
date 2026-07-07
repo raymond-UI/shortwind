@@ -56,7 +56,6 @@ import { authComponent } from "./auth.js";
 const pageRowValidator = v.object({
   id: v.id("pages"),
   slug: v.string(),
-  customDomain: v.union(v.string(), v.null()),
   visibility: v.union(
     v.literal("public"),
     v.literal("unlisted"),
@@ -199,7 +198,6 @@ export const listPages = query({
             page: {
               id: p._id,
               slug: p.slug,
-              customDomain: p.customDomain,
               visibility: p.visibility,
               lifecycle: p.lifecycle,
               tags: p.tags,

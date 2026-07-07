@@ -4,10 +4,14 @@ import {
   internalMutation,
   internalQuery,
   mutation,
+  query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireDomainsBind, requireRead } from "./lib/auth_guard.js";
+import { requireDomainsBind } from "./lib/auth_guard.js";
+import { requireReadOperator } from "./lib/operator_auth.js";
+import { resolvePlan } from "./lib/plan_resolver.js";
+import { withinCustomDomainQuota } from "./lib/billing_limits.js";
 
 /**
  * Custom-domain bind — Cloudflare for SaaS, human-gated (CLOUD-40, PRD §6.1/§7.2/§9).
@@ -22,10 +26,16 @@ import { requireDomainsBind, requireRead } from "./lib/auth_guard.js";
  *   - hostname state-change webhooks are ENTERPRISE-ONLY → we cannot be pushed
  *     the "cert active" event; we POLL the hostname-details endpoint instead.
  *
- * Two gates sit in front of the Cloudflare call (PRD §7.2):
+ * Three gates sit in front of the Cloudflare call (PRD §7.2 + §8.4):
  *   1. the `domains:bind` SCOPE — a privileged, human-gated grant absent from the
  *      default device-flow token (→ 403 without it). Enforced via
  *      {@link requireDomainsBind}.
+ *   1b. plan ENTITLEMENT — a custom domain requires a paid plan (the
+ *      card-before-custom-domain anti-phishing lever, PRD §8.4). `free` has a
+ *      domain quota of 0, so the bind is rejected (NOT_ENTITLED) before any
+ *      Cloudflare hostname exists. The plan is resolved through the injectable
+ *      {@link resolvePlan} seam and the quota checked with
+ *      {@link withinCustomDomainQuota}.
  *   2. the account POLICY `customDomainNeedsApproval` — when set, the bind parks
  *      in `pending-human` and NO Cloudflare hostname is created until an operator
  *      approves it. The policy is read from the CLOUD-35 `policy.set` audit entry
@@ -185,18 +195,6 @@ export type DomainBindState =
   | "active"
   | "failed";
 
-/** The bind outcome handed back to the HTTP edge + CLI, as plain data. */
-export interface DomainBindResult {
-  state: DomainBindState;
-  hostname: string;
-  /** Cloudflare's hostname id once created; null in `pending-human`. */
-  cloudflareHostnameId: string | null;
-  /** Set only on `active` (the bound page) / context on other states. */
-  pageId: string;
-  /** Present on `failed` (cert failed / retries exhausted) to explain why. */
-  reason?: string;
-}
-
 /**
  * The PURE cert-status → terminal classification. Polling reads the CF record's
  * `certStatus`; this maps it to "done" / "still pending" / "failed" with no IO so
@@ -213,34 +211,6 @@ export function classifyCertStatus(
 // ---------------------------------------------------------------------------
 // Internal queries/mutations (the action has no ctx.db; it delegates these).
 // ---------------------------------------------------------------------------
-
-/**
- * Validate the bearer for `domains:bind` AND resolve the bind context: the page
- * (account-scoped — another account's page is reported not-found) and the
- * account's `customDomainNeedsApproval` policy (read from the newest `policy.set`
- * audit entry, the CLOUD-35 durable-store convention; default `true`).
- */
-export const authAndContextForBind = internalQuery({
-  args: { bearer: v.string(), pageId: v.id("pages") },
-  returns: v.object({
-    accountId: v.id("accounts"),
-    tokenId: v.id("tokens"),
-    needsApproval: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const auth = await requireDomainsBind(ctx, args.bearer);
-    const page = await ctx.db.get(args.pageId);
-    if (!page || page.accountId !== auth.accountId) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
-    }
-    const needsApproval = await readNeedsApproval(ctx, auth.accountId);
-    return {
-      accountId: auth.accountId,
-      tokenId: auth.tokenId,
-      needsApproval,
-    };
-  },
-});
 
 const POLICY_ACTION = "policy.set" as const;
 
@@ -265,108 +235,6 @@ async function readNeedsApproval(
     ? md.customDomainNeedsApproval
     : true;
 }
-
-/** The minimal auth/context for an operator approval (read scope is enough). */
-export const authForApprove = internalQuery({
-  args: { bearer: v.string(), pageId: v.id("pages") },
-  returns: v.object({
-    accountId: v.id("accounts"),
-    tokenId: v.id("tokens"),
-  }),
-  handler: async (ctx, args) => {
-    const auth = await requireRead(ctx, args.bearer);
-    const page = await ctx.db.get(args.pageId);
-    if (!page || page.accountId !== auth.accountId) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
-    }
-    return { accountId: auth.accountId, tokenId: auth.tokenId };
-  },
-});
-
-/**
- * Record a bind state transition as an append-only `domain.bind` audit entry.
- * Every state the bind passes through (pending-human / queued / pending-cert /
- * active / failed) is auditable. No schema change — same convention as policy.
- */
-export const recordBindAudit = internalMutation({
-  args: {
-    accountId: v.id("accounts"),
-    pageId: v.id("pages"),
-    actorTokenId: v.union(v.id("tokens"), v.null()),
-    hostname: v.string(),
-    state: v.string(),
-    cloudflareHostnameId: v.union(v.string(), v.null()),
-    reason: v.union(v.string(), v.null()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await ctx.db.insert("auditLog", {
-      accountId: args.accountId,
-      action: "domain.bind",
-      targetId: args.pageId,
-      actorTokenId: args.actorTokenId,
-      metadata: {
-        hostname: args.hostname,
-        state: args.state,
-        cloudflareHostnameId: args.cloudflareHostnameId,
-        reason: args.reason,
-      },
-      createdAt: Date.now(),
-    });
-    return null;
-  },
-});
-
-/**
- * The ACTIVE commit: bind the hostname onto the page AND emit the custom-domain
- * billing meter increment — atomically. The meter is a simple `domain.meter`
- * audit event here (a counter/event); full metered billing lands in CLOUD-43,
- * which consumes these events. The bind is also audited as `active`.
- */
-export const commitDomainActive = internalMutation({
-  args: {
-    accountId: v.id("accounts"),
-    pageId: v.id("pages"),
-    actorTokenId: v.union(v.id("tokens"), v.null()),
-    hostname: v.string(),
-    cloudflareHostnameId: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const page = await ctx.db.get(args.pageId);
-    if (!page || page.accountId !== args.accountId) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
-    }
-    const now = Date.now();
-    // Bind the hostname onto the page (the worker's custom-hostname resolution
-    // reads `by_customDomain`).
-    await ctx.db.patch(args.pageId, { customDomain: args.hostname, updatedAt: now });
-    // Billing meter increment — a counter/event CLOUD-43's billing rollup reads.
-    await ctx.db.insert("auditLog", {
-      accountId: args.accountId,
-      action: "domain.meter",
-      targetId: args.pageId,
-      actorTokenId: args.actorTokenId,
-      metadata: { hostname: args.hostname, kind: "custom-domain", delta: 1 },
-      createdAt: now,
-    });
-    // The active transition itself, audited.
-    await ctx.db.insert("auditLog", {
-      accountId: args.accountId,
-      action: "domain.bind",
-      targetId: args.pageId,
-      actorTokenId: args.actorTokenId,
-      metadata: {
-        hostname: args.hostname,
-        state: "active",
-        cloudflareHostnameId: args.cloudflareHostnameId,
-        reason: null,
-      },
-      createdAt: now,
-    });
-    return null;
-  },
-});
 
 // ---------------------------------------------------------------------------
 // The Cloudflare provisioning drive (action-side; uses the injected client).
@@ -413,216 +281,415 @@ async function pollUntilCert(
   return "pending";
 }
 
+// ===========================================================================
+// ACCOUNT-LEVEL custom domains (the ONLY custom-domain model; the per-page
+// bind was removed).
+//
+// A domain is an alias of the ACCOUNT: bind one subdomain you own
+// (`pages.abc.com`) and EVERY page is reachable at `<hostname>/<slug>` (path-
+// routed by serve.resolveAccountDomainRoute), alongside its
+// `<subdomain>.shortwind.app` vanity URL. One Cloudflare-for-SaaS cert per
+// hostname (not per page). Same scope + approval + entitlement gates as the
+// per-page bind; the difference is the subject (account, no `pageId`) and that
+// the hostname must be a subdomain (not a bare apex).
+// ===========================================================================
+
+/** Reserved apexes the platform serves from — an account cannot bind these. */
+const RESERVED_APEXES = ["shortwind.app", "shortwind.dev"] as const;
+/** One DNS label: 1–63 chars, alnum, internal hyphens allowed. */
+const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
 /**
- * Provision a custom hostname through Cloudflare: create (with rate-limit
- * backoff) → poll the details endpoint for the cert → on active commit the bind
- * + meter. Returns the resulting {@link DomainBindResult}. Pure orchestration
- * over the injected client + the internal mutations; no `ctx.db` (action-side).
+ * Validate a bindable custom domain. Subdomain-ONLY (product decision): a bare
+ * apex (`abc.com`, 2 labels) is rejected — bind `pages.abc.com`. Also rejects
+ * malformed hostnames and any shortwind-owned name. Pure/exported for tests.
  */
-async function provision(
-  ctx: RunnerCtx,
-  args: {
-    accountId: Id<"accounts">;
-    pageId: Id<"pages">;
-    tokenId: Id<"tokens">;
-    hostname: string;
-  },
-): Promise<DomainBindResult> {
-  // 1. Create the custom hostname (retry a rate-limit with backoff).
-  const record = await createWithBackoff(args.hostname);
-  if (record === null) {
-    // Persistent rate-limit → queue the bind; a later sweep retries the create.
-    await ctx.runMutation(internal.domains.recordBindAudit, {
-      accountId: args.accountId,
-      pageId: args.pageId,
-      actorTokenId: args.tokenId,
-      hostname: args.hostname,
-      state: "queued",
-      cloudflareHostnameId: null,
-      reason: "cloudflare cert-issuance rate limit",
-    });
+export function isBindableSubdomain(
+  hostname: string,
+): { ok: true; hostname: string } | { ok: false; reason: string } {
+  const h = hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (!h) return { ok: false, reason: "hostname is required" };
+  const labels = h.split(".");
+  if (labels.length < 3) {
     return {
-      state: "queued",
-      hostname: args.hostname,
-      cloudflareHostnameId: null,
-      pageId: args.pageId,
-      reason: "cloudflare cert-issuance rate limit",
+      ok: false,
+      reason:
+        "a subdomain is required (e.g. pages.example.com), not a bare apex",
     };
   }
-
-  // 2. Poll the details endpoint for the cert (webhooks enterprise-only — §9).
-  const verdict = await pollUntilCert(record.id);
-
-  if (verdict === "failed") {
-    await ctx.runMutation(internal.domains.recordBindAudit, {
-      accountId: args.accountId,
-      pageId: args.pageId,
-      actorTokenId: args.tokenId,
-      hostname: args.hostname,
-      state: "failed",
-      cloudflareHostnameId: record.id,
-      reason: "cloudflare cert issuance failed",
-    });
-    return {
-      state: "failed",
-      hostname: args.hostname,
-      cloudflareHostnameId: record.id,
-      pageId: args.pageId,
-      reason: "cloudflare cert issuance failed",
-    };
+  if (!labels.every((l) => HOST_LABEL.test(l))) {
+    return { ok: false, reason: `invalid hostname: ${JSON.stringify(h)}` };
   }
-
-  if (verdict === "pending") {
-    // Cert not yet ready after the poll budget — leave `pending-cert`; the page
-    // is NOT bound yet. A later sweep (or a re-bind) finishes the transition.
-    await ctx.runMutation(internal.domains.recordBindAudit, {
-      accountId: args.accountId,
-      pageId: args.pageId,
-      actorTokenId: args.tokenId,
-      hostname: args.hostname,
-      state: "pending-cert",
-      cloudflareHostnameId: record.id,
-      reason: null,
-    });
-    return {
-      state: "pending-cert",
-      hostname: args.hostname,
-      cloudflareHostnameId: record.id,
-      pageId: args.pageId,
-    };
+  if (RESERVED_APEXES.some((a) => h === a || h.endsWith(`.${a}`))) {
+    return { ok: false, reason: "cannot bind a shortwind-owned domain" };
   }
-
-  // 3. Active: bind onto the page + emit the domain billing meter, atomically.
-  await ctx.runMutation(internal.domains.commitDomainActive, {
-    accountId: args.accountId,
-    pageId: args.pageId,
-    actorTokenId: args.tokenId,
-    hostname: args.hostname,
-    cloudflareHostnameId: record.id,
-  });
-  return {
-    state: "active",
-    hostname: args.hostname,
-    cloudflareHostnameId: record.id,
-    pageId: args.pageId,
-  };
+  return { ok: true, hostname: h };
 }
 
-// ---------------------------------------------------------------------------
-// Public verbs.
-// ---------------------------------------------------------------------------
+const accountDomainStatus = v.union(
+  v.literal("pending-human"),
+  v.literal("queued"),
+  v.literal("pending-cert"),
+  v.literal("active"),
+  v.literal("failed"),
+);
 
-const bindResultValidator = v.object({
-  state: v.union(
-    v.literal("pending-human"),
-    v.literal("queued"),
-    v.literal("pending-cert"),
-    v.literal("active"),
-    v.literal("failed"),
-  ),
+/** The account-domain bind outcome, as plain data (no `pageId` — account-wide). */
+export interface AccountDomainBindResult {
+  state: DomainBindState;
+  hostname: string;
+  cloudflareHostnameId: string | null;
+  reason?: string;
+}
+
+const accountBindResultValidator = v.object({
+  state: accountDomainStatus,
   hostname: v.string(),
   cloudflareHostnameId: v.union(v.string(), v.null()),
-  pageId: v.string(),
   reason: v.optional(v.string()),
 });
 
 /**
- * bindDomain (POST /v1/pages/{id}/domain): bind a custom hostname to a page.
- *
- * - requires the `domains:bind` scope (→ 403 without it).
- * - honors the account policy `customDomainNeedsApproval`: when set, the bind
- *   parks in `pending-human` and NO Cloudflare hostname is created until an
- *   operator calls {@link approveDomain}.
- * - otherwise provisions the hostname through Cloudflare for SaaS: create (with
- *   rate-limit backoff → `queued`), poll the details endpoint for the cert, and
- *   on `active` set `pages.customDomain` + emit the domain billing meter.
- *
- * An ACTION (the Cloudflare calls are network IO); the bearer is validated in an
- * internalQuery (`authAndContextForBind`) since an action has no `ctx.db`.
+ * Scope (`domains:bind`) + entitlement (plan quota on ACTIVE account domains) +
+ * approval policy + global hostname-conflict check. Returns the bind context.
+ * A hostname already active for THIS account short-circuits as idempotent
+ * (`alreadyActive`), consuming no new quota; one bound to ANOTHER account is a
+ * CONFLICT.
  */
-export const bindDomain = action({
-  args: {
-    bearer: v.string(),
-    pageId: v.id("pages"),
-    hostname: v.string(),
-  },
-  returns: bindResultValidator,
-  handler: async (ctx, args): Promise<DomainBindResult> => {
-    const hostname = args.hostname.trim().toLowerCase();
-    if (!hostname) {
+export const authAndContextForAccountBind = internalQuery({
+  args: { bearer: v.string(), hostname: v.string() },
+  returns: v.object({
+    accountId: v.id("accounts"),
+    tokenId: v.id("tokens"),
+    needsApproval: v.boolean(),
+    alreadyActive: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const auth = await requireDomainsBind(ctx, args.bearer);
+
+    const existing = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_hostname", (q) => q.eq("hostname", args.hostname))
+      .first();
+    if (existing && existing.accountId !== auth.accountId) {
       throw new ConvexError({
-        code: "BAD_REQUEST",
-        message: "`hostname` is required",
+        code: "CONFLICT",
+        message: "This domain is already bound to another account.",
       });
     }
+    const alreadyActive =
+      existing?.status === "active" && existing.accountId === auth.accountId;
 
-    // Gate 1: scope (domains:bind) + account-scoped page + policy. Throws 403
-    // (insufficient_scope) without the privileged grant; 404 for another
-    // account's page.
-    const ctxInfo = await ctx.runQuery(internal.domains.authAndContextForBind, {
-      bearer: args.bearer,
-      pageId: args.pageId,
+    if (!alreadyActive) {
+      const plan = await resolvePlan(ctx, auth.accountId);
+      const active = await ctx.db
+        .query("accountDomains")
+        .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+        .collect();
+      const activeCount = active.filter((d) => d.status === "active").length;
+      if (!withinCustomDomainQuota(plan, activeCount)) {
+        throw new ConvexError({
+          code: "NOT_ENTITLED",
+          message:
+            "Custom domains require a paid plan (or you have reached your plan's domain limit). Upgrade to bind a domain.",
+        });
+      }
+    }
+
+    const needsApproval = await readNeedsApproval(ctx, auth.accountId);
+    return {
+      accountId: auth.accountId,
+      tokenId: auth.tokenId,
+      needsApproval,
+      alreadyActive,
+    };
+  },
+});
+
+/**
+ * Upsert the account-domain row to a new state (keyed by hostname) and audit the
+ * transition. On `active` it also emits the `domain.meter` billing event
+ * (kind: account-custom-domain) — the same counter `billing.getUsage` reads.
+ */
+export const upsertAccountDomainStatus = internalMutation({
+  args: {
+    accountId: v.id("accounts"),
+    tokenId: v.union(v.id("tokens"), v.null()),
+    hostname: v.string(),
+    status: accountDomainStatus,
+    cloudflareHostnameId: v.union(v.string(), v.null()),
+    reason: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_hostname", (q) => q.eq("hostname", args.hostname))
+      .first();
+    const isActive = args.status === "active";
+    const row = {
+      accountId: args.accountId,
+      hostname: args.hostname,
+      status: args.status,
+      cloudflareHostnameId: args.cloudflareHostnameId,
+      verifiedAt: isActive ? now : (existing?.verifiedAt ?? null),
+      createdAt: existing?.createdAt ?? now,
+    };
+    if (existing) await ctx.db.patch(existing._id, row);
+    else await ctx.db.insert("accountDomains", row);
+
+    await ctx.db.insert("auditLog", {
+      accountId: args.accountId,
+      action: "domain.bind",
+      targetId: null,
+      actorTokenId: args.tokenId,
+      metadata: {
+        hostname: args.hostname,
+        state: args.status,
+        cloudflareHostnameId: args.cloudflareHostnameId,
+        reason: args.reason,
+        scope: "account",
+      },
+      createdAt: now,
+    });
+    if (isActive) {
+      await ctx.db.insert("auditLog", {
+        accountId: args.accountId,
+        action: "domain.meter",
+        targetId: null,
+        actorTokenId: args.tokenId,
+        metadata: {
+          hostname: args.hostname,
+          kind: "account-custom-domain",
+          delta: 1,
+        },
+        createdAt: now,
+      });
+    }
+    return null;
+  },
+});
+
+/**
+ * Provision an account domain through Cloudflare: create (rate-limit backoff →
+ * `queued`) → poll the cert → on active persist the row + meter. Reuses the
+ * page-bind's `createWithBackoff` / `pollUntilCert` (both hostname-scoped, page-
+ * agnostic); the only difference is it commits to `accountDomains`.
+ */
+async function provisionAccountDomain(
+  ctx: RunnerCtx,
+  args: {
+    accountId: Id<"accounts">;
+    tokenId: Id<"tokens"> | null;
+    hostname: string;
+  },
+): Promise<AccountDomainBindResult> {
+  const set = (
+    status: DomainBindState,
+    cloudflareHostnameId: string | null,
+    reason: string | null,
+  ) =>
+    ctx.runMutation(internal.domains.upsertAccountDomainStatus, {
+      accountId: args.accountId,
+      tokenId: args.tokenId,
+      hostname: args.hostname,
+      status,
+      cloudflareHostnameId,
+      reason,
     });
 
-    // Gate 2: human-approval policy. When set, park in `pending-human` WITHOUT
-    // calling Cloudflare — the hostname is created only after an operator approves.
-    if (ctxInfo.needsApproval) {
-      await ctx.runMutation(internal.domains.recordBindAudit, {
-        accountId: ctxInfo.accountId,
-        pageId: args.pageId,
-        actorTokenId: ctxInfo.tokenId,
+  const record = await createWithBackoff(args.hostname);
+  if (record === null) {
+    await set("queued", null, "cloudflare cert-issuance rate limit");
+    return {
+      state: "queued",
+      hostname: args.hostname,
+      cloudflareHostnameId: null,
+      reason: "cloudflare cert-issuance rate limit",
+    };
+  }
+
+  const verdict = await pollUntilCert(record.id);
+  if (verdict === "failed") {
+    await set("failed", record.id, "cloudflare cert issuance failed");
+    return {
+      state: "failed",
+      hostname: args.hostname,
+      cloudflareHostnameId: record.id,
+      reason: "cloudflare cert issuance failed",
+    };
+  }
+  if (verdict === "pending") {
+    await set("pending-cert", record.id, null);
+    return {
+      state: "pending-cert",
+      hostname: args.hostname,
+      cloudflareHostnameId: record.id,
+    };
+  }
+  await set("active", record.id, null);
+  return {
+    state: "active",
+    hostname: args.hostname,
+    cloudflareHostnameId: record.id,
+  };
+}
+
+/**
+ * bindAccountDomain (POST /v1/domains): bind a subdomain you own to the ACCOUNT.
+ * Same gates as the per-page bind — `domains:bind` scope, plan entitlement,
+ * `customDomainNeedsApproval` policy — but no `pageId`, and the hostname must be
+ * a subdomain. Every page then serves at `<hostname>/<slug>`.
+ */
+export const bindAccountDomain = action({
+  args: { bearer: v.string(), hostname: v.string() },
+  returns: accountBindResultValidator,
+  handler: async (ctx, args): Promise<AccountDomainBindResult> => {
+    const check = isBindableSubdomain(args.hostname);
+    if (!check.ok) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: check.reason });
+    }
+    const hostname = check.hostname;
+
+    const info = await ctx.runQuery(
+      internal.domains.authAndContextForAccountBind,
+      { bearer: args.bearer, hostname },
+    );
+
+    if (info.alreadyActive) {
+      return { state: "active", hostname, cloudflareHostnameId: null };
+    }
+    if (info.needsApproval) {
+      await ctx.runMutation(internal.domains.upsertAccountDomainStatus, {
+        accountId: info.accountId,
+        tokenId: info.tokenId,
         hostname,
-        state: "pending-human",
+        status: "pending-human",
         cloudflareHostnameId: null,
         reason: null,
       });
-      return {
-        state: "pending-human",
-        hostname,
-        cloudflareHostnameId: null,
-        pageId: args.pageId,
-      };
+      return { state: "pending-human", hostname, cloudflareHostnameId: null };
     }
-
-    // No approval required → provision immediately through Cloudflare.
-    return provision(ctx, {
-      accountId: ctxInfo.accountId,
-      pageId: args.pageId,
-      tokenId: ctxInfo.tokenId,
+    return provisionAccountDomain(ctx, {
+      accountId: info.accountId,
+      tokenId: info.tokenId,
       hostname,
     });
   },
 });
 
 /**
- * approveDomain (operator action): approve a `pending-human` bind and provision
- * the hostname through Cloudflare for SaaS (the same create → poll → active path
- * as a no-approval bind). This is the human gate in PRD §7.2 — an operator
- * unblocks the queued approval, after which the cert is issued and the page is
- * bound. Re-uses the read-scope auth (the operator is acting within the account).
+ * pageDomains: the URLs a page is reachable at (decision — "check what domain a
+ * page lives under"). Always its `<subdomain>.shortwind.app` vanity URL, plus —
+ * because domains are account-level — one `<hostname>/<slug>` entry per ACTIVE
+ * account domain. Designed for multiple domains (array), though the plan caps
+ * active at 1 today. Account-scoped read (operator bearer or session).
  */
-export const approveDomain = action({
-  args: {
-    bearer: v.string(),
-    pageId: v.id("pages"),
-    hostname: v.string(),
-  },
-  returns: bindResultValidator,
-  handler: async (ctx, args): Promise<DomainBindResult> => {
-    const hostname = args.hostname.trim().toLowerCase();
-    if (!hostname) {
-      throw new ConvexError({
-        code: "BAD_REQUEST",
-        message: "`hostname` is required",
-      });
+export const pageDomains = query({
+  args: { pageId: v.id("pages"), bearer: v.optional(v.string()) },
+  returns: v.object({
+    slug: v.string(),
+    subdomain: v.union(v.string(), v.null()),
+    customDomains: v.array(
+      v.object({ hostname: v.string(), url: v.string() }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const page = await ctx.db.get(args.pageId);
+    if (!page || page.accountId !== auth.accountId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
     }
-    const auth = await ctx.runQuery(internal.domains.authForApprove, {
+    const domains = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+      .collect();
+    return {
+      slug: page.slug,
+      subdomain: page.subdomain ?? null,
+      customDomains: domains
+        .filter((d) => d.status === "active")
+        .map((d) => ({
+          hostname: d.hostname,
+          url: `https://${d.hostname}/${page.slug}`,
+        })),
+    };
+  },
+});
+
+/**
+ * listAccountDomains: the account's custom domains for the dashboard (hostname +
+ * bind status + verifiedAt). Account-scoped read (operator session or bearer).
+ */
+export const listAccountDomains = query({
+  args: { bearer: v.optional(v.string()) },
+  returns: v.array(
+    v.object({
+      id: v.string(),
+      hostname: v.string(),
+      status: accountDomainStatus,
+      verifiedAt: v.union(v.number(), v.null()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const rows = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+      .collect();
+    return rows.map((d) => ({
+      id: d._id as string,
+      hostname: d.hostname,
+      status: d.status,
+      verifiedAt: d.verifiedAt,
+      createdAt: d.createdAt,
+    }));
+  },
+});
+
+/** Resolve the operator's account for a `pending-human` account-domain approval. */
+export const authForAccountApprove = internalQuery({
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
+  returns: v.object({
+    accountId: v.id("accounts"),
+    tokenId: v.union(v.id("tokens"), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const domain = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_hostname", (q) => q.eq("hostname", args.hostname))
+      .first();
+    if (!domain || domain.accountId !== auth.accountId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Domain not found" });
+    }
+    return { accountId: auth.accountId, tokenId: auth.tokenId };
+  },
+});
+
+/**
+ * approveAccountDomain (operator action): approve a `pending-human` account
+ * domain and provision the hostname through Cloudflare (the same create → poll →
+ * active path as a no-approval bind). The human gate of PRD §7.2 for the
+ * account-level model. Operator-authed (session or read bearer).
+ */
+export const approveAccountDomain = action({
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
+  returns: accountBindResultValidator,
+  handler: async (ctx, args): Promise<AccountDomainBindResult> => {
+    const check = isBindableSubdomain(args.hostname);
+    if (!check.ok) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: check.reason });
+    }
+    const hostname = check.hostname;
+    const auth = await ctx.runQuery(internal.domains.authForAccountApprove, {
       bearer: args.bearer,
-      pageId: args.pageId,
+      hostname,
     });
-    return provision(ctx, {
+    return provisionAccountDomain(ctx, {
       accountId: auth.accountId,
-      pageId: args.pageId,
       tokenId: auth.tokenId,
       hostname,
     });

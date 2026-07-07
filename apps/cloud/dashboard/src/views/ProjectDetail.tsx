@@ -51,7 +51,7 @@ export function ProjectDetail({
   }
 
   const { page } = entry;
-  const url = pageUrl(page.slug, page.customDomain);
+  const url = pageUrl(page.slug);
 
   return (
     <div className="space-y-6" data-testid="project-detail">
@@ -67,7 +67,7 @@ export function ProjectDetail({
             rel="noreferrer"
             className="@link @caption"
           >
-            {pageHost(page.slug, page.customDomain)} ↗
+            {pageHost(page.slug)} ↗
           </a>
           <CopyButton value={url} />
         </div>
@@ -149,12 +149,12 @@ function OverviewTab({ entry }: { entry: PageWithVersions }) {
       <dt className="@dt">Live URL</dt>
       <dd className="@dd">
         <a
-          href={pageUrl(page.slug, page.customDomain)}
+          href={pageUrl(page.slug)}
           target="_blank"
           rel="noreferrer"
           className="@link"
         >
-          {pageHost(page.slug, page.customDomain)}
+          {pageHost(page.slug)}
         </a>
       </dd>
 

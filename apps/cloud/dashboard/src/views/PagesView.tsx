@@ -57,7 +57,7 @@ function PageCard({
   onOpen?: (id: string) => void;
 }) {
   const { page } = entry;
-  const host = pageHost(page.slug, page.customDomain);
+  const host = pageHost(page.slug);
   const interactive = Boolean(onOpen);
 
   // Accessible clickable card: the title is a real <button> whose hit area is
@@ -91,7 +91,7 @@ function PageCard({
       </div>
 
       <a
-        href={pageUrl(page.slug, page.customDomain)}
+        href={pageUrl(page.slug)}
         target="_blank"
         rel="noreferrer"
         className="@link relative z-10 truncate text-xs text-muted-foreground hover:text-term"

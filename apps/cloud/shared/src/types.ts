@@ -96,8 +96,6 @@ export interface Page {
    * before this field landed may omit it (absent ⇒ path-based serving only).
    */
   subdomain?: string;
-  /** Optional bound custom hostname (Cloudflare for SaaS). */
-  customDomain: string | null;
   visibility: PageVisibility;
   lifecycle: PageLifecycle;
   /** Free-form discovery tags (load-bearing for `find`). */

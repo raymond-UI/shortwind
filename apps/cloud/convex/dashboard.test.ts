@@ -66,7 +66,6 @@ describe("dashboard.listPages", () => {
       const pageId = await ctx.db.insert("pages", {
         accountId: accountId as never,
         slug: "launch",
-        customDomain: null,
         visibility: "public",
         lifecycle: "active",
         tags: ["ops"],
@@ -118,7 +117,6 @@ describe("dashboard.listPages", () => {
       await ctx.db.insert("pages", {
         accountId: other.accountId as never,
         slug: "secret",
-        customDomain: null,
         visibility: "private",
         lifecycle: "active",
         tags: [],
@@ -154,7 +152,6 @@ describe("dashboard.listRecipeEditEvents (PRD §5.4 distinct feed)", () => {
         await ctx.db.insert("pages", {
           accountId: accountId as never,
           slug,
-          customDomain: null,
           visibility: "public",
           lifecycle,
           tags: [],
@@ -242,7 +239,6 @@ describe("dashboard.listAuditLog & listModeration", () => {
       const myPage = await ctx.db.insert("pages", {
         accountId: mine.accountId as never,
         slug: "p",
-        customDomain: null,
         visibility: "public",
         lifecycle: "quarantined",
         tags: [],
@@ -270,7 +266,6 @@ describe("dashboard.listAuditLog & listModeration", () => {
       const otherPage = await ctx.db.insert("pages", {
         accountId: other.accountId as never,
         slug: "q",
-        customDomain: null,
         visibility: "public",
         lifecycle: "quarantined",
         tags: [],

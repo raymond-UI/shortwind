@@ -34,7 +34,6 @@ function row(over: Partial<PageRowLike>): PageRowLike {
     slug: "status",
     visibility: "public",
     lifecycle: "active",
-    customDomain: null,
     currentVersion: 3,
     tags: ["ops"],
     // CLOUD-51 (additive): defaults for the new fields.
@@ -47,11 +46,8 @@ function row(over: Partial<PageRowLike>): PageRowLike {
 
 describe("normalizeFindFilters", () => {
   it("trims values and drops blank / whitespace-only ones", () => {
-    expect(
-      normalizeFindFilters({ q: "  status ", domain: "", tag: "   " }),
-    ).toEqual({
+    expect(normalizeFindFilters({ q: "  status ", tag: "   " })).toEqual({
       q: "status",
-      domain: undefined,
       tag: undefined,
       group: undefined,
     });
@@ -60,13 +56,11 @@ describe("normalizeFindFilters", () => {
   it("treats missing/null params as absent", () => {
     expect(normalizeFindFilters({})).toEqual({
       q: undefined,
-      domain: undefined,
       tag: undefined,
       group: undefined,
     });
-    expect(normalizeFindFilters({ q: null, domain: null, tag: null })).toEqual({
+    expect(normalizeFindFilters({ q: null, tag: null })).toEqual({
       q: undefined,
-      domain: undefined,
       tag: undefined,
       group: undefined,
     });
@@ -74,10 +68,10 @@ describe("normalizeFindFilters", () => {
 });
 
 describe("planFindIndex — find is index-backed (never a full scan)", () => {
-  it("uses by_customDomain when a domain filter is present (most selective)", () => {
-    expect(planFindIndex({ domain: "acme.com" })).toEqual({
-      index: "by_customDomain",
-      domain: "acme.com",
+  it("uses by_project when a group filter is present", () => {
+    expect(planFindIndex({ group: "marketing" })).toEqual({
+      index: "by_project",
+      group: "marketing",
     });
   });
 
@@ -87,13 +81,6 @@ describe("planFindIndex — find is index-backed (never a full scan)", () => {
     // tag membership cannot be served by the whole-array by_tag index, so it
     // rides the account-scoped scan as a residual filter.
     expect(planFindIndex({ tag: "ops" })).toEqual({ index: "by_account" });
-  });
-
-  it("prefers domain over tag when both are present", () => {
-    expect(planFindIndex({ domain: "acme.com", tag: "ops" })).toEqual({
-      index: "by_customDomain",
-      domain: "acme.com",
-    });
   });
 });
 
@@ -148,7 +135,6 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
           _id: "pg_x",
           slug: "status",
           visibility: "unlisted",
-          customDomain: "status.acme.com",
           currentVersion: 7,
           tags: ["ops", "prod"],
           expiresAt: 9999,
@@ -163,7 +149,6 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
       url: "https://shortwind.app/status",
       visibility: "unlisted",
       lifecycle: "active",
-      customDomain: "status.acme.com",
       currentVersion: 7,
       tags: ["ops", "prod"],
       expiresAt: 9999,
@@ -186,7 +171,6 @@ describe("toPageSummary — the exact CLI-facing JSON shape", () => {
     expect(Object.keys(summary).sort()).toEqual(
       [
         "currentVersion",
-        "customDomain",
         "expiresAt",
         "id",
         "lifecycle",

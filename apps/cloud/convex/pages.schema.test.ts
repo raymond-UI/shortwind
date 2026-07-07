@@ -25,9 +25,9 @@ function fields(table: string): string[] {
 
 describe("publish/update adapters write fields the schema declares", () => {
   it("commitNewPage writes every pages field", () => {
-    // commitNewPage inserts: accountId, slug, customDomain, visibility,
-    // lifecycle, tags, currentVersionId, currentVersion, createdAt, updatedAt,
-    // plus the CLOUD-51 additive expiresAt / projectGroup (default null).
+    // pages fields. `customDomain` is DEPRECATED + UNUSED (custom domains are
+    // account-level now) but kept as an optional column so the prod deploy needs
+    // no migration — so it still appears in the schema field set.
     expect(new Set(fields("pages"))).toEqual(
       new Set([
         "accountId",

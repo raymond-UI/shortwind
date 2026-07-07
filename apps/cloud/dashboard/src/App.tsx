@@ -6,6 +6,7 @@ import { RecipeEditsView } from "./views/RecipeEditsView";
 import { ModerationView } from "./views/ModerationView";
 import { PolicyView } from "./views/PolicyView";
 import { UsageView } from "./views/UsageView";
+import { BillingView } from "./views/BillingView";
 import { DomainsView } from "./views/DomainsView";
 import { AnalyticsView } from "./views/AnalyticsView";
 import { SettingsView } from "./views/SettingsView";
@@ -29,6 +30,7 @@ const SECTIONS = [
   { id: "analytics", label: "Analytics", render: () => <AnalyticsView /> },
   { id: "domains", label: "Domains", render: () => <DomainsView /> },
   { id: "usage", label: "Usage", render: () => <UsageView /> },
+  { id: "billing", label: "Billing", render: () => <BillingView /> },
   { id: "activity", label: "Activity", render: () => <ActivitySection /> },
   { id: "moderation", label: "Moderation", render: () => <ModerationView /> },
   { id: "settings", label: "Settings", render: () => <SettingsView /> },

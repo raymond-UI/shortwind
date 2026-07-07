@@ -19,6 +19,9 @@ importers:
       '@convex-dev/rate-limiter':
         specifier: 0.3.2
         version: 0.3.2(convex@1.41.0(react@19.2.7))(react@19.2.7)
+      '@convex-dev/stripe':
+        specifier: 0.1.4
+        version: 0.1.4(@types/node@22.20.0)(convex@1.41.0(react@19.2.7))(react@19.2.7)
       '@shortwind/core':
         specifier: 0.1.0-beta.19
         version: 0.1.0-beta.19
@@ -241,6 +244,12 @@ packages:
     peerDependenciesMeta:
       react:
         optional: true
+
+  '@convex-dev/stripe@0.1.4':
+    resolution: {integrity: sha512-HnINm3K2QHGvP0X4YV7KruCjQ1Ni0HE1qpJ5rZYjfdUbMcqJsX4ZYTmOo7tL83qtokS3EahKVkhXLCH/9Ms/og==}
+    peerDependencies:
+      convex: ^1.29.3
+      react: ^18.3.1 || ^19.0.0
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -1461,6 +1470,15 @@ packages:
   std-env@4.1.0:
     resolution: {integrity: sha512-Rq7ybcX2RuC55r9oaPVEW7/xu3tj8u4GeBYHBWCychFtzMIr86A7e3PPEBPT37sHStKX3+TiX/Fr/ACmJLVlLQ==}
 
+  stripe@20.4.1:
+    resolution: {integrity: sha512-axCguHItc8Sxt0HC6aSkdVRPffjYPV7EQqZRb2GkIa8FzWDycE7nHJM19C6xAIynH1Qp1/BHiopSi96jGBxT0w==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/node': '>=16'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   supports-color@10.2.2:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
     engines: {node: '>=18'}
@@ -1788,6 +1806,14 @@ snapshots:
       convex: 1.41.0(react@19.2.7)
     optionalDependencies:
       react: 19.2.7
+
+  '@convex-dev/stripe@0.1.4(@types/node@22.20.0)(convex@1.41.0(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      convex: 1.41.0(react@19.2.7)
+      react: 19.2.7
+      stripe: 20.4.1(@types/node@22.20.0)
+    transitivePeerDependencies:
+      - '@types/node'
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -2670,6 +2696,10 @@ snapshots:
   stackback@0.0.2: {}
 
   std-env@4.1.0: {}
+
+  stripe@20.4.1(@types/node@22.20.0):
+    optionalDependencies:
+      '@types/node': 22.20.0
 
   supports-color@10.2.2: {}
 

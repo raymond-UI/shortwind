@@ -60,7 +60,6 @@ async function seedPageWithVersions(
     const pageId = await ctx.db.insert("pages", {
       accountId: accountId as never,
       slug,
-      customDomain: null,
       visibility: "public",
       lifecycle: "active",
       tags: [],
