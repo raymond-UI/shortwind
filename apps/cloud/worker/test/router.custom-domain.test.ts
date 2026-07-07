@@ -11,16 +11,16 @@ import {
   handleRequest,
   type RouterDeps,
   type TokenValidator,
-  type ColdCustomHostnameSource,
+  type ColdAccountDomainSource,
 } from "../src/router";
 
 /**
- * CLOUD-40 — worker custom-hostname resolution (ADDITIVE branch).
+ * Worker ACCOUNT-LEVEL custom-domain resolution (ADDITIVE branch).
  *
- * A request to a bound custom hostname (pages.customDomain) resolves to the page
- * via the injected `coldCustomHostname` cold source — but ONLY on a host/path
- * miss, so the existing hot-path host/path resolution + KV-hit discipline is
- * untouched. Runs inside workerd against local miniflare R2 + KV (no live creds).
+ * A request to a bound account domain resolves `<hostname>/<slug>` to the page
+ * via the injected `coldAccountDomain(host, path)` cold source — but ONLY on a
+ * subdomain miss, so the existing hot-path host/path resolution + KV-hit
+ * discipline is untouched. Runs inside workerd against local miniflare R2 + KV.
  */
 const E = env as unknown as Env;
 
@@ -73,55 +73,63 @@ async function run(request: Request, d: RouterDeps) {
   return res;
 }
 
-describe("CLOUD-40 router: custom-hostname resolution", () => {
-  it("resolves a bound custom hostname → the page and serves the artifact", async () => {
+describe("router: account-level custom-domain resolution", () => {
+  it("resolves <hostname>/<slug> → the page and serves the artifact", async () => {
     const r = route();
     await seedArtifact(r);
 
-    const coldCustomHostname = vi.fn<ColdCustomHostnameSource>(async (host) =>
-      host === "mybrand.com" ? r : null,
+    const coldAccountDomain = vi.fn<ColdAccountDomainSource>(
+      async (host, path) =>
+        host === "pages.mybrand.com" && path === "/price-calculator" ? r : null,
     );
     const coldRoute = vi.fn<ColdRouteSource>(async () => null);
-    const d = deps({ coldRoute, coldCustomHostname });
+    const d = deps({ coldRoute, coldAccountDomain });
 
-    const res = await run(req("mybrand.com", "/"), d);
+    const res = await run(req("pages.mybrand.com", "/price-calculator"), d);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(HTML);
-    // The custom-hostname resolver WAS consulted (the host/path lookup missed).
-    expect(coldCustomHostname).toHaveBeenCalledWith("mybrand.com");
-    // The resolved route was cached in KV → a repeat view is a KV hit.
-    expect(await lookupRoute(E, "mybrand.com", "/")).not.toBeNull();
+    // Consulted with BOTH host and path (the subdomain lookup missed).
+    expect(coldAccountDomain).toHaveBeenCalledWith(
+      "pages.mybrand.com",
+      "/price-calculator",
+    );
+    // Cached under (host, path) → a repeat view is a KV hit.
+    expect(
+      await lookupRoute(E, "pages.mybrand.com", "/price-calculator"),
+    ).not.toBeNull();
   });
 
-  it("404s an unbound custom hostname (no page maps to it)", async () => {
-    const coldCustomHostname = vi.fn<ColdCustomHostnameSource>(async () => null);
-    const d = deps({ coldCustomHostname });
+  it("404s an unbound host / unknown slug", async () => {
+    const coldAccountDomain = vi.fn<ColdAccountDomainSource>(async () => null);
+    const d = deps({ coldAccountDomain });
 
-    const res = await run(req("unbound.example.org", "/"), d);
+    const res = await run(req("unbound.example.org", "/whatever"), d);
     expect(res.status).toBe(404);
-    expect(coldCustomHostname).toHaveBeenCalledWith("unbound.example.org");
+    expect(coldAccountDomain).toHaveBeenCalledWith(
+      "unbound.example.org",
+      "/whatever",
+    );
   });
 
-  it("does NOT consult the custom-hostname resolver when host/path already resolves (hot-path untouched)", async () => {
+  it("does NOT consult the account-domain resolver when host/path already resolves", async () => {
     const r = route({ pageId: "page_hit" });
     await seedArtifact(r);
 
     const coldRoute = vi.fn<ColdRouteSource>(async () => r);
-    const coldCustomHostname = vi.fn<ColdCustomHostnameSource>(async () => null);
-    const d = deps({ coldRoute, coldCustomHostname });
+    const coldAccountDomain = vi.fn<ColdAccountDomainSource>(async () => null);
+    const d = deps({ coldRoute, coldAccountDomain });
 
-    const res = await run(req("regular.example.com", "/p"), d);
+    const res = await run(req("label.shortwind.app", "/"), d);
 
     expect(res.status).toBe(200);
-    // The standard cold route resolved → the custom-hostname branch is skipped.
     expect(coldRoute).toHaveBeenCalledTimes(1);
-    expect(coldCustomHostname).not.toHaveBeenCalled();
+    expect(coldAccountDomain).not.toHaveBeenCalled();
   });
 
-  it("behaves identically to before when no custom-hostname resolver is injected", async () => {
-    const d = deps(); // no coldCustomHostname
-    const res = await run(req("nope.example.com", "/"), d);
+  it("behaves identically to before when no account-domain resolver is injected", async () => {
+    const d = deps(); // no coldAccountDomain
+    const res = await run(req("nope.example.com", "/x"), d);
     expect(res.status).toBe(404);
   });
 });

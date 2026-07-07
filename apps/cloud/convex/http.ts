@@ -6,6 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { formatUserCode } from "./lib/device_grant.js";
 import { authComponent, createAuth } from "./auth";
 import { checkAbuseLimit } from "./lib/rate_limit.js";
+import { registerBillingStripeRoutes } from "./billingStripe/http.js";
 import {
   API_CATALOG_PATH,
   OAUTH_AS_METADATA_PATH,
@@ -48,6 +49,10 @@ const http = httpRouter();
 
 authComponent.registerRoutes(http, createAuth, { cors: true });
 
+// Stripe billing webhook (ported from Realm) — signature-verified POST at
+// `/stripe/webhook`, mounted after the auth routes (which stay untouched).
+registerBillingStripeRoutes(http);
+
 // ---------------------------------------------------------------------------
 // CLOUD-24 — page READ REST surface.
 // ---------------------------------------------------------------------------
@@ -83,7 +88,7 @@ function errorResponse(err: unknown): Response {
   return json({ error: { code: "INTERNAL", message: "Internal error" } }, 500);
 }
 
-/** GET /v1/pages?q=&domain=&tag= → list page summaries (find). */
+/** GET /v1/pages?q=&tag=&group= → list page summaries (find). */
 const findHandler = httpAction(async (ctx, request) => {
   const url = new URL(request.url);
   const bearer = bearerFromRequest(request);
@@ -91,8 +96,8 @@ const findHandler = httpAction(async (ctx, request) => {
     const pages = await ctx.runQuery(api.pages.find, {
       bearer,
       q: url.searchParams.get("q") ?? undefined,
-      domain: url.searchParams.get("domain") ?? undefined,
       tag: url.searchParams.get("tag") ?? undefined,
+      group: url.searchParams.get("group") ?? undefined,
     });
     return json({ pages }, 200);
   } catch (err) {
@@ -398,17 +403,13 @@ const abuseHandler = httpAction(async (ctx, request) => {
 // ---------------------------------------------------------------------------
 
 /**
- * POST /v1/pages/{id}/domain → bind a custom hostname to a page (bindDomain).
+ * POST /v1/domains → bind an ACCOUNT-level custom domain (a subdomain you own).
  * Body: `{ hostname }`; the bearer rides in Authorization. Requires the
- * `domains:bind` scope — a token without it maps to 403 (the auth guard throws
- * `FORBIDDEN`, translated by {@link errorResponse}). Returns the bind
- * {@link DomainBindResult} (state machine: pending-human / queued / pending-cert
- * / active / failed).
+ * `domains:bind` scope (403 without it). A domain is an account alias — every
+ * page then serves at `<hostname>/<slug>` — so there is no `pageId`. Returns the
+ * bind state machine (pending-human / queued / pending-cert / active / failed).
  */
-const bindDomainHandler = httpAction(async (ctx, request) => {
-  const url = new URL(request.url);
-  const segments = pagesPathSegments(url.pathname); // [id, "domain"]
-  const id = segments[0] ?? "";
+const bindAccountDomainHandler = httpAction(async (ctx, request) => {
   const bearer = bearerFromRequest(request);
   const body = await readJsonBody(request);
   const hostname = body["hostname"];
@@ -419,16 +420,15 @@ const bindDomainHandler = httpAction(async (ctx, request) => {
     );
   }
   try {
-    const result = await ctx.runAction(api.domains.bindDomain, {
+    const result = await ctx.runAction(api.domains.bindAccountDomain, {
       bearer,
-      pageId: id as Id<"pages">,
       hostname,
     });
     return json(result, 200);
   } catch (err) {
     if (err instanceof ConvexError) {
       const data = err.data as { code?: string } | undefined;
-      if (data?.code === "NOT_FOUND") return json({ error: data }, 404);
+      if (data?.code === "CONFLICT") return json({ error: data }, 409);
     }
     return errorResponse(err);
   }
@@ -544,13 +544,19 @@ const validateTokenHandler = httpAction(async (ctx, request) => {
   }
 });
 
-/** GET /internal/resolve-custom?host= → the Worker custom-hostname route (or null). */
-const resolveCustomDomainHandler = httpAction(async (ctx, request) => {
+/**
+ * GET /internal/resolve-account?host=&path= → the Worker cold source for an
+ * ACCOUNT-level custom domain. Resolves host → owning account's active domain →
+ * `<path first segment>` slug → page. Path-routed (unlike the removed per-page
+ * resolve-custom, which was host-only).
+ */
+const resolveAccountDomainHandler = httpAction(async (ctx, request) => {
   const gate = serveSecretGate(request);
   if (gate) return gate;
   const url = new URL(request.url);
-  const route = await ctx.runQuery(api.serve.resolveCustomDomain, {
+  const route = await ctx.runQuery(api.serve.resolveAccountDomainRoute, {
     host: url.searchParams.get("host") ?? "",
+    path: url.searchParams.get("path") ?? "",
   });
   return json(route, 200);
 });
@@ -647,23 +653,18 @@ http.route({
   handler: validateTokenHandler,
 });
 http.route({
-  path: "/internal/resolve-custom",
+  path: "/internal/resolve-account",
   method: "GET",
-  handler: resolveCustomDomainHandler,
+  handler: resolveAccountDomainHandler,
 });
 
 http.route({ path: "/v1/abuse", method: "POST", handler: abuseHandler });
 
+// Account-level custom-domain bind (a subdomain you own). No `pageId`.
+http.route({ path: "/v1/domains", method: "POST", handler: bindAccountDomainHandler });
+
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });
 http.route({ path: "/v1/pages", method: "POST", handler: publishHandler });
-// CLOUD-40: POST on the `/v1/pages/` PREFIX is the bind-domain sub-route
-// (`/v1/pages/{id}/domain`). The publish POST above is the EXACT `/v1/pages`
-// path, so the two never collide.
-http.route({
-  pathPrefix: "/v1/pages/",
-  method: "POST",
-  handler: bindDomainHandler,
-});
 http.route({
   pathPrefix: "/v1/pages/",
   method: "GET",

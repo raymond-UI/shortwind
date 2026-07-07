@@ -10,6 +10,12 @@
 
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
+import type * as billingStripe_actions from "../billingStripe/actions.js";
+import type * as billingStripe_http from "../billingStripe/http.js";
+import type * as billingStripe_lib from "../billingStripe/lib.js";
+import type * as billingStripe_plan from "../billingStripe/plan.js";
+import type * as billingStripe_plans from "../billingStripe/plans.js";
+import type * as billingStripe_queries from "../billingStripe/queries.js";
 import type * as bundles from "../bundles.js";
 import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
@@ -18,11 +24,17 @@ import type * as domains from "../domains.js";
 import type * as expand from "../expand.js";
 import type * as http from "../http.js";
 import type * as lib_auth_guard from "../lib/auth_guard.js";
+import type * as lib_billing_limits from "../lib/billing_limits.js";
+import type * as lib_billing_plans from "../lib/billing_plans.js";
+import type * as lib_billing_scope from "../lib/billing_scope.js";
 import type * as lib_content_scan from "../lib/content_scan.js";
+import type * as lib_device_grant from "../lib/device_grant.js";
 import type * as lib_edge_kv from "../lib/edge_kv.js";
 import type * as lib_operator_auth from "../lib/operator_auth.js";
+import type * as lib_plan_resolver from "../lib/plan_resolver.js";
 import type * as lib_publish_core from "../lib/publish_core.js";
 import type * as lib_rate_limit from "../lib/rate_limit.js";
+import type * as migrations from "../migrations.js";
 import type * as moderation from "../moderation.js";
 import type * as pages from "../pages.js";
 import type * as recipes from "../recipes.js";
@@ -39,6 +51,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   billing: typeof billing;
+  "billingStripe/actions": typeof billingStripe_actions;
+  "billingStripe/http": typeof billingStripe_http;
+  "billingStripe/lib": typeof billingStripe_lib;
+  "billingStripe/plan": typeof billingStripe_plan;
+  "billingStripe/plans": typeof billingStripe_plans;
+  "billingStripe/queries": typeof billingStripe_queries;
   bundles: typeof bundles;
   crons: typeof crons;
   dashboard: typeof dashboard;
@@ -47,11 +65,17 @@ declare const fullApi: ApiFromModules<{
   expand: typeof expand;
   http: typeof http;
   "lib/auth_guard": typeof lib_auth_guard;
+  "lib/billing_limits": typeof lib_billing_limits;
+  "lib/billing_plans": typeof lib_billing_plans;
+  "lib/billing_scope": typeof lib_billing_scope;
   "lib/content_scan": typeof lib_content_scan;
+  "lib/device_grant": typeof lib_device_grant;
   "lib/edge_kv": typeof lib_edge_kv;
   "lib/operator_auth": typeof lib_operator_auth;
+  "lib/plan_resolver": typeof lib_plan_resolver;
   "lib/publish_core": typeof lib_publish_core;
   "lib/rate_limit": typeof lib_rate_limit;
+  migrations: typeof migrations;
   moderation: typeof moderation;
   pages: typeof pages;
   recipes: typeof recipes;
@@ -89,4 +113,5 @@ export declare const internal: FilterApi<
 export declare const components: {
   betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
   rateLimiter: import("@convex-dev/rate-limiter/_generated/component.js").ComponentApi<"rateLimiter">;
+  stripe: import("@convex-dev/stripe/_generated/component.js").ComponentApi<"stripe">;
 };

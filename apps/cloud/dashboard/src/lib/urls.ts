@@ -10,13 +10,16 @@
 const PAGES_BASE: string =
   (import.meta.env?.VITE_PAGES_DOMAIN as string | undefined) ?? "shortwind.app";
 
-/** The canonical live URL for a page: its custom domain if bound, else slug subdomain. */
-export function pageUrl(slug: string, customDomain: string | null): string {
-  if (customDomain) return `https://${customDomain}`;
+/**
+ * The canonical live URL for a page: its `<slug>.shortwind.app` vanity
+ * subdomain. Custom domains are ACCOUNT-level now (a page also serves at
+ * `<account-domain>/<slug>`); the Domains view surfaces those separately.
+ */
+export function pageUrl(slug: string): string {
   return `https://${slug}.${PAGES_BASE}`;
 }
 
 /** The hostname shown on a card (no scheme), for compact display. */
-export function pageHost(slug: string, customDomain: string | null): string {
-  return customDomain ?? `${slug}.${PAGES_BASE}`;
+export function pageHost(slug: string): string {
+  return `${slug}.${PAGES_BASE}`;
 }

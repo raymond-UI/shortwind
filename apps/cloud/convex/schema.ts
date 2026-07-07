@@ -34,6 +34,40 @@ export default defineSchema({
     // CLOUD-01: lookup an account by its Better Auth user id at token-issue time.
     .index("by_authUserId", ["authUserId"]),
 
+  // ACCOUNT-LEVEL custom domains. A custom domain is an alias of the ACCOUNT,
+  // not of a single page: an account binds one subdomain it owns (e.g.
+  // `pages.abc.com`) and every one of its pages is then reachable at
+  // `<hostname>/<page.slug>` (path-routed; see serve.resolveAccountDomainRoute),
+  // in addition to the page's `<subdomain>.shortwind.app` vanity URL. This
+  // supersedes the per-page `pages.customDomain` model (which is being removed).
+  //
+  // The table allows MANY rows per account by design (future multi-domain), but
+  // billing currently caps ACTIVE domains at 1 (see billing_limits.ts). One
+  // Cloudflare-for-SaaS cert is issued per hostname here, not per page.
+  accountDomains: defineTable({
+    accountId: v.id("accounts"),
+    // The bound subdomain, normalized lower-case, no trailing dot (e.g.
+    // `pages.abc.com`). Subdomain-only — a bare apex is rejected at bind.
+    hostname: v.string(),
+    // Bind lifecycle, mirroring the per-hostname Cloudflare cert dance.
+    status: v.union(
+      v.literal("pending-human"),
+      v.literal("queued"),
+      v.literal("pending-cert"),
+      v.literal("active"),
+      v.literal("failed"),
+    ),
+    // Cloudflare's custom-hostname id once created; null before/while pending.
+    cloudflareHostnameId: v.union(v.string(), v.null()),
+    // When the cert went active (epoch ms); null until then.
+    verifiedAt: v.union(v.number(), v.null()),
+    createdAt: v.number(),
+  })
+    // Serve path: resolve an incoming host → the owning account's active domain.
+    .index("by_hostname", ["hostname"])
+    // List an account's domains (+ enforce the active-count quota).
+    .index("by_account", ["accountId"]),
+
   // Mirrors shared `Page`. The page's metadata + a pointer to the current
   // version; frozen artifacts live in R2, per-version history in `pageVersions`.
   pages: defineTable({
@@ -49,8 +83,14 @@ export default defineSchema({
     // that omits it) stay valid — the serve resolver treats absent as "no
     // subdomain serving for this page" and the path-based serve still works.
     subdomain: v.optional(v.string()),
-    // Optional bound custom hostname (Cloudflare for SaaS); null when unbound.
-    customDomain: v.union(v.string(), v.null()),
+    // DEPRECATED + UNUSED. The per-page custom-domain feature was removed —
+    // custom domains are ACCOUNT-level now (`accountDomains`; each page serves at
+    // `<hostname>/<slug>`). Nothing reads or writes this field. It is kept as an
+    // OPTIONAL column ONLY so the prod `convex deploy` needs no data migration
+    // (existing rows still carry it). To drop the column entirely: run
+    // `internal.migrations.dropPageCustomDomain` against prod, then delete this
+    // line (a follow-up 2-phase deploy).
+    customDomain: v.optional(v.union(v.string(), v.null())),
     // PageVisibility: who can reach the page.
     visibility: v.union(
       v.literal("public"),
@@ -94,8 +134,6 @@ export default defineSchema({
     .index("by_subdomain", ["subdomain"])
     // List an account's pages.
     .index("by_account", ["accountId"])
-    // Custom-domain serve path resolves host -> page.
-    .index("by_customDomain", ["customDomain"])
     // Discovery: enumerate pages by tag (array index fans out per element).
     .index("by_tag", ["tags"])
     // CLOUD-51: enumerate an account's pages within a project group.

@@ -138,26 +138,57 @@ export const resolveRoute = query({
 });
 
 /**
- * resolveCustomDomain (GET /internal/resolve-custom?host=) — the Worker custom-
- * hostname cold source (CLOUD-40). A bound `pages.customDomain` (Cloudflare for
- * SaaS) resolves to its page route via the `by_customDomain` index. Tried by the
- * Worker ONLY on a subdomain miss, so it never shadows the per-page subdomain hot
- * path. Like {@link resolveRoute} it returns the full projection (the Worker
- * enforces lifecycle/visibility itself); the HTTP route is shared-secret gated
- * (audit #7) so the projection is never publicly readable. Host is lowercased to
- * match the stored hostname.
+ * Parse the single-segment page slug from a serve PATH. Account-domain routing
+ * maps `<hostname>/<slug>` → the page `(accountId, slug)`. The slug is exactly
+ * ONE path segment: `/price-calculator` → `"price-calculator"`. The domain ROOT
+ * (`/` or empty) has no page (product decision — no account index page) and a
+ * NESTED path (`/a/b`) is not a page. Both return null → the Worker 404s. Pure.
  */
-export const resolveCustomDomain = query({
-  args: { host: v.string() },
+export function slugFromPath(path: string): string | null {
+  const trimmed = path.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (trimmed === "" || trimmed.includes("/")) return null;
+  return trimmed;
+}
+
+/**
+ * resolveAccountDomainRoute (GET /internal/resolve-account?host=&path=) — the
+ * Worker cold source for ACCOUNT-LEVEL custom domains. Resolves the incoming
+ * host to the owning account's ACTIVE `accountDomains` row, then the first path
+ * segment to that account's page `(accountId, slug)`. Both the host (unknown /
+ * inactive domain) and the path (root / nested / unknown slug) can miss → null,
+ * which the Worker 404s. This supersedes {@link resolveCustomDomain}: a domain
+ * is an account alias, so one hostname fans out to every `<host>/<slug>` page.
+ *
+ * Route resolution is deterministic because slugs are unique PER ACCOUNT
+ * (`by_slug`) and the host pins the account — the two ambiguities that made the
+ * old path-as-slug fallback unsafe are both resolved here.
+ */
+export const resolveAccountDomainRoute = query({
+  args: { host: v.string(), path: v.string() },
   returns: serveRouteValidator,
   handler: async (ctx, args) => {
     const host = args.host.toLowerCase().replace(/\.$/, "");
     if (host === "") return null;
+    const slug = slugFromPath(args.path);
+    if (slug === null) return null;
+
+    // Host → the owning account's ACTIVE domain (inactive/pending never serves).
+    const domain = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_hostname", (q) => q.eq("hostname", host))
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .first();
+    if (domain === null) return null;
+
+    // (account, slug) → the page. Another account's slug is invisible here.
     const page = await ctx.db
       .query("pages")
-      .withIndex("by_customDomain", (q) => q.eq("customDomain", host))
-      .first();
+      .withIndex("by_slug", (q) =>
+        q.eq("accountId", domain.accountId).eq("slug", slug),
+      )
+      .unique();
     if (page === null) return null;
+
     const version =
       page.currentVersionId === null
         ? null

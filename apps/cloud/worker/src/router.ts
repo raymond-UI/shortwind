@@ -60,14 +60,16 @@ export type TokenValidator = (
 ) => Promise<boolean>;
 
 /**
- * Resolve an incoming CUSTOM HOSTNAME (a bound `pages.customDomain`) to its page
- * route (CLOUD-40). Injected like {@link ColdRouteSource} so the router keeps
- * zero Convex dependency; the live impl reads `by_customDomain` from the cold
- * source (Convex) and is wired at deploy (CLOUD-30b). Returns `null` when no page
- * binds the hostname.
+ * Resolve an incoming ACCOUNT-LEVEL custom domain to a page route: the host maps
+ * to the owning account's active domain and the PATH's first segment to that
+ * account's page slug (`<hostname>/<slug>`). Injected like {@link ColdRouteSource}
+ * so the router keeps zero Convex dependency; the live impl reads
+ * `accountDomains` + `by_slug` from the cold source (Convex), wired at deploy.
+ * Returns `null` when the host is not a bound domain or the slug is not a page.
  */
-export type ColdCustomHostnameSource = (
+export type ColdAccountDomainSource = (
   host: string,
+  path: string,
 ) => Promise<CachedRoute | null>;
 
 /** The cold-source functions the router injects (see module header). */
@@ -77,11 +79,11 @@ export interface RouterDeps {
   /** Validate a bearer token for a private page (Convex check). */
   validateToken: TokenValidator;
   /**
-   * Resolve a bound custom hostname → its page route (CLOUD-40). Optional: when
-   * absent, the custom-hostname branch is skipped and the router behaves exactly
-   * as before (host/path resolution only).
+   * Resolve an account-level custom domain (`<hostname>/<slug>`) → its page
+   * route. Optional: when absent, the custom-domain branch is skipped and the
+   * router behaves exactly as before (subdomain host resolution only).
    */
-  coldCustomHostname?: ColdCustomHostnameSource;
+  coldAccountDomain?: ColdAccountDomainSource;
 }
 
 /**
@@ -204,16 +206,15 @@ export async function handleRequest(
   //    NOT call the cold source (asserted by tests + kv.ts contract).
   let route = await resolveRouteWithFallback(env, host, path, deps.coldRoute);
 
-  // 1b. CLOUD-40 (ADDITIVE): a custom hostname bound to a page (pages.customDomain)
-  //     resolves here. Tried ONLY on a host/path miss, so the existing hot-path
-  //     resolution + KV-hit discipline above is untouched: a normal route never
-  //     reaches this branch. The bound page serves at the hostname root; a deeper
-  //     path under a custom hostname is not a separate route and falls through to
-  //     404 below. The result is cached under (host, path) like any cold hit so a
-  //     repeat view is a KV hit (no Convex call). When no resolver is injected the
-  //     branch is skipped and behavior is identical to before.
-  if (route === null && deps.coldCustomHostname !== undefined) {
-    const custom = await deps.coldCustomHostname(host);
+  // 1b. ACCOUNT-LEVEL custom domain: a host bound to an account resolves its
+  //     page by the PATH's first segment (`<hostname>/<slug>`). Tried ONLY on a
+  //     subdomain miss, so the existing hot-path resolution + KV-hit discipline
+  //     above is untouched. Unlike the removed per-page model this IS path-
+  //     sensitive, and the (host, path) cache key already distinguishes each
+  //     `<hostname>/<slug>` so a repeat view is a KV hit (no Convex call). When
+  //     no resolver is injected the branch is skipped (behavior as before).
+  if (route === null && deps.coldAccountDomain !== undefined) {
+    const custom = await deps.coldAccountDomain(host, path);
     if (custom !== null) {
       await putRoute(env, host, path, custom);
       route = custom;
@@ -377,14 +378,13 @@ function defaultDeps(env: Env): RouterDeps {
     }
   };
 
-  // Audit (serve WARNING): wire the custom-hostname cold source so a bound
-  // `pages.customDomain` actually resolves in prod (it was a dead branch —
-  // defaultDeps omitted it). Tried only on a host/path miss (see handleRequest).
-  const coldCustomHostname: ColdCustomHostnameSource = async (host) => {
+  // Account-level custom domain cold source: resolve `<hostname>/<slug>` to a
+  // page route via Convex. Tried only on a subdomain miss (see handleRequest).
+  const coldAccountDomain: ColdAccountDomainSource = async (host, path) => {
     try {
-      const url = `${base}/internal/resolve-custom?host=${encodeURIComponent(
+      const url = `${base}/internal/resolve-account?host=${encodeURIComponent(
         host,
-      )}`;
+      )}&path=${encodeURIComponent(path)}`;
       const res = await fetch(url, internalInit);
       if (!res.ok) return null;
       const body = (await res.json()) as ResolvedRoute;
@@ -394,7 +394,7 @@ function defaultDeps(env: Env): RouterDeps {
     }
   };
 
-  return { coldRoute, validateToken, coldCustomHostname };
+  return { coldRoute, validateToken, coldAccountDomain };
 }
 
 /**

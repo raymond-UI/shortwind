@@ -21,7 +21,6 @@ export type ModerationState =
 export interface PageRow {
   id: string;
   slug: string;
-  customDomain: string | null;
   visibility: Visibility;
   lifecycle: Lifecycle;
   tags: string[];
@@ -106,6 +105,40 @@ export interface UsageMeters {
   periodEnd: number;
 }
 
+/** The plan ids the dashboard gates on. Mirrors `convex/lib/billing_plans.ts`. */
+export type PlanId = "free" | "pro";
+
+export type DomainStatus =
+  | "pending-human"
+  | "queued"
+  | "pending-cert"
+  | "active"
+  | "failed";
+
+/**
+ * An ACCOUNT-level custom domain. Mirrors `domains.listAccountDomains` returns.
+ * A domain is an account alias — every page serves at `<hostname>/<slug>`.
+ */
+export interface AccountDomainRow {
+  id: string;
+  hostname: string;
+  status: DomainStatus;
+  verifiedAt: number | null;
+  createdAt: number;
+}
+
+/**
+ * The account's billing summary. Mirrors the `summary` query returns in
+ * `convex/billingStripe/queries.ts`. `currentPeriodEnd` is Stripe's unix-seconds
+ * period end (null when there is no active subscription).
+ */
+export interface BillingSummary {
+  plan: PlanId;
+  hasActive: boolean;
+  currentPeriodEnd: number | null;
+  cancelAtPeriodEnd: boolean;
+}
+
 /**
  * The full oversight dataset the dashboard consumes. The real provider fills
  * each field from a `useQuery(api.dashboard.*)`; tests fill it with fixtures.
@@ -119,6 +152,10 @@ export interface DashboardData {
   policy: AccountPolicy | undefined;
   /** Metered billing usage (CLOUD-43): the three cost-aligned meters. */
   usage: UsageMeters | undefined;
+  /** The account's plan/subscription summary (Stripe billing). `undefined` = loading. */
+  billing: BillingSummary | undefined;
+  /** The account's custom domains (account-level). `undefined` = loading. */
+  accountDomains: AccountDomainRow[] | undefined;
   /** The operator's own API tokens (epic #184). `undefined` = loading. */
   tokens: TokenRow[] | undefined;
   /** Persist a policy toggle. Resolves to the new policy. */
@@ -129,4 +166,10 @@ export interface DashboardData {
   deletePage: (id: string) => Promise<void>;
   /** Revoke one of the operator's own API tokens. */
   revokeToken: (tokenId: string) => Promise<void>;
+  /** Start a Stripe checkout for a paid plan; resolves to the hosted URL. */
+  startCheckout: (plan: "pro") => Promise<{ url: string }>;
+  /** Open the Stripe customer portal; resolves to the hosted URL. */
+  openPortal: () => Promise<{ url: string }>;
+  /** Approve a `pending-human` account domain (operator gate). */
+  approveDomain: (hostname: string) => Promise<void>;
 }

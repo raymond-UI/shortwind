@@ -217,7 +217,6 @@ export const commitNewPage = internalMutation({
       accountId: args.accountId,
       slug: args.slug,
       subdomain,
-      customDomain: null,
       visibility: args.visibility,
       lifecycle: "active",
       tags: args.tags,
@@ -1336,7 +1335,6 @@ export interface PageSummary {
    * agent never gets a tombstoned/quarantined page from `find`, but `get`
    * surfaces it (clearly marked) for audit. */
   lifecycle: "active" | "quarantined" | "tombstoned";
-  customDomain: string | null;
   currentVersion: number;
   tags: string[];
   /** CLOUD-51 (additive): optional hard expiry (epoch ms); null = no expiry. */
@@ -1352,7 +1350,6 @@ export interface PageRowLike {
   slug: string;
   visibility: "public" | "unlisted" | "private";
   lifecycle: "active" | "quarantined" | "tombstoned";
-  customDomain: string | null;
   currentVersion: number;
   tags: string[];
   // CLOUD-51 (additive): mirror the new pages fields.
@@ -1364,7 +1361,6 @@ export interface PageRowLike {
 /** The normalized, trimmed `find` filters. `undefined`/blank ⇒ "no filter". */
 export interface FindFilters {
   q?: string;
-  domain?: string;
   tag?: string;
   // CLOUD-51 (additive): restrict to a single project group.
   group?: string;
@@ -1393,7 +1389,6 @@ export function toPageSummary(row: PageRowLike, baseUrl: string): PageSummary {
     url: summaryUrl(baseUrl, row.slug),
     visibility: row.visibility,
     lifecycle: row.lifecycle,
-    customDomain: row.customDomain,
     currentVersion: row.currentVersion,
     tags: row.tags,
     // CLOUD-51 (additive): surface expiry + group on the summary.
@@ -1428,13 +1423,11 @@ export function normalizeFilter(
 /** Normalize a raw filter bag (parsed query params) into `FindFilters`. */
 export function normalizeFindFilters(raw: {
   q?: string | null;
-  domain?: string | null;
   tag?: string | null;
   group?: string | null;
 }): FindFilters {
   return {
     q: normalizeFilter(raw.q),
-    domain: normalizeFilter(raw.domain),
     tag: normalizeFilter(raw.tag),
     // CLOUD-51 (additive): the optional project-group filter.
     group: normalizeFilter(raw.group),
@@ -1491,23 +1484,18 @@ export function applyResidualFilters<
 /**
  * The INDEX the adapter drives the scan from, as plain data (so the "no full
  * scan" choice is unit-testable without a DB):
- *   - `domain` present → `by_customDomain` (a true equality index, most
- *     selective: at most one page binds a given hostname).
- *   - else             → `by_account` (the caller's pages). `tag`-only and
+ *   - `group` present → `by_project` (accountId, projectGroup) equality index.
+ *   - else            → `by_account` (the caller's pages). `tag`-only and
  *     `q`-only both land here; `tag` membership is then a residual filter (see
  *     {@link applyResidualFilters} for why `by_tag` cannot serve membership).
  * Every branch is constrained to ONE account downstream, so there is never a
  * cross-account leak and never a full-table scan.
  */
 export type FindIndexPlan =
-  | { index: "by_customDomain"; domain: string }
   | { index: "by_project"; group: string }
   | { index: "by_account" };
 
 export function planFindIndex(filters: FindFilters): FindIndexPlan {
-  if (filters.domain !== undefined) {
-    return { index: "by_customDomain", domain: filters.domain };
-  }
   // CLOUD-51 (additive): a `group`-scoped find drives the `by_project`
   // (accountId, projectGroup) equality index — account-scoped + group-narrowed,
   // so it never scans the whole account or the whole table.
@@ -1538,7 +1526,6 @@ const summaryValidator = v.object({
     v.literal("quarantined"),
     v.literal("tombstoned"),
   ),
-  customDomain: v.union(v.string(), v.null()),
   currentVersion: v.number(),
   tags: v.array(v.string()),
   // CLOUD-51 (additive): expiry + project group on the summary.
@@ -1557,7 +1544,7 @@ const versionEntryValidator = v.object({
 });
 
 /**
- * find (GET /v1/pages?q=&domain=&tag=): list the caller's pages matching the
+ * find (GET /v1/pages?q=&tag=&group=): list the caller's pages matching the
  * filters, as summaries. Empty result → `[]` (the agent reads this to decide
  * publish-vs-update). requireRead-guarded, account-scoped, INDEX-backed.
  */
@@ -1565,7 +1552,6 @@ export const find = query({
   args: {
     bearer: v.string(),
     q: v.optional(v.string()),
-    domain: v.optional(v.string()),
     tag: v.optional(v.string()),
     // CLOUD-51 (additive): restrict the find to a single project group.
     group: v.optional(v.string()),
@@ -1575,7 +1561,6 @@ export const find = query({
     const auth = await requireRead(ctx, args.bearer);
     const filters = normalizeFindFilters({
       q: args.q,
-      domain: args.domain,
       tag: args.tag,
       group: args.group,
     });
@@ -1585,14 +1570,7 @@ export const find = query({
     // branch yields rows for the caller's account only — no full table scan,
     // no cross-account leakage.
     let candidates: Doc<"pages">[];
-    if (plan.index === "by_customDomain") {
-      const domain = plan.domain;
-      candidates = await ctx.db
-        .query("pages")
-        .withIndex("by_customDomain", (q) => q.eq("customDomain", domain))
-        .collect();
-      candidates = candidates.filter((p) => p.accountId === auth.accountId);
-    } else if (plan.index === "by_project") {
+    if (plan.index === "by_project") {
       // CLOUD-51: account-scoped + group-narrowed via the by_project index.
       const group = plan.group;
       candidates = await ctx.db
@@ -1620,7 +1598,6 @@ export const find = query({
           slug: row.slug,
           visibility: row.visibility,
           lifecycle: row.lifecycle,
-          customDomain: row.customDomain,
           currentVersion: row.currentVersion,
           tags: row.tags,
           expiresAt: row.expiresAt ?? null,
@@ -1677,7 +1654,6 @@ export const get = query({
           slug: page.slug,
           visibility: page.visibility,
           lifecycle: page.lifecycle,
-          customDomain: page.customDomain,
           currentVersion: page.currentVersion,
           tags: page.tags,
           expiresAt: page.expiresAt ?? null,

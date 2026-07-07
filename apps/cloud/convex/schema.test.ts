@@ -79,6 +79,9 @@ describe("every shared record type maps 1:1 to a table", () => {
     // RFC 8628 device-authorization grant (the CLI `login` flow). Transient,
     // swept hourly; deliberately not a shared `types.ts` record.
     "deviceCodes",
+    // Account-level custom domains (bind state + Cloudflare cert). Server-only
+    // control-plane state; not a shared `types.ts` record.
+    "accountDomains",
   ];
 
   it("defines exactly the record tables + infra tables (no extras, none missing)", () => {
@@ -89,20 +92,14 @@ describe("every shared record type maps 1:1 to a table", () => {
 });
 
 describe("find-query indexes exist (CLOUD-10 spec)", () => {
-  it("pages has by_slug, by_account, by_customDomain, by_tag", () => {
+  it("pages has by_slug, by_account, by_tag", () => {
     expect(indexNames("pages")).toEqual(
-      expect.arrayContaining([
-        "by_slug",
-        "by_account",
-        "by_customDomain",
-        "by_tag",
-      ]),
+      expect.arrayContaining(["by_slug", "by_account", "by_tag"]),
     );
     expect(indexFields("pages", "by_slug")).toEqual(["accountId", "slug"]);
     // CLOUD-SUBDOMAIN: global subdomain → page resolution (serve host lookup).
     expect(indexFields("pages", "by_subdomain")).toEqual(["subdomain"]);
     expect(indexFields("pages", "by_account")).toEqual(["accountId"]);
-    expect(indexFields("pages", "by_customDomain")).toEqual(["customDomain"]);
     expect(indexFields("pages", "by_tag")).toEqual(["tags"]);
   });
 

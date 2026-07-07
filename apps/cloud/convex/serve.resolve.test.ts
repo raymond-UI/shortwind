@@ -166,27 +166,6 @@ describe("CLOUD-SUBDOMAIN — serve.resolveRoute (subdomain-only)", () => {
   });
 });
 
-describe("CLOUD-40 — resolveCustomDomain (custom-hostname cold source)", () => {
-  it("resolves a bound custom hostname to its page route (host lowercased)", async () => {
-    const t = convexTest(schema, modules);
-    const bearer = await seedAuth(t, "auth_user_cd");
-    const { id } = await publishPage(t, bearer, "marketing");
-
-    // Bind a custom hostname to the published page.
-    await t.run(async (ctx) => {
-      await ctx.db.patch(id as never, { customDomain: "www.acme.example" });
-    });
-
-    const route = await t.query(api.serve.resolveCustomDomain, {
-      host: "WWW.Acme.Example", // mixed case → lowercased before lookup
-    });
-    expect(route).not.toBeNull();
-    expect(route!.pageId).toBe(id);
-
-    // An unbound hostname resolves to nothing.
-    const none = await t.query(api.serve.resolveCustomDomain, {
-      host: "unbound.example",
-    });
-    expect(none).toBeNull();
-  });
-});
+// Account-level custom-domain resolution (`resolveAccountDomainRoute`) is
+// covered end-to-end in `account_domains.test.ts`. The removed per-page
+// `resolveCustomDomain` test lived here.

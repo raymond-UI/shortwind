@@ -1,5 +1,7 @@
 import type {
+  AccountDomainRow,
   AuditRow,
+  BillingSummary,
   DashboardData,
   ModerationRow,
   PageWithVersions,
@@ -19,7 +21,6 @@ export const mockPages: PageWithVersions[] = [
     page: {
       id: "page_1",
       slug: "launch",
-      customDomain: "example.com",
       visibility: "public",
       lifecycle: "active",
       tags: ["marketing"],
@@ -50,7 +51,6 @@ export const mockPages: PageWithVersions[] = [
     page: {
       id: "page_2",
       slug: "pulled",
-      customDomain: null,
       visibility: "private",
       lifecycle: "tombstoned",
       tags: [],
@@ -152,6 +152,32 @@ export const mockUsage: UsageMeters = {
   periodEnd: 1_700_000_400_000,
 };
 
+/** Mock billing summary — an active Pro subscription. Shapes `summary` returns. */
+export const mockBilling: BillingSummary = {
+  plan: "pro",
+  hasActive: true,
+  currentPeriodEnd: 1_735_689_600, // unix seconds (Stripe period end)
+  cancelAtPeriodEnd: false,
+};
+
+/** Mock account domains — one active, one awaiting operator approval. */
+export const mockAccountDomains: AccountDomainRow[] = [
+  {
+    id: "dom_active",
+    hostname: "pages.acme.com",
+    status: "active",
+    verifiedAt: 1_700_000_300_000,
+    createdAt: 1_700_000_000_000,
+  },
+  {
+    id: "dom_pending",
+    hostname: "www.acme.com",
+    status: "pending-human",
+    verifiedAt: null,
+    createdAt: 1_700_000_100_000,
+  },
+];
+
 /**
  * Build a `DashboardData` from optional overrides. `setPolicy` defaults to a
  * spy-able async no-op so policy tests can assert it was called.
@@ -166,11 +192,16 @@ export function makeData(
     moderation: mockModeration,
     policy: mockPolicy,
     usage: mockUsage,
+    billing: mockBilling,
+    accountDomains: mockAccountDomains,
     tokens: mockTokens,
     setPolicy: async () => {},
     setVisibility: async () => {},
     deletePage: async () => {},
     revokeToken: async () => {},
+    startCheckout: async () => ({ url: "https://checkout.stripe.test/session" }),
+    openPortal: async () => ({ url: "https://portal.stripe.test/session" }),
+    approveDomain: async () => {},
     ...overrides,
   };
 }
