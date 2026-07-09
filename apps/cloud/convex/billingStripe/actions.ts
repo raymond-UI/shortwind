@@ -1,3 +1,4 @@
+import Stripe from "stripe";
 import { action, internalQuery } from "../_generated/server.js";
 import { internal } from "../_generated/api.js";
 import { ConvexError, v } from "convex/values";
@@ -75,7 +76,11 @@ export const createCheckoutSession = action({
     plan: v.union(...PLAN_IDS.map((p) => v.literal(p))),
     bearer: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  // Explicit return type: the Stripe SDK's `Checkout.Session` return is huge and,
+  // combined with this handler referencing `internal.*.authManage` (same file),
+  // trips TS's self-referential inference into `any` — which then poisons the
+  // generated `api`/`internal` types project-wide. Annotating breaks the cycle.
+  handler: async (ctx, args): Promise<{ url: string }> => {
     const auth = await ctx.runQuery(internal.billingStripe.actions.authManage, {
       bearer: args.bearer,
     });
@@ -112,14 +117,32 @@ export const createCheckoutSession = action({
       userId: customerKey(scope),
     });
 
-    const session = await stripeClient.createCheckoutSession(ctx, {
-      priceId,
-      customerId: customer.customerId,
+    // We create the Checkout Session directly (not via the component's
+    // `createCheckoutSession`) for ONE reason: to pass `allow_promotion_codes`,
+    // which the component's typed wrapper doesn't expose. Every other field is a
+    // faithful copy of what the component sets — in particular
+    // `subscription_data.metadata.orgId`, the account key the webhook reads to
+    // link the resulting subscription back to us (drop it and billing breaks).
+    // The component instantiates the same SDK in this runtime, so a direct call
+    // behaves identically. Key resolution mirrors the component (env var).
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      throw new ConvexError({
+        code: "BILLING_STRIPE_KEY_NOT_CONFIGURED",
+        message: "STRIPE_SECRET_KEY is not set.",
+      });
+    }
+    const stripe = new Stripe(secretKey);
+    const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      successUrl: dashboardBillingUrl("?checkout=success"),
-      cancelUrl: dashboardBillingUrl("?checkout=canceled"),
+      line_items: [{ price: priceId, quantity: 1 }],
+      customer: customer.customerId,
+      success_url: dashboardBillingUrl("?checkout=success"),
+      cancel_url: dashboardBillingUrl("?checkout=canceled"),
+      // Let customers enter a promo/coupon code on the Checkout page.
+      allow_promotion_codes: true,
       // Lands on the subscription row's indexed `orgId` column (our account id).
-      subscriptionMetadata: { orgId: scope.accountId },
+      subscription_data: { metadata: { orgId: scope.accountId } },
       metadata: {
         scopeType: "account",
         accountId: scope.accountId,

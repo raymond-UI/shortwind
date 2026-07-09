@@ -18,7 +18,8 @@
     "better-auth": "1.5.6",
     "cac": "6.7.14",
     "convex": "1.41.0",
-    "hono": "4.12.26"
+    "hono": "4.12.26",
+    "stripe": "20.4.1"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.16.18",
