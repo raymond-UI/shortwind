@@ -466,3 +466,15 @@ a {
 [data-tone="danger"] { --tone-bg: color-mix(in oklab, var(--destructive) 15%, transparent); --tone-fg: var(--destructive); }
 [data-tone="info"] { --tone-bg: color-mix(in oklab, var(--primary) 15%, transparent); --tone-fg: var(--primary); }
 /* end shortwind tones */
+
+/* Filled primary button. Defined as a real class (not a `text-<token>` utility,
+   which doesn't survive the client build for tokens used only on the landing) so
+   the text color is guaranteed. Foreground/background inversion = high contrast
+   in both themes. */
+.sw-btn-primary {
+  background-color: var(--foreground);
+  color: var(--background);
+}
+.sw-btn-primary:hover {
+  opacity: 0.9;
+}
