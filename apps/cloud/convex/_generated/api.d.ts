@@ -27,6 +27,7 @@ import type * as lib_auth_guard from "../lib/auth_guard.js";
 import type * as lib_billing_limits from "../lib/billing_limits.js";
 import type * as lib_billing_plans from "../lib/billing_plans.js";
 import type * as lib_billing_scope from "../lib/billing_scope.js";
+import type * as lib_cloudflare_saas from "../lib/cloudflare_saas.js";
 import type * as lib_content_scan from "../lib/content_scan.js";
 import type * as lib_device_grant from "../lib/device_grant.js";
 import type * as lib_edge_kv from "../lib/edge_kv.js";
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   "lib/billing_limits": typeof lib_billing_limits;
   "lib/billing_plans": typeof lib_billing_plans;
   "lib/billing_scope": typeof lib_billing_scope;
+  "lib/cloudflare_saas": typeof lib_cloudflare_saas;
   "lib/content_scan": typeof lib_content_scan;
   "lib/device_grant": typeof lib_device_grant;
   "lib/edge_kv": typeof lib_edge_kv;

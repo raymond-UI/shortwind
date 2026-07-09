@@ -194,6 +194,7 @@ export function makeData(
     usage: mockUsage,
     billing: mockBilling,
     accountDomains: mockAccountDomains,
+    cnameTarget: "cname.shortwind.app",
     tokens: mockTokens,
     setPolicy: async () => {},
     setVisibility: async () => {},
@@ -201,6 +202,16 @@ export function makeData(
     revokeToken: async () => {},
     startCheckout: async () => ({ url: "https://checkout.stripe.test/session" }),
     openPortal: async () => ({ url: "https://portal.stripe.test/session" }),
+    bindDomain: async (hostname) => ({
+      state: "pending-cert",
+      hostname,
+      cloudflareHostnameId: "cf_test",
+    }),
+    recheckDomain: async (hostname) => ({
+      state: "active",
+      hostname,
+      cloudflareHostnameId: "cf_test",
+    }),
     approveDomain: async () => {},
     ...overrides,
   };
