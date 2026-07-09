@@ -12,7 +12,12 @@ import type {
   Visibility,
 } from "../lib/types";
 
-type DetailTab = "overview" | "deployments" | "settings";
+export type DetailTab = "overview" | "deployments" | "settings";
+
+/** Narrow an arbitrary string (e.g. a `?tab=` param) to a known detail tab. */
+export function isDetailTab(value: string | null | undefined): value is DetailTab {
+  return value === "overview" || value === "deployments" || value === "settings";
+}
 
 /**
  * Project detail (epic #184, issue #3) — a single hosted page: its live URL,
@@ -27,12 +32,20 @@ type DetailTab = "overview" | "deployments" | "settings";
 export function ProjectDetail({
   pageId,
   onBack,
+  tab: controlledTab,
+  onTabChange,
 }: {
   pageId: string;
   onBack: () => void;
+  /** When provided, the active tab is URL-driven (deep-linkable via `?tab=`). */
+  tab?: DetailTab;
+  onTabChange?: (tab: DetailTab) => void;
 }) {
   const { pages } = useDashboardData();
-  const [tab, setTab] = useState<DetailTab>("overview");
+  // Controlled when the route supplies `tab`/`onTabChange`; otherwise internal.
+  const [internalTab, setInternalTab] = useState<DetailTab>("overview");
+  const tab = controlledTab ?? internalTab;
+  const setTab = onTabChange ?? setInternalTab;
 
   if (pages === undefined) {
     return <div className="@muted">Loading…</div>;
