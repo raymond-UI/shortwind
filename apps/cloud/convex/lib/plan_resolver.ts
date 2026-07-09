@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel.js";
 import type { QueryCtx } from "../_generated/server.js";
-import { FREE_PLAN, type PlanId } from "./billing_plans.js";
+import { type PlanId } from "./billing_plans.js";
+import { makeStripePlanResolver } from "../billingStripe/plan.js";
 
 /**
  * Plan-resolution seam (mirrors `domains.ts`'s `__setCloudflareSaaSClient` and
@@ -24,23 +25,18 @@ export interface PlanResolver {
   resolve(ctx: QueryCtx, accountId: Id<"accounts">): Promise<PlanId>;
 }
 
+// Production default: the REAL Stripe-backed resolver (an account with no active
+// subscription resolves to `free`). Imported STATICALLY — Convex bundles
+// functions and does NOT support dynamic `import()` in the function runtime, so a
+// lazy import throws and would silently fall back to `free` (a Pro account would
+// be wrongly blocked). Offline tests inject a resolver via `__setPlanResolver`,
+// so the default's `resolve` is never called under convex-test; only the module
+// (and `billingStripe`'s already-registered `components.stripe`) loads, which is
+// safe. Errors from the resolver (e.g. an unknown price) propagate — never
+// masked into `free`.
+const stripeResolver = makeStripePlanResolver();
 const defaultResolver: PlanResolver = {
-  // Production default: resolve the account's REAL plan via the Stripe-backed
-  // resolver. Loaded LAZILY (dynamic import) so `lib/` carries no static
-  // billing-component dependency — offline tests inject a resolver via
-  // `__setPlanResolver` and never reach this branch, so `billingStripe` (and
-  // `components.stripe`) never load under convex-test. An account with no active
-  // subscription resolves to `free`.
-  resolve: async (ctx, accountId) => {
-    try {
-      const { makeStripePlanResolver } = await import("../billingStripe/plan.js");
-      return await makeStripePlanResolver().resolve(ctx, accountId);
-    } catch {
-      // If billing is unreachable/unconfigured, fail CLOSED (treat as free →
-      // custom-domain bind is blocked) rather than granting entitlement.
-      return FREE_PLAN;
-    }
-  },
+  resolve: (ctx, accountId) => stripeResolver.resolve(ctx, accountId),
 };
 
 let resolver: PlanResolver = defaultResolver;
