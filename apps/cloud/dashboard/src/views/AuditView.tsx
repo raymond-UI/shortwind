@@ -1,7 +1,16 @@
 import { useDashboardData } from "../lib/data";
 import { formatTime } from "../lib/format";
 import { Badge } from "../components/Badge";
+import { CopyValue } from "../components/CopyValue";
 import { EmptyState } from "../components/EmptyState";
+import type { Tone } from "../components/Badge";
+
+/** Destructive actions read as danger; everything else stays neutral. */
+function actionTone(action: string): Tone | undefined {
+  if (/delete|revoke|quarantine|kill|remove/i.test(action)) return "danger";
+  if (/publish|create|approve|bind/i.test(action)) return "success";
+  return undefined;
+}
 
 /**
  * Audit log view (CLOUD-35, PRD §6.3) — the chronological actor/action feed,
@@ -20,15 +29,24 @@ export function AuditView() {
   return (
     <ul data-testid="audit-view" className="@list-bordered list-none">
       {auditLog.map((e) => (
-        <li key={e.id} data-testid="audit-row" className="@list-item gap-3">
-
-          <span className="w-44 shrink-0 text-xs text-muted-foreground tabular-nums">
+        <li
+          key={e.id}
+          data-testid="audit-row"
+          className="@list-item items-center gap-3"
+        >
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-term"
+            aria-hidden="true"
+          />
+          <span className="w-40 shrink-0 text-xs text-muted-foreground tabular-nums">
             {formatTime(e.createdAt)}
           </span>
-          <Badge>{e.action}</Badge>
-          <span className="truncate text-xs text-muted-foreground">
-            {e.targetId ?? "—"}
-          </span>
+          <Badge tone={actionTone(e.action)}>{e.action}</Badge>
+          {e.targetId ? (
+            <CopyValue value={e.targetId} className="min-w-0 text-xs" />
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
         </li>
       ))}
     </ul>

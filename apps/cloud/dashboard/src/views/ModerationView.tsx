@@ -1,6 +1,7 @@
 import { useDashboardData } from "../lib/data";
 import { formatTime } from "../lib/format";
 import { Badge } from "../components/Badge";
+import { CopyValue } from "../components/CopyValue";
 import { EmptyState } from "../components/EmptyState";
 import type { ModerationState } from "../lib/types";
 
@@ -46,16 +47,30 @@ export function ModerationView() {
           <li
             key={m.id}
             data-testid="moderation-row"
-            className="@card flex gap-3 !p-3 text-sm"
+            className={
+              "@card flex gap-3 !p-3 text-sm " +
+              (danger ? "border-l-2 border-l-destructive" : "")
+            }
           >
-            <Badge tone={danger ? "danger" : "neutral"}>
-              {STATE_LABEL[m.state]}
-            </Badge>
-            <div className="flex-1 space-y-0.5">
-              <div className="font-medium">{m.pageId}</div>
-              <div className="@caption">
-                {m.reason ?? "—"}
+            <span
+              aria-hidden="true"
+              className={
+                "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md border text-sm " +
+                (danger
+                  ? "border-destructive/30 bg-destructive/10 text-destructive"
+                  : "border-border bg-secondary text-muted-foreground")
+              }
+            >
+              🛡
+            </span>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={danger ? "danger" : "neutral"}>
+                  {STATE_LABEL[m.state]}
+                </Badge>
+                <CopyValue value={m.pageId} className="min-w-0" />
               </div>
+              <div className="@caption">{m.reason ?? "—"}</div>
               {m.preservedR2Key ? (
                 <div className="@caption tabular-nums">
                   sealed: {m.preservedR2Key}
@@ -67,7 +82,7 @@ export function ModerationView() {
                 </div>
               ) : null}
             </div>
-            <span className="@caption tabular-nums">
+            <span className="@caption shrink-0 tabular-nums">
               {formatTime(m.updatedAt)}
             </span>
           </li>

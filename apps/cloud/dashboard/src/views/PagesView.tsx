@@ -3,6 +3,7 @@ import { relativeTime } from "../lib/format";
 import { pageHost, pageUrl } from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
+import { SectionHeader } from "../components/SectionHeader";
 import { SkeletonCards } from "../components/Skeleton";
 import type { PageWithVersions } from "../lib/types";
 
@@ -35,17 +36,35 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
     );
   }
 
+  const liveCount = pages.filter((p) => p.page.lifecycle === "active").length;
+
   return (
-    <ul
-      data-testid="pages-view"
-      className="@grid-3 grid list-none gap-4 sm:grid-cols-2 xl:grid-cols-3"
-    >
-      {pages.map((p) => (
-        <li key={p.page.id}>
-          <PageCard entry={p} onOpen={onOpen} />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-5">
+      <SectionHeader
+        eyebrow="Pages"
+        title="Your hosted pages"
+        description="Every published page, its live URL, visibility, and latest version. Open one for its deployment history and settings."
+        actions={
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground tabular-nums">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-term"
+              aria-hidden="true"
+            />
+            {liveCount} live · {pages.length} total
+          </span>
+        }
+      />
+      <ul
+        data-testid="pages-view"
+        className="@grid-3 grid list-none gap-4 sm:grid-cols-2 xl:grid-cols-3"
+      >
+        {pages.map((p) => (
+          <li key={p.page.id}>
+            <PageCard entry={p} onOpen={onOpen} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

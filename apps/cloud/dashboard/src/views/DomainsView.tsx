@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
+import { CopyValue } from "../components/CopyValue";
+import { SectionHeader } from "../components/SectionHeader";
 import type { AccountDomainRow, DomainStatus } from "../lib/types";
 
 /**
@@ -39,8 +41,8 @@ const STATUS_STYLE: Record<
 > = {
   active: {
     label: "Active",
-    dot: "bg-emerald-500",
-    badge: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
+    dot: "bg-term",
+    badge: "border-term/40 bg-term/10 text-term",
     hint: "Live — your pages serve on this domain.",
   },
   "pending-cert": {
@@ -78,36 +80,6 @@ function StatusBadge({ status }: { status: DomainStatus }) {
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />
       {s.label}
     </span>
-  );
-}
-
-/** A mono value with a one-click copy affordance. */
-function CopyValue({ value, testId }: { value: string; testId?: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* clipboard blocked — no-op */
-    }
-  }
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      data-testid={testId}
-      title="Copy"
-      className="group inline-flex max-w-full items-center gap-2 rounded px-1.5 py-0.5 font-mono text-sm hover:bg-secondary"
-    >
-      <span className="truncate">{value}</span>
-      <span
-        className={`shrink-0 text-[11px] ${copied ? "text-emerald-400" : "text-muted-foreground opacity-0 group-hover:opacity-100"}`}
-      >
-        {copied ? "Copied ✓" : "Copy"}
-      </span>
-    </button>
   );
 }
 
@@ -190,15 +162,19 @@ export function DomainsView() {
 
   return (
     <div className="space-y-5" data-testid="domains-view">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold">Custom domain</h2>
-        <p className="@caption">
-          Account-wide — every page also serves at{" "}
-          <span className="font-mono">your-domain/&lt;slug&gt;</span>. Bind a
-          subdomain you own (e.g.{" "}
-          <span className="font-mono">pages.example.com</span>), not a bare apex.
-        </p>
-      </div>
+      <SectionHeader
+        eyebrow="Custom domain"
+        title="Bring your own domain"
+        description={
+          <>
+            Account-wide — every page also serves at{" "}
+            <span className="font-mono">your-domain/&lt;slug&gt;</span>. Bind a
+            subdomain you own (e.g.{" "}
+            <span className="font-mono">pages.example.com</span>), not a bare
+            apex.
+          </>
+        }
+      />
 
       {canBind ? (
         <form
