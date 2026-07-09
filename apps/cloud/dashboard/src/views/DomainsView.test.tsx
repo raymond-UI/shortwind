@@ -73,6 +73,33 @@ describe("DomainsView (UI custom-domain management)", () => {
     );
   });
 
+  it("surfaces the friendly ConvexError message (not the raw wrapper) + upgrade nudge", async () => {
+    // A Convex function throwing ConvexError surfaces its payload on `.data`.
+    const bindDomain = vi.fn().mockRejectedValue(
+      Object.assign(new Error("[Request ID: abc] Server Error"), {
+        data: {
+          code: "NOT_ENTITLED",
+          message: "Custom domains require a paid plan.",
+        },
+      }),
+    );
+    renderWithData(<DomainsView />, { accountDomains: [], bindDomain });
+    fireEvent.change(screen.getByTestId("domain-input"), {
+      target: { value: "pages.acme.com" },
+    });
+    fireEvent.click(screen.getByTestId("domain-connect"));
+    await waitFor(() =>
+      expect(screen.getByTestId("domain-error")).toHaveTextContent(
+        "Custom domains require a paid plan.",
+      ),
+    );
+    // No raw "Server Error" leak, and the entitlement case nudges to Billing.
+    expect(screen.getByTestId("domain-error")).not.toHaveTextContent(
+      "Server Error",
+    );
+    expect(screen.getByTestId("domain-error")).toHaveTextContent(/Billing/);
+  });
+
   it("marks an active domain and hides its DNS instructions", () => {
     renderWithData(<DomainsView />, {
       accountDomains: [
