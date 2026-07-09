@@ -37,7 +37,6 @@ export function renderGet(result: GetResult, json: boolean): string {
     `slug:       ${page.slug}`,
     `url:        ${page.url}`,
     `visibility: ${page.visibility}`,
-    `domain:     ${page.customDomain ?? "(none)"}`,
     `version:    v${page.currentVersion}`,
     `tags:       ${page.tags.length > 0 ? page.tags.join(", ") : "(none)"}`,
   ].join("\n");

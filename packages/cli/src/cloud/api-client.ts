@@ -38,7 +38,6 @@ export interface PageSummary {
   slug: string;
   url: string;
   visibility: "public" | "unlisted" | "private";
-  customDomain: string | null;
   currentVersion: number;
   tags: string[];
   updatedAt: number;
@@ -170,18 +169,32 @@ export type DomainBindState =
   | "failed";
 
 /**
- * The `POST /v1/pages/{id}/domain` response (CLOUD-40 `DomainBindResult`) — the
- * bind state handed back to the CLI as plain data.
+ * The `POST /v1/domains` (bind) / `POST /v1/domains/approve` response — the
+ * ACCOUNT-level bind state handed back as plain data. Account-scoped: no
+ * `pageId` (a domain aliases the whole account; every page serves at
+ * `<hostname>/<slug>`).
  */
 export interface DomainBindResult {
   state: DomainBindState;
   hostname: string;
   /** Cloudflare's hostname id once created; null while `pending-human`. */
   cloudflareHostnameId: string | null;
-  /** The page the hostname is (being) bound to. */
-  pageId: string;
   /** Present on `failed` (cert failed / retries exhausted) to explain why. */
   reason?: string;
+}
+
+/** An account custom domain as `GET /v1/domains` lists it. */
+export interface AccountDomain {
+  id: string;
+  hostname: string;
+  status: DomainBindState;
+  verifiedAt: number | null;
+  createdAt: number;
+}
+
+/** `GET /v1/domains` → the account's domains (empty → `{ domains: [] }`). */
+export interface ListDomainsResult {
+  domains: AccountDomain[];
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +242,6 @@ export class ApiError extends Error {
 /** Filters for `find` (all optional; blank/absent ⇒ no filter). */
 export interface FindQuery {
   q?: string | undefined;
-  domain?: string | undefined;
   /** Repeatable tag filter — each becomes a `tag=` query param. */
   tags?: string[] | undefined;
 }
@@ -256,11 +268,15 @@ export interface ApiClient {
   /** `PATCH /v1/pages/{id}/visibility` — set the access level (CLOUD-31/34). */
   setVisibility?(id: string, level: VisibilityLevel): Promise<PageSummary>;
   /**
-   * `POST /v1/pages/{id}/domain` — bind a custom hostname (CLOUD-40/41).
-   * Requires the `domains:bind` scope; a token without it yields a `forbidden`
-   * {@link ApiError} the caller maps to the step-up grant path.
+   * `POST /v1/domains` — bind an ACCOUNT-level custom domain (a subdomain you
+   * own). Requires the `domains:bind` scope; a token without it yields a
+   * `forbidden` {@link ApiError} the caller maps to the step-up grant path.
    */
-  bindDomain?(id: string, hostname: string): Promise<DomainBindResult>;
+  bindDomain?(hostname: string): Promise<DomainBindResult>;
+  /** `GET /v1/domains` — list the account's custom domains (CLI↔web parity). */
+  listDomains?(): Promise<ListDomainsResult>;
+  /** `POST /v1/domains/approve` — approve a `pending-human` domain (operator). */
+  approveDomain?(hostname: string): Promise<DomainBindResult>;
 }
 
 /** The three page access levels (PRD §4 — mirrors the server contract). */
@@ -276,9 +292,11 @@ export type VisibilityCapableClient = ApiClient & {
   setVisibility(id: string, level: VisibilityLevel): Promise<PageSummary>;
 };
 
-/** An {@link ApiClient} known to carry `bindDomain` (the bind-domain seam). */
+/** An {@link ApiClient} known to carry the domain-management verbs. */
 export type DomainCapableClient = ApiClient & {
-  bindDomain(id: string, hostname: string): Promise<DomainBindResult>;
+  bindDomain(hostname: string): Promise<DomainBindResult>;
+  listDomains(): Promise<ListDomainsResult>;
+  approveDomain(hostname: string): Promise<DomainBindResult>;
 };
 
 /** The `fetch` signature the client depends on (global `fetch` satisfies it). */
@@ -426,7 +444,6 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
     async findPages(query: FindQuery): Promise<FindResult> {
       const params = new URLSearchParams();
       if (query.q) params.set("q", query.q);
-      if (query.domain) params.set("domain", query.domain);
       for (const tag of query.tags ?? []) params.append("tag", tag);
       const qs = params.toString();
       const result = await request<FindResult>(
@@ -473,16 +490,25 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
       );
     },
 
-    bindDomain(id: string, hostname: string): Promise<DomainBindResult> {
-      // POST /v1/pages/{id}/domain { hostname } → the bind state (CLOUD-40).
-      // A token lacking `domains:bind` returns 403, which `toApiError` maps to a
+    bindDomain(hostname: string): Promise<DomainBindResult> {
+      // POST /v1/domains { hostname } → the account-level bind state. A token
+      // lacking `domains:bind` returns 403, which `toApiError` maps to a
       // `forbidden` ApiError — the bind-domain handler reads that as the signal
       // to drive the step-up grant flow (PRD §7.2) instead of failing flatly.
-      return request<DomainBindResult>(
-        "POST",
-        `/v1/pages/${encodeURIComponent(id)}/domain`,
-        { hostname },
-      );
+      return request<DomainBindResult>("POST", "/v1/domains", { hostname });
+    },
+
+    async listDomains(): Promise<ListDomainsResult> {
+      // GET /v1/domains → the account's custom domains (empty → { domains: [] }).
+      const result = await request<ListDomainsResult>("GET", "/v1/domains");
+      return { domains: Array.isArray(result.domains) ? result.domains : [] };
+    },
+
+    approveDomain(hostname: string): Promise<DomainBindResult> {
+      // POST /v1/domains/approve { hostname } → the provisioned bind state.
+      return request<DomainBindResult>("POST", "/v1/domains/approve", {
+        hostname,
+      });
     },
   };
 }

@@ -15,7 +15,6 @@ const SUMMARY: PageSummary = {
   slug: "status",
   url: "https://shortwind.dev/status",
   visibility: "private",
-  customDomain: null,
   currentVersion: 2,
   tags: ["ops"],
   updatedAt: 1717000000000,

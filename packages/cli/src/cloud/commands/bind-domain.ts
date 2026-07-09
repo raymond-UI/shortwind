@@ -4,9 +4,10 @@ import { validateHostname } from "../contract/slug.js";
 import { ApiError, type DomainBindResult, type DomainCapableClient } from "../api-client.js";
 
 /**
- * `bind-domain <id> <hostname>` — POST /v1/pages/{id}/domain: bind a custom
- * hostname. Privileged: requires the `domains:bind` scope, which is
- * human-gated (PRD §4, §7.2). `login --scope domains:bind` requests it.
+ * `bind-domain <hostname>` — POST /v1/domains: bind an ACCOUNT-level custom
+ * domain (a subdomain you own; every page then serves at `<hostname>/<slug>`).
+ * Privileged: requires the `domains:bind` scope, which is human-gated (PRD §4,
+ * §7.2). `login --scope domains:bind` requests it.
  *
  * {@link bindDomain} is the retained CLOUD-04 parse stub (cli.test.ts). The
  * REAL behavior is {@link runBindDomain} (CLOUD-41), unit-tested against a
@@ -25,12 +26,11 @@ export interface BindDomainOptions {
   json?: boolean;
 }
 
-export function bindDomain(id: string, hostname: string, opts: BindDomainOptions): StubResult {
+export function bindDomain(hostname: string, opts: BindDomainOptions): StubResult {
   return {
     verb: "bind-domain",
     implementedBy: "CLOUD-41",
     parsed: {
-      id,
       hostname,
       json: Boolean(opts.json),
     },
@@ -91,7 +91,7 @@ export function hasBindScope(scopes: readonly string[]): boolean {
 export function renderBindDomain(result: DomainBindResult, json: boolean): string {
   if (json) return JSON.stringify(result, null, 2);
   const tail = result.reason ? ` — ${result.reason}` : "";
-  return `bind ${result.hostname} → ${result.pageId}: ${result.state}${tail}`;
+  return `bind ${result.hostname}: ${result.state}${tail}`;
 }
 
 /**
@@ -122,7 +122,6 @@ export interface BindDomainContext {
  * machine callers (pending-human / queued / pending-cert / active / failed).
  */
 export async function runBindDomain(
-  id: string,
   hostname: string,
   opts: BindDomainOptions,
   ctx: BindDomainContext,
@@ -143,7 +142,7 @@ export async function runBindDomain(
   }
 
   try {
-    const result = await ctx.client.bindDomain(id, hostname);
+    const result = await ctx.client.bindDomain(hostname);
     return renderBindDomain(result, json);
   } catch (err) {
     // (2) Server-side gate: a 403 means our local scope view was insufficient.
@@ -151,7 +150,7 @@ export async function runBindDomain(
     if (err instanceof ApiError && err.kind === "forbidden") {
       const granted = await ctx.stepUp();
       if (!granted.ok) throw new StepUpDeniedError(granted.reason);
-      const result = await ctx.client.bindDomain(id, hostname);
+      const result = await ctx.client.bindDomain(hostname);
       return renderBindDomain(result, json);
     }
     throw err;

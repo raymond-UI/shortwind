@@ -15,7 +15,6 @@ const PAGE: PageSummary = {
   slug: "status",
   url: "https://shortwind.dev/status",
   visibility: "public",
-  customDomain: null,
   currentVersion: 3,
   tags: ["ops", "live"],
   updatedAt: 1717000000000,
@@ -23,9 +22,8 @@ const PAGE: PageSummary = {
 
 describe("toFindQuery", () => {
   it("normalizes flags into the api-client query (repeatable tags)", () => {
-    expect(toFindQuery({ q: "s", domain: "d", tag: ["a", "b"] })).toEqual({
+    expect(toFindQuery({ q: "s", tag: ["a", "b"] })).toEqual({
       q: "s",
-      domain: "d",
       tags: ["a", "b"],
     });
     expect(toFindQuery({})).toEqual({ tags: [] });

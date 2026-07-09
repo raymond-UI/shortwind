@@ -17,40 +17,31 @@ import {
 } from "../api-client.js";
 
 /**
- * bind-domain (CLOUD-41) — the step-up scope grant + the bind call against a
- * MOCKED api-client and a MOCKED step-up (no network, per CLOUD-04 carry-over).
- *
- * Behaviors covered:
- *   - without `domains:bind`: the step-up flow is INVOKED (not a flat failure),
- *     and on success the bind proceeds;
- *   - with the scope already granted: bindDomain is called, step-up is NOT;
- *   - a server 403 (forbidden ApiError) routes through the step-up retry path;
- *   - a denied/expired step-up surfaces a StepUpDeniedError (clean failure);
- *   - `--json` output is the stable verbatim bind-state shape.
+ * bind-domain (account-level) — the step-up scope grant + the bind call against
+ * a MOCKED api-client and a MOCKED step-up (no network). A domain aliases the
+ * whole account (no pageId).
  */
 
 const PENDING_HUMAN: DomainBindResult = {
   state: "pending-human",
   hostname: "www.example.com",
   cloudflareHostnameId: null,
-  pageId: "pg_1",
 };
 
 const ACTIVE: DomainBindResult = {
   state: "active",
   hostname: "www.example.com",
   cloudflareHostnameId: "cf_123",
-  pageId: "pg_1",
 };
 
 /** A DomainCapableClient whose bindDomain returns the given result, counting calls. */
 function clientReturning(
   result: DomainBindResult,
-  onBind: (id: string, hostname: string) => void = () => {},
+  onBind: (hostname: string) => void = () => {},
 ): DomainCapableClient {
   return baseClient({
-    bindDomain: async (id, hostname) => {
-      onBind(id, hostname);
+    bindDomain: async (hostname) => {
+      onBind(hostname);
       return result;
     },
   });
@@ -60,12 +51,12 @@ function clientReturning(
 function client403Then(
   succeedWith: DomainBindResult,
   forbiddenCount: number,
-  onBind: (id: string, hostname: string) => void = () => {},
+  onBind: (hostname: string) => void = () => {},
 ): DomainCapableClient {
   let calls = 0;
   return baseClient({
-    bindDomain: async (id, hostname) => {
-      onBind(id, hostname);
+    bindDomain: async (hostname) => {
+      onBind(hostname);
       calls += 1;
       if (calls <= forbiddenCount) {
         throw new ApiError({
@@ -95,6 +86,10 @@ function baseClient(over: Partial<DomainCapableClient>): DomainCapableClient {
     bindDomain: async () => {
       throw new Error("unused");
     },
+    listDomains: async () => ({ domains: [] }),
+    approveDomain: async () => {
+      throw new Error("unused");
+    },
     ...over,
   } as DomainCapableClient;
 }
@@ -116,12 +111,12 @@ function ctx(over: Partial<BindDomainContext>): BindDomainContext {
   };
 }
 
-describe("bindDomain — retained CLOUD-04 parse stub", () => {
+describe("bindDomain — retained parse stub", () => {
   it("reports the parsed args (used by cli.test.ts parse-shape)", () => {
-    expect(bindDomain("pg_1", "www.example.com", { json: true })).toEqual({
+    expect(bindDomain("www.example.com", { json: true })).toEqual({
       verb: "bind-domain",
       implementedBy: "CLOUD-41",
-      parsed: { id: "pg_1", hostname: "www.example.com", json: true },
+      parsed: { hostname: "www.example.com", json: true },
     });
   });
 });
@@ -136,7 +131,7 @@ describe("hasBindScope", () => {
 describe("renderBindDomain — golden output", () => {
   it("human: one-line state summary", () => {
     expect(renderBindDomain(PENDING_HUMAN, false)).toBe(
-      "bind www.example.com → pg_1: pending-human",
+      "bind www.example.com: pending-human",
     );
   });
 
@@ -146,7 +141,7 @@ describe("renderBindDomain — golden output", () => {
         { ...ACTIVE, state: "failed", reason: "cert failed" },
         false,
       ),
-    ).toBe("bind www.example.com → pg_1: failed — cert failed");
+    ).toBe("bind www.example.com: failed — cert failed");
   });
 
   it("--json: emits the bind state verbatim (stable contract)", () => {
@@ -159,7 +154,7 @@ describe("runBindDomain — client-side hostname validation (#156)", () => {
     let steppedUp = false;
     let bindCalled = false;
     await expect(
-      runBindDomain("pg_1", "not a host!", {}, {
+      runBindDomain("not a host!", {}, {
         client: clientReturning(PENDING_HUMAN, () => {
           bindCalled = true;
         }),
@@ -176,22 +171,21 @@ describe("runBindDomain — client-side hostname validation (#156)", () => {
 
   it("accepts a valid hostname and proceeds to bind", async () => {
     const out = await runBindDomain(
-      "pg_1",
       "www.example.com",
       {},
       ctx({ client: clientReturning(ACTIVE) }),
     );
-    expect(out).toBe("bind www.example.com → pg_1: active");
+    expect(out).toBe("bind www.example.com: active");
   });
 });
 
 describe("runBindDomain — step-up gating (PRD §7.2)", () => {
   it("WITHOUT domains:bind: invokes the step-up flow, then binds (not a flat failure)", async () => {
     let steppedUp = false;
-    let bound: { id?: string; hostname?: string } = {};
-    const out = await runBindDomain("pg_1", "www.example.com", { json: true }, {
-      client: clientReturning(PENDING_HUMAN, (id, hostname) => {
-        bound = { id, hostname };
+    let bound: string | undefined;
+    const out = await runBindDomain("www.example.com", { json: true }, {
+      client: clientReturning(PENDING_HUMAN, (hostname) => {
+        bound = hostname;
       }),
       readScopes: () => ["pages:read", "pages:write"],
       stepUp: fakeStepUp({ ok: true, scopes: [BIND_SCOPE] }, () => {
@@ -199,20 +193,19 @@ describe("runBindDomain — step-up gating (PRD §7.2)", () => {
       }),
     });
     expect(steppedUp).toBe(true);
-    expect(bound).toEqual({ id: "pg_1", hostname: "www.example.com" });
+    expect(bound).toBe("www.example.com");
     expect(JSON.parse(out)).toEqual(PENDING_HUMAN);
   });
 
   it("WITH domains:bind already: calls bindDomain and does NOT step up", async () => {
     let steppedUp = false;
-    let bound: { id?: string; hostname?: string } = {};
+    let bound: string | undefined;
     const out = await runBindDomain(
-      "pg_1",
       "www.example.com",
       {},
       ctx({
-        client: clientReturning(ACTIVE, (id, hostname) => {
-          bound = { id, hostname };
+        client: clientReturning(ACTIVE, (hostname) => {
+          bound = hostname;
         }),
         readScopes: () => ["pages:read", BIND_SCOPE],
         stepUp: fakeStepUp({ ok: true, scopes: [BIND_SCOPE] }, () => {
@@ -221,14 +214,14 @@ describe("runBindDomain — step-up gating (PRD §7.2)", () => {
       }),
     );
     expect(steppedUp).toBe(false);
-    expect(bound).toEqual({ id: "pg_1", hostname: "www.example.com" });
-    expect(out).toBe("bind www.example.com → pg_1: active");
+    expect(bound).toBe("www.example.com");
+    expect(out).toBe("bind www.example.com: active");
   });
 
   it("a denied step-up throws StepUpDeniedError and never calls bindDomain", async () => {
     let bindCalled = false;
     await expect(
-      runBindDomain("pg_1", "www.example.com", {}, {
+      runBindDomain("www.example.com", {}, {
         client: clientReturning(ACTIVE, () => {
           bindCalled = true;
         }),
@@ -244,7 +237,7 @@ describe("runBindDomain — server 403 maps to the needs-scope step-up retry", (
   it("a forbidden ApiError triggers one step-up, then retries the bind", async () => {
     let stepUps = 0;
     let bindCalls = 0;
-    const out = await runBindDomain("pg_1", "www.example.com", {}, {
+    const out = await runBindDomain("www.example.com", {}, {
       // Local view thinks we have the scope, but the server says 403 once.
       client: client403Then(ACTIVE, 1, () => {
         bindCalls += 1;
@@ -256,12 +249,12 @@ describe("runBindDomain — server 403 maps to the needs-scope step-up retry", (
     });
     expect(stepUps).toBe(1);
     expect(bindCalls).toBe(2); // first 403, retry succeeds
-    expect(out).toBe("bind www.example.com → pg_1: active");
+    expect(out).toBe("bind www.example.com: active");
   });
 
   it("a denied step-up after a 403 surfaces StepUpDeniedError", async () => {
     await expect(
-      runBindDomain("pg_1", "www.example.com", {}, {
+      runBindDomain("www.example.com", {}, {
         client: client403Then(ACTIVE, 1),
         readScopes: () => [BIND_SCOPE],
         stepUp: fakeStepUp({ ok: false, reason: "expired" }),
@@ -277,7 +270,7 @@ describe("runBindDomain — server 403 maps to the needs-scope step-up retry", (
       },
     });
     await expect(
-      runBindDomain("pg_1", "www.example.com", {}, {
+      runBindDomain("www.example.com", {}, {
         client,
         readScopes: () => [BIND_SCOPE],
         stepUp: fakeStepUp({ ok: true, scopes: [BIND_SCOPE] }, () => {
