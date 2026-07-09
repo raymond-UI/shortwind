@@ -45,11 +45,10 @@ export const authManage = internalQuery({
  * origins (CORS); the FIRST entry is the canonical dashboard ORIGIN.
  *
  * The dashboard (TanStack Start) is served under the `/cloud` BASEPATH, and the
- * billing surface is the Billing SECTION of the single `/cloud/dashboard` shell
- * (there is no `/dashboard/billing` route). So checkout/portal return to
- * `<origin>/cloud/dashboard` — a bare `/dashboard/billing` 404s.
+ * billing surface is now a real deep-linkable route (#212): the Billing section
+ * lives at `/cloud/dashboard/billing`. So checkout/portal return there directly.
  */
-const DASHBOARD_BILLING_PATH = "/cloud/dashboard";
+const DASHBOARD_BILLING_PATH = "/cloud/dashboard/billing";
 
 function dashboardBillingUrl(query = ""): string {
   const raw = process.env.DASHBOARD_URL;
@@ -117,8 +116,8 @@ export const createCheckoutSession = action({
       priceId,
       customerId: customer.customerId,
       mode: "subscription",
-      successUrl: dashboardBillingUrl("?section=billing&checkout=success"),
-      cancelUrl: dashboardBillingUrl("?section=billing&checkout=canceled"),
+      successUrl: dashboardBillingUrl("?checkout=success"),
+      cancelUrl: dashboardBillingUrl("?checkout=canceled"),
       // Lands on the subscription row's indexed `orgId` column (our account id).
       subscriptionMetadata: { orgId: scope.accountId },
       metadata: {
@@ -160,7 +159,7 @@ export const portalUrl = action({
 
     const session = await stripeClient.createCustomerPortalSession(ctx, {
       customerId,
-      returnUrl: dashboardBillingUrl("?section=billing"),
+      returnUrl: dashboardBillingUrl(),
     });
     return { url: session.url };
   },

@@ -15,7 +15,10 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedDeviceRouteImport } from './routes/_authed/device'
 import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
+import { Route as AuthedDashboardIndexRouteImport } from './routes/_authed/dashboard/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AuthedDashboardSectionRouteImport } from './routes/_authed/dashboard/$section'
+import { Route as AuthedDashboardPagesIdRouteImport } from './routes/_authed/dashboard/pages/$id'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -46,27 +49,47 @@ const AuthedDashboardRoute = AuthedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedDashboardIndexRoute = AuthedDashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedDashboardRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedDashboardSectionRoute = AuthedDashboardSectionRouteImport.update({
+  id: '/$section',
+  path: '/$section',
+  getParentRoute: () => AuthedDashboardRoute,
+} as any)
+const AuthedDashboardPagesIdRoute = AuthedDashboardPagesIdRouteImport.update({
+  id: '/pages/$id',
+  path: '/pages/$id',
+  getParentRoute: () => AuthedDashboardRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/dashboard': typeof AuthedDashboardRoute
+  '/dashboard': typeof AuthedDashboardRouteWithChildren
   '/device': typeof AuthedDeviceRoute
+  '/dashboard/$section': typeof AuthedDashboardSectionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard/': typeof AuthedDashboardIndexRoute
+  '/dashboard/pages/$id': typeof AuthedDashboardPagesIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/dashboard': typeof AuthedDashboardRoute
   '/device': typeof AuthedDeviceRoute
+  '/dashboard/$section': typeof AuthedDashboardSectionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard': typeof AuthedDashboardIndexRoute
+  '/dashboard/pages/$id': typeof AuthedDashboardPagesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -74,9 +97,12 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/_authed/dashboard': typeof AuthedDashboardRoute
+  '/_authed/dashboard': typeof AuthedDashboardRouteWithChildren
   '/_authed/device': typeof AuthedDeviceRoute
+  '/_authed/dashboard/$section': typeof AuthedDashboardSectionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/_authed/dashboard/': typeof AuthedDashboardIndexRoute
+  '/_authed/dashboard/pages/$id': typeof AuthedDashboardPagesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -86,9 +112,20 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard'
     | '/device'
+    | '/dashboard/$section'
     | '/api/auth/$'
+    | '/dashboard/'
+    | '/dashboard/pages/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup' | '/dashboard' | '/device' | '/api/auth/$'
+  to:
+    | '/'
+    | '/login'
+    | '/signup'
+    | '/device'
+    | '/dashboard/$section'
+    | '/api/auth/$'
+    | '/dashboard'
+    | '/dashboard/pages/$id'
   id:
     | '__root__'
     | '/'
@@ -97,7 +134,10 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_authed/dashboard'
     | '/_authed/device'
+    | '/_authed/dashboard/$section'
     | '/api/auth/$'
+    | '/_authed/dashboard/'
+    | '/_authed/dashboard/pages/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -152,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedDashboardRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/dashboard/': {
+      id: '/_authed/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof AuthedDashboardIndexRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -159,16 +206,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/dashboard/$section': {
+      id: '/_authed/dashboard/$section'
+      path: '/$section'
+      fullPath: '/dashboard/$section'
+      preLoaderRoute: typeof AuthedDashboardSectionRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
+    '/_authed/dashboard/pages/$id': {
+      id: '/_authed/dashboard/pages/$id'
+      path: '/pages/$id'
+      fullPath: '/dashboard/pages/$id'
+      preLoaderRoute: typeof AuthedDashboardPagesIdRouteImport
+      parentRoute: typeof AuthedDashboardRoute
+    }
   }
 }
 
+interface AuthedDashboardRouteChildren {
+  AuthedDashboardSectionRoute: typeof AuthedDashboardSectionRoute
+  AuthedDashboardIndexRoute: typeof AuthedDashboardIndexRoute
+  AuthedDashboardPagesIdRoute: typeof AuthedDashboardPagesIdRoute
+}
+
+const AuthedDashboardRouteChildren: AuthedDashboardRouteChildren = {
+  AuthedDashboardSectionRoute: AuthedDashboardSectionRoute,
+  AuthedDashboardIndexRoute: AuthedDashboardIndexRoute,
+  AuthedDashboardPagesIdRoute: AuthedDashboardPagesIdRoute,
+}
+
+const AuthedDashboardRouteWithChildren = AuthedDashboardRoute._addFileChildren(
+  AuthedDashboardRouteChildren,
+)
+
 interface AuthedRouteChildren {
-  AuthedDashboardRoute: typeof AuthedDashboardRoute
+  AuthedDashboardRoute: typeof AuthedDashboardRouteWithChildren
   AuthedDeviceRoute: typeof AuthedDeviceRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedDashboardRoute: AuthedDashboardRoute,
+  AuthedDashboardRoute: AuthedDashboardRouteWithChildren,
   AuthedDeviceRoute: AuthedDeviceRoute,
 }
 
