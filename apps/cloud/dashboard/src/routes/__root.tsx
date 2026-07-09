@@ -39,9 +39,20 @@ export const Route = createRootRouteWithContext<{
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "robots", content: "noindex, nofollow" },
+      { name: "theme-color", content: "#0a0a0a" },
       { title: "Shortwind Cloud" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    // Favicons: the dashboard shares the `shortwind.dev` origin with the Astro
+    // site, so we reference the site's already-deployed icon set at the domain
+    // root (no asset duplication). This gives every dashboard page — including
+    // the public /cloud landing — the shortwind ▚ favicon.
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "icon", href: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { rel: "icon", href: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+    ],
   }),
   beforeLoad: async (ctx) => {
     const token = await getAuth();
