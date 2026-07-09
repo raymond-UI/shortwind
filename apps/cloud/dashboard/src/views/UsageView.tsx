@@ -1,11 +1,14 @@
 import { useDashboardData } from "../lib/data";
 import { formatBytes, formatTime } from "../lib/format";
+import { SectionHeader } from "../components/SectionHeader";
 
 /**
- * Usage view (CLOUD-43, PRD §6.4) — the metered-billing surface, restyled as
- * stat cards (epic #184, #189). Three meters = exactly what costs money:
- * publishes, custom domains, storage. Page VIEWS are deliberately absent (a
- * viral page costs ~nothing). Reads `usage` from the data seam.
+ * Usage view (CLOUD-43, PRD §6.4) — the metered-billing surface, restyled in
+ * the #213 design pass as accented stat cards: a leading term-green glyph, a
+ * large tabular value, the label, and what it means. Three meters = exactly
+ * what costs money: publishes, custom domains, storage. Page VIEWS are
+ * deliberately absent (a viral page costs ~nothing). Reads `usage` from the
+ * data seam.
  */
 export function UsageView() {
   const { usage } = useDashboardData();
@@ -17,18 +20,21 @@ export function UsageView() {
   const meters = [
     {
       key: "publishes",
+      glyph: "▲",
       label: "Publishes",
       value: String(usage.publishes),
       hint: "one per published version",
     },
     {
       key: "customDomains",
+      glyph: "⊞",
       label: "Custom domains",
       value: String(usage.customDomains),
       hint: "Cloudflare-for-SaaS hostname + cert",
     },
     {
       key: "storage",
+      glyph: "⛁",
       label: "Storage",
       value: formatBytes(usage.storageBytes),
       hint: "frozen artifact footprint",
@@ -36,34 +42,52 @@ export function UsageView() {
   ];
 
   return (
-    <div className="space-y-4" data-testid="usage-view">
-      <p className="@caption" data-testid="usage-cost-note">
-        Metered to what costs money (PRD §6.4): publishes, custom domains, and
-        storage. Page views are not billed — a viral page costs nothing.
-      </p>
-      {/* @stat / @stat-value / @stat-label — the catalog stat recipes. */}
-      <div className="@grid-3 grid gap-4 sm:grid-cols-3">
+    <div className="space-y-5" data-testid="usage-view">
+      <SectionHeader
+        eyebrow="Usage"
+        title="What this account is using"
+        description={
+          <span data-testid="usage-cost-note">
+            Metered to what costs money (PRD §6.4): publishes, custom domains,
+            and storage. Page views are not billed — a viral page costs nothing.
+          </span>
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-3">
         {meters.map((m) => (
           <div
             key={m.key}
             data-testid={`usage-meter-${m.key}`}
-            className="@stat"
+            className="rounded-lg border border-border bg-card p-5"
           >
-            <div className="@stat-value" data-testid={`usage-value-${m.key}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{m.label}</span>
+              <span className="text-term" aria-hidden="true">
+                {m.glyph}
+              </span>
+            </div>
+            <div
+              className="mt-3 text-3xl font-semibold tabular-nums leading-none tracking-tight"
+              data-testid={`usage-value-${m.key}`}
+            >
               {m.value}
             </div>
-            <div className="@stat-label">{m.label}</div>
-            <div className="@caption">{m.hint}</div>
+            <div className="mt-2 text-xs text-muted-foreground">{m.hint}</div>
           </div>
         ))}
       </div>
-      <p className="@caption tabular-nums">
-        period:{" "}
-        {usage.periodStart === null
-          ? "since account start"
-          : formatTime(usage.periodStart)}{" "}
-        → {formatTime(usage.periodEnd)}
-      </p>
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="h-1.5 w-1.5 rounded-full bg-term" aria-hidden="true" />
+        <span className="tabular-nums">
+          period:{" "}
+          {usage.periodStart === null
+            ? "since account start"
+            : formatTime(usage.periodStart)}{" "}
+          → {formatTime(usage.periodEnd)}
+        </span>
+      </div>
     </div>
   );
 }

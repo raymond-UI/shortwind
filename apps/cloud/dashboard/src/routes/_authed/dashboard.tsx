@@ -130,7 +130,24 @@ function DashboardLayout() {
             >
               ☰
             </button>
-            <h1 className="@heading-sm">{activeLabel}</h1>
+            {/* Breadcrumb, not a page title — each view owns its own header
+                (SectionHeader), so this stays a lightweight location marker. */}
+            <nav aria-label="Breadcrumb" className="min-w-0 text-xs">
+              <ol className="flex items-center gap-1.5 text-muted-foreground">
+                <li className="flex items-center gap-1.5">
+                  <span className="text-term" aria-hidden="true">
+                    ▚
+                  </span>
+                  <span>Cloud</span>
+                </li>
+                <li aria-hidden="true" className="text-border">
+                  /
+                </li>
+                <li className="truncate font-medium text-foreground">
+                  {activeLabel}
+                </li>
+              </ol>
+            </nav>
           </header>
           <main className="flex-1 overflow-auto p-4 md:p-6">
             <Outlet />

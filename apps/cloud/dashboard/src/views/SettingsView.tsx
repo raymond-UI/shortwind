@@ -4,6 +4,7 @@ import { formatTime } from "../lib/format";
 import { PolicyView } from "./PolicyView";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
+import { SectionHeader } from "../components/SectionHeader";
 import type { TokenRow } from "../lib/types";
 
 /**
@@ -16,24 +17,21 @@ import type { TokenRow } from "../lib/types";
 export function SettingsView() {
   return (
     <div className="max-w-2xl space-y-10" data-testid="settings-view">
-      <section className="space-y-3">
-        <div>
-          <h2 className="@heading-sm">Policy</h2>
-          <p className="@caption">
-            Account-wide controls applied to every page.
-          </p>
-        </div>
+      <section className="space-y-4">
+        <SectionHeader
+          eyebrow="Policy"
+          title="Account policy"
+          description="Account-wide controls applied to every page."
+        />
         <PolicyView />
       </section>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="@heading-sm">API tokens</h2>
-          <p className="@caption">
-            Scoped bearer tokens used by the CLI and agents. Revoke any you no
-            longer trust.
-          </p>
-        </div>
+      <section className="space-y-4">
+        <SectionHeader
+          eyebrow="Access"
+          title="API tokens"
+          description="Scoped bearer tokens used by the CLI and agents. Revoke any you no longer trust."
+        />
         <TokenList />
       </section>
     </div>
@@ -83,20 +81,36 @@ function TokenRowItem({ token }: { token: TokenRow }) {
 
   return (
     <li data-testid="token-row" className="@list-item items-start gap-3">
-
+      <span
+        aria-hidden="true"
+        className={
+          "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md border text-sm " +
+          (revoked
+            ? "border-border bg-secondary text-muted-foreground opacity-60"
+            : "border-term/30 bg-term/10 text-term")
+        }
+      >
+        🔑
+      </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-medium">
+          <span
+            className={
+              "truncate font-medium " + (revoked ? "line-through opacity-70" : "")
+            }
+          >
             {token.label ?? "(unlabeled)"}
           </span>
           {revoked ? <Badge tone="danger">revoked</Badge> : null}
         </div>
-        <div className="mt-0.5 flex flex-wrap gap-1">
+        <div className="mt-1 flex flex-wrap gap-1">
           {token.scopes.map((s) => (
-            <Badge key={s}>{s}</Badge>
+            <Badge key={s} outline>
+              {s}
+            </Badge>
           ))}
         </div>
-        <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+        <div className="mt-1.5 text-xs text-muted-foreground tabular-nums">
           created {formatTime(token.createdAt)}
           {token.expiresAt !== null
             ? ` · expires ${formatTime(token.expiresAt)}`
