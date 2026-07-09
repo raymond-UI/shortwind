@@ -7,6 +7,9 @@ const links = [
   { href: "/docs", label: "docs" },
   { href: "/catalog", label: "catalog" },
   { href: "/playground", label: "playground" },
+  // Cloud is a separate app under /cloud (the dashboard); link it so the
+  // hosting product is discoverable from the marketing site.
+  { href: "/cloud", label: "cloud" },
 ];
 const path = Astro.url.pathname;
 const isActive = (href: string) =>

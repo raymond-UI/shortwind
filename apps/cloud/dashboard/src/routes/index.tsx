@@ -1,13 +1,15 @@
 import { Link, createFileRoute, useRouteContext } from "@tanstack/react-router";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
- * Public marketing landing page for Shortwind Cloud (agent-native HTML hosting).
+ * Public marketing landing page for Shortwind Cloud (agent-native HTML hosting),
+ * the public `/cloud` index (https://shortwind.dev/cloud). NOT auth-gated — the
+ * `_authed` layout guards the operator dashboard. `isAuthenticated` only swaps
+ * the CTA (already signed in → "Open dashboard").
  *
- * This route is intentionally NOT auth-gated — it is the public `/cloud` index
- * (https://shortwind.dev/cloud). The `_authed` layout still guards the operator
- * dashboard. We read `isAuthenticated` (seeded by `__root.beforeLoad`) only to
- * swap the CTA: an already-signed-in operator gets "Open dashboard" instead of
- * the sign-in / sign-up pair.
+ * Styled on the SHARED theme (`index.css` tokens, ported from `site/src/index.css`)
+ * so it reads as one product with shortwind.dev: mono-forward, thin borders,
+ * sharp radius, the `--term` green accent (`text-term`) — no hardcoded colors.
  */
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -17,8 +19,19 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Publish agent-built HTML to the web — one command, a durable URL. Expanded and frozen server-side, served at the edge.",
+          "Your agent publishes a page and gets a live URL instantly — free to publish and serve at <slug>.shortwind.app. Bring your own domain on Pro.",
       },
+      {
+        property: "og:title",
+        content: "Shortwind Cloud — Agent-native HTML hosting",
+      },
+      {
+        property: "og:description",
+        content:
+          "Your agent builds it, we host it. Publish agent-built HTML to a live URL instantly — free. Bring your own domain on Pro ($5/mo).",
+      },
+      { property: "og:type", content: "website" },
+      { name: "theme-color", content: "#0a0a0a" },
     ],
   }),
   component: LandingPage,
@@ -26,46 +39,46 @@ export const Route = createFileRoute("/")({
 
 const STEPS = [
   {
-    n: "1",
-    title: "Agent authors HTML",
-    body: "Your agent writes a page in Shortwind shorthand — compact recipe tokens like a stat, a chip, a panel — instead of long utility-class strings.",
+    n: "01",
+    title: "Publish from the CLI or an agent",
+    body: "One call ships an HTML file — your @recipe classes expanded server-side — as a frozen, immutable version.",
   },
   {
-    n: "2",
-    title: "publish",
-    body: "One call expands the shorthand to Tailwind server-side, freezes the result, and stores it as an immutable artifact.",
+    n: "02",
+    title: "Get an instant live URL",
+    body: "Every page serves at <slug>.shortwind.app — public, unlisted, or private. Serving is free; a viral page costs nothing.",
   },
   {
-    n: "3",
-    title: "Live at the edge",
-    body: "The frozen page is served from a durable URL — https://<name>.shortwind.dev — with zero origin compute.",
+    n: "03",
+    title: "Bring your own domain",
+    body: "Bind a subdomain you own — every page then also serves at your-domain/<slug>, with an auto-issued certificate.",
   },
 ];
 
 const FEATURES = [
   {
     title: "Server-side expansion",
-    body: "Shorthand recipes expand to Tailwind at publish time, not in the prompt — roughly 40% fewer tokens to author the same page.",
+    body: "Shorthand @recipe classes expand to Tailwind at publish time, not in the prompt — fewer tokens to author the same page.",
   },
   {
     title: "Frozen, served at the edge",
     body: "Published pages are immutable artifacts served from the edge with zero origin compute. A viral page costs ~nothing.",
   },
   {
-    title: "Trust & safety built in",
-    body: "A global kill path, quarantine, and hash-scan coverage ship by default — abuse is contained in under 30 seconds.",
-  },
-  {
-    title: "Per-page subdomains + custom domains",
-    body: "Every page gets its own <name>.shortwind.dev subdomain. Bring your own domain via Cloudflare for SaaS.",
-  },
-  {
     title: "A small agent API",
-    body: "find, publish, and update — three verbs an agent can drive. No build step, no deploy pipeline to wire up.",
+    body: "find, publish, update, delete — a handful of verbs an agent can drive. No repo, no build step, no deploy pipeline.",
   },
   {
     title: "Versioned & durable",
-    body: "Every publish is a new immutable version. Recipe edits are tracked, and pages can be reverted or audited.",
+    body: "Every publish is a new immutable version. Recipe edits are tracked; pages can be reverted or audited.",
+  },
+  {
+    title: "Account-wide custom domains",
+    body: "Bind one subdomain you own and it fans out to every page — your-domain/<slug> — with TLS handled for you.",
+  },
+  {
+    title: "Trust & safety by default",
+    body: "A global kill path, quarantine, and content scanning ship built in, so abuse is contained fast.",
   },
 ];
 
@@ -73,23 +86,32 @@ function LandingPage() {
   const { isAuthenticated } = useRouteContext({ from: Route.id });
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 antialiased [font-family:Inter,ui-sans-serif,system-ui,sans-serif] selection:bg-emerald-400/30">
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        {/* Top bar */}
-        <header className="flex items-center justify-between border-b border-white/10 pb-6">
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-lg border border-white/15 bg-white/5 font-mono text-emerald-400">
-              ▚
-            </div>
-            <span className="text-sm font-semibold tracking-tight">
-              Shortwind Cloud
-            </span>
-          </div>
+    <div className="min-h-screen bg-background font-mono text-foreground antialiased">
+      {/* Gradient hairline — the one hit of color, matching shortwind.dev. */}
+      <div className="sw-hairline" aria-hidden="true" />
+
+      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
+        {/* Top bar — mirrors the site header. */}
+        <header className="flex h-14 items-center justify-between border-b border-border/80">
+          <a
+            href="https://shortwind.dev"
+            className="flex items-center gap-1.5 text-sm font-bold tracking-tight"
+          >
+            <span className="text-term">▚</span>
+            <span>shortwind</span>
+            <span className="text-muted-foreground">Cloud</span>
+          </a>
           <nav className="flex items-center gap-2 text-xs">
+            <a
+              href="https://shortwind.dev/docs"
+              className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              docs
+            </a>
             {isAuthenticated ? (
               <Link
                 to="/dashboard"
-                className="rounded-md border border-white/10 px-3 py-1.5 text-zinc-300 hover:bg-white/5"
+                className="rounded-md border border-border px-3 py-1.5 text-foreground transition-colors hover:bg-secondary"
               >
                 Open dashboard
               </Link>
@@ -97,54 +119,59 @@ function LandingPage() {
               <>
                 <Link
                   to="/login"
-                  className="rounded-md border border-white/10 px-3 py-1.5 text-zinc-300 hover:bg-white/5"
+                  className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
                 >
                   Sign in
                 </Link>
                 <Link
                   to="/signup"
-                  className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5 font-medium text-emerald-300 hover:bg-emerald-400/20"
+                  className="rounded-md border border-border bg-primary px-3 py-1.5 font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   Get started
                 </Link>
               </>
             )}
+            <span className="mx-1 h-5 w-px bg-border" />
+            <ThemeToggle />
           </nav>
         </header>
 
         {/* Hero */}
-        <section className="py-20 sm:py-28">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Agent-native HTML hosting
-          </div>
-          <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
-            Publish agent-built HTML to the web — one command, a durable URL.
+        <section className="mx-auto max-w-2xl pt-16 pb-4 text-center sm:pt-24">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-term" />
+            Shortwind Cloud · public beta
+          </span>
+          <h1 className="mt-6 text-[1.75rem] font-extrabold leading-[1.2] tracking-tight sm:text-4xl sm:leading-[1.1] md:text-5xl">
+            Your agent builds it.
+            <br className="hidden sm:inline" />{" "}
+            <span className="text-term">We host it.</span>
           </h1>
-          <p className="mt-5 max-w-2xl text-base text-zinc-400 sm:text-lg">
-            Shortwind Cloud takes the HTML an agent writes, expands and freezes
-            it server-side, and serves it from the edge at a permanent address.
-            No build step, no deploy pipeline.
+          <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-muted-foreground sm:text-lg">
+            Agent-native HTML hosting. An agent publishes a page and gets a{" "}
+            <span className="text-foreground">live URL instantly</span> — no
+            repo, no build step, no deploy config. Publishing and serving are
+            free.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             {isAuthenticated ? (
               <Link
                 to="/dashboard"
-                className="rounded-lg bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
+                className="rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
               >
-                Open dashboard
+                Open dashboard →
               </Link>
             ) : (
               <>
                 <Link
                   to="/signup"
-                  className="rounded-lg bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
+                  className="rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                 >
-                  Get started
+                  Start free →
                 </Link>
                 <Link
                   to="/login"
-                  className="rounded-lg border border-white/15 px-5 py-2.5 text-sm font-medium text-zinc-200 hover:bg-white/5"
+                  className="rounded-md border border-border px-5 py-2.5 text-sm font-medium transition-colors hover:bg-secondary"
                 >
                   Sign in
                 </Link>
@@ -154,43 +181,35 @@ function LandingPage() {
         </section>
 
         {/* How it works */}
-        <section className="border-t border-white/10 py-16">
-          <h2 className="text-xs uppercase tracking-wider text-zinc-500">
-            How it works
-          </h2>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <section className="mx-auto max-w-xl pt-16 text-left">
+          <ol className="space-y-5">
             {STEPS.map((s) => (
-              <div
-                key={s.n}
-                className="rounded-xl border border-white/10 bg-white/[0.02] p-5"
-              >
-                <div className="grid h-7 w-7 place-items-center rounded-md border border-white/15 bg-white/5 font-mono text-sm text-emerald-400">
-                  {s.n}
+              <li key={s.n} className="flex items-start gap-4">
+                <span className="text-term">{s.n}</span>
+                <div>
+                  <h3 className="text-sm font-semibold">{s.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {s.body}
+                  </p>
                 </div>
-                <h3 className="mt-4 text-sm font-medium text-zinc-100">
-                  {s.title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-                  {s.body}
-                </p>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
         {/* Why */}
-        <section className="border-t border-white/10 py-16">
-          <h2 className="text-xs uppercase tracking-wider text-zinc-500">
+        <section className="pt-20">
+          <p className="text-center text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
             Why Shortwind Cloud
-          </h2>
+          </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
               <div
                 key={f.title}
-                className="rounded-xl border border-white/10 bg-white/[0.02] p-5"
+                className="rounded-lg border border-border bg-card p-5"
               >
-                <h3 className="text-sm font-medium text-zinc-100">{f.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                <h3 className="text-sm font-semibold">{f.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                   {f.body}
                 </p>
               </div>
@@ -198,63 +217,121 @@ function LandingPage() {
           </div>
         </section>
 
+        {/* Pricing */}
+        <section className="mx-auto max-w-3xl pt-20">
+          <p className="text-center text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+            Pricing
+          </p>
+          <h2 className="mt-2 text-center text-2xl font-bold tracking-tight">
+            Free to publish. <span className="text-term">$5</span> for your own
+            domain.
+          </h2>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-border bg-card p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Free</span>
+                <span className="text-sm text-muted-foreground">$0</span>
+              </div>
+              <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+                <li>▚ Unlimited publishes</li>
+                <li>
+                  ▚ <span className="tabular-nums">&lt;slug&gt;.shortwind.app</span> URLs
+                </li>
+                <li>▚ Public / unlisted / private</li>
+                <li>▚ Free serving — page views aren&rsquo;t billed</li>
+              </ul>
+            </div>
+            <div className="rounded-lg border border-term/40 bg-card p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Pro</span>
+                <span className="text-sm">
+                  <span className="text-term">$5</span>
+                  <span className="text-muted-foreground">/mo</span>
+                </span>
+              </div>
+              <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+                <li>
+                  <span className="text-term">▚</span> Everything in Free
+                </li>
+                <li>
+                  <span className="text-term">▚</span> Bring your own domain
+                </li>
+                <li>
+                  <span className="text-term">▚</span>{" "}
+                  <span className="tabular-nums">your-domain/&lt;slug&gt;</span>
+                </li>
+                <li>
+                  <span className="text-term">▚</span> Auto-issued TLS certificate
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
         {/* Closing CTA */}
-        <section className="border-t border-white/10 py-16">
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-8 text-center sm:p-12">
-            <h2 className="text-2xl font-semibold tracking-tight">
+        <section className="pt-20">
+          <div className="rounded-lg border border-border bg-gradient-to-b from-secondary/40 to-transparent p-8 text-center sm:p-12">
+            <h2 className="text-2xl font-bold tracking-tight">
               Give your agent a place to publish.
             </h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm text-zinc-400">
-              Create an operator account and start shipping durable pages from
-              find, publish, and update.
+            <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
+              Create an account and start shipping durable pages from{" "}
+              <span className="font-medium text-foreground">find</span>,{" "}
+              <span className="font-medium text-foreground">publish</span>, and{" "}
+              <span className="font-medium text-foreground">update</span>.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               {isAuthenticated ? (
                 <Link
                   to="/dashboard"
-                  className="rounded-lg bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
+                  className="rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                 >
-                  Open dashboard
+                  Open dashboard →
                 </Link>
               ) : (
-                <>
-                  <Link
-                    to="/signup"
-                    className="rounded-lg bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
-                  >
-                    Get started
-                  </Link>
-                  <Link
-                    to="/login"
-                    className="rounded-lg border border-white/15 px-5 py-2.5 text-sm font-medium text-zinc-200 hover:bg-white/5"
-                  >
-                    Sign in
-                  </Link>
-                </>
+                <Link
+                  to="/signup"
+                  className="rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  Create an account →
+                </Link>
               )}
             </div>
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6 text-xs text-zinc-500">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-emerald-400/70">▚</span>
-            <span>Shortwind Cloud</span>
+        {/* Footer — mirrors the site footer, links back to shortwind.dev. */}
+        <footer className="mt-20 flex flex-wrap items-center justify-between gap-4 border-t border-border py-8 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 font-bold">
+            <span className="text-term">▚</span>
+            <span>shortwind</span>
+            <span className="text-muted-foreground">Cloud</span>
           </div>
-          <div className="flex items-center gap-4">
-            <a
-              href="https://shortwind.dev"
-              className="hover:text-zinc-300"
-            >
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <a href="https://shortwind.dev" className="hover:text-foreground">
               shortwind.dev
             </a>
-            <Link to="/dashboard" className="hover:text-zinc-300">
-              Operator dashboard
+            <a href="https://shortwind.dev/docs" className="hover:text-foreground">
+              docs
+            </a>
+            <Link to="/dashboard" className="hover:text-foreground">
+              console
             </Link>
+            <span className="text-muted-foreground/60">© 2026</span>
           </div>
         </footer>
       </div>
+
+      <style>{`
+        .sw-hairline {
+          position: fixed;
+          inset: 0 0 auto 0;
+          height: 2px;
+          z-index: 50;
+          background: linear-gradient(90deg, transparent, oklch(0.6 0.2 277), oklch(0.65 0.22 320), transparent);
+          box-shadow: 0 0 18px oklch(0.6 0.2 277 / 60%);
+        }
+      `}</style>
     </div>
   );
 }
