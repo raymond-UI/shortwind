@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { routeTree } from "./routeTree.gen";
+import { RouteError, RouteNotFound } from "./components/RouteError";
 
 /**
  * Router factory (mirrors nyxe-mail/apps/web/src/router.tsx). Wires a Convex
@@ -38,6 +39,10 @@ export function getRouter() {
     // set it explicitly so the router is correct even outside that injection.
     basepath: "/cloud",
     scrollRestoration: true,
+    // Themed boundaries in place of TanStack's raw "Something went wrong!"
+    // default (which leaked Convex "Server Error" strings full-bleed).
+    defaultErrorComponent: RouteError,
+    defaultNotFoundComponent: RouteNotFound,
     context: {
       queryClient,
       convexQueryClient,

@@ -15,7 +15,12 @@ import { authClient } from "@/lib/auth-client";
  */
 export const Route = createFileRoute("/login")({
   beforeLoad: ({ context }) => {
-    if (context.isAuthenticated) throw redirect({ to: "/dashboard" });
+    // Redirect straight to the resolved section, not the bare `/dashboard`
+    // (which itself redirects to `/overview`) — routing through `/dashboard`
+    // added an extra history hop and made the URL bounce after login.
+    if (context.isAuthenticated) {
+      throw redirect({ to: "/dashboard/$section", params: { section: "overview" } });
+    }
   },
   component: LoginPage,
 });
@@ -41,7 +46,10 @@ function LoginPage() {
       return;
     }
     await router.invalidate();
-    await router.navigate({ to: "/dashboard" });
+    await router.navigate({
+      to: "/dashboard/$section",
+      params: { section: "overview" },
+    });
   }
 
   return (
