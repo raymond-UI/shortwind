@@ -72,6 +72,10 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
     api.domains.listAccountDomains,
     skip ? "skip" : args,
   );
+  const domainSetup = useQuery(
+    api.domains.domainSetupInfo,
+    skip ? "skip" : args,
+  );
   const tokens = useQuery(api.dashboard.listTokens, skip ? "skip" : args);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
   const setVisibilityMutation = useMutation(api.pages.setVisibility);
@@ -82,6 +86,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
   );
   const portalUrlAction = useAction(api.billingStripe.actions.portalUrl);
   const approveDomainAction = useAction(api.domains.approveAccountDomain);
+  const bindDomainAction = useAction(api.domains.bindAccountDomain);
+  const recheckDomainAction = useAction(api.domains.recheckAccountDomain);
 
   const value = useMemo<DashboardData>(
     () => ({
@@ -93,6 +99,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       usage,
       billing,
       accountDomains,
+      cnameTarget: domainSetup?.cnameTarget,
       tokens,
       setPolicy: async (next) => {
         await setPolicyMutation(next);
@@ -114,6 +121,13 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       openPortal: async () => {
         return await portalUrlAction({});
       },
+      bindDomain: async (hostname) => {
+        // Bearer omitted → operator-session path (the account owner binds).
+        return await bindDomainAction({ hostname });
+      },
+      recheckDomain: async (hostname) => {
+        return await recheckDomainAction({ hostname });
+      },
       approveDomain: async (hostname) => {
         // Bearer omitted → operator-session path (requireReadOperator).
         await approveDomainAction({ hostname });
@@ -128,6 +142,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       usage,
       billing,
       accountDomains,
+      domainSetup,
       tokens,
       setPolicyMutation,
       setVisibilityMutation,
@@ -136,6 +151,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       createCheckoutAction,
       portalUrlAction,
       approveDomainAction,
+      bindDomainAction,
+      recheckDomainAction,
     ],
   );
 

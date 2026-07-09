@@ -127,6 +127,14 @@ export interface AccountDomainRow {
   createdAt: number;
 }
 
+/** The bind-state result of `bindAccountDomain` / `approveAccountDomain`. */
+export interface DomainBindResult {
+  state: DomainStatus;
+  hostname: string;
+  cloudflareHostnameId: string | null;
+  reason?: string;
+}
+
 /**
  * The account's billing summary. Mirrors the `summary` query returns in
  * `convex/billingStripe/queries.ts`. `currentPeriodEnd` is Stripe's unix-seconds
@@ -156,6 +164,8 @@ export interface DashboardData {
   billing: BillingSummary | undefined;
   /** The account's custom domains (account-level). `undefined` = loading. */
   accountDomains: AccountDomainRow[] | undefined;
+  /** The CNAME target customers point their subdomain at. `undefined` = loading. */
+  cnameTarget: string | undefined;
   /** The operator's own API tokens (epic #184). `undefined` = loading. */
   tokens: TokenRow[] | undefined;
   /** Persist a policy toggle. Resolves to the new policy. */
@@ -170,6 +180,10 @@ export interface DashboardData {
   startCheckout: (plan: "pro") => Promise<{ url: string }>;
   /** Open the Stripe customer portal; resolves to the hosted URL. */
   openPortal: () => Promise<{ url: string }>;
+  /** Bind an account custom domain from the UI (operator session). */
+  bindDomain: (hostname: string) => Promise<DomainBindResult>;
+  /** Re-poll a pending domain's Cloudflare cert and refresh its status. */
+  recheckDomain: (hostname: string) => Promise<DomainBindResult>;
   /** Approve a `pending-human` account domain (operator gate). */
   approveDomain: (hostname: string) => Promise<void>;
 }

@@ -12,6 +12,7 @@ import { requireDomainsBind } from "./lib/auth_guard.js";
 import { requireReadOperator } from "./lib/operator_auth.js";
 import { resolvePlan } from "./lib/plan_resolver.js";
 import { withinCustomDomainQuota } from "./lib/billing_limits.js";
+import { makeCloudflareSaaSClient } from "./lib/cloudflare_saas.js";
 
 /**
  * Custom-domain bind — Cloudflare for SaaS, human-gated (CLOUD-40, PRD §6.1/§7.2/§9).
@@ -42,11 +43,11 @@ import { withinCustomDomainQuota } from "./lib/billing_limits.js";
  *      (no schema change — same durable-store convention as `dashboard.ts`).
  *
  * The Cloudflare for SaaS API is reached through an INJECTABLE
- * {@link CloudflareSaaSClient} so the action is exercisable offline: tests inject
- * a mock; the REAL HTTP client is wired at deploy (CLOUD-30b/41) via
- * {@link __setCloudflareSaaSClient}. The default client throws `NOT_CONFIGURED`
- * (closed-by-default) so an un-provisioned deployment cannot silently no-op a
- * bind.
+ * {@link CloudflareSaaSClient}. The production default is the REAL HTTP client
+ * (`lib/cloudflare_saas.ts`), which reads `CLOUDFLARE_API_TOKEN` /
+ * `CLOUDFLARE_ZONE_ID` at call time and throws `NOT_CONFIGURED` when unset (so an
+ * un-provisioned deployment still can't silently no-op a bind). Tests inject a
+ * mock via {@link __setCloudflareSaaSClient}.
  *
  * The state machine (plain data, returned to the caller):
  *
@@ -115,24 +116,13 @@ export interface CloudflareSaaSClient {
 }
 
 /**
- * The default (un-provisioned) client: every call throws `NOT_CONFIGURED`.
- * Closed-by-default so a deployment without the CF wiring cannot quietly drop a
- * bind on the floor. CLOUD-30b/41 replaces this with the live HTTP client.
+ * Production default: the REAL Cloudflare-for-SaaS HTTP client
+ * (`lib/cloudflare_saas.ts`). It reads `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID`
+ * at CALL time and throws `NOT_CONFIGURED` when they're absent, so an
+ * un-provisioned deployment still can't silently drop a bind. Tests inject a
+ * mock via `__setCloudflareSaaSClient` (below) before any call.
  */
-const defaultClient: CloudflareSaaSClient = {
-  createCustomHostname: async () => {
-    throw new ConvexError({
-      code: "NOT_CONFIGURED",
-      message: "Cloudflare for SaaS client is not configured",
-    });
-  },
-  getCustomHostname: async () => {
-    throw new ConvexError({
-      code: "NOT_CONFIGURED",
-      message: "Cloudflare for SaaS client is not configured",
-    });
-  },
-};
+const defaultClient: CloudflareSaaSClient = makeCloudflareSaaSClient();
 
 let cfClient: CloudflareSaaSClient = defaultClient;
 
@@ -141,7 +131,7 @@ export function __setCloudflareSaaSClient(client: CloudflareSaaSClient): void {
   cfClient = client;
 }
 
-/** Restore the closed-by-default (un-provisioned) client. */
+/** Restore the production (real HTTP) client. */
 export function __resetCloudflareSaaSClient(): void {
   cfClient = defaultClient;
 }
@@ -357,15 +347,25 @@ const accountBindResultValidator = v.object({
  * CONFLICT.
  */
 export const authAndContextForAccountBind = internalQuery({
-  args: { bearer: v.string(), hostname: v.string() },
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
   returns: v.object({
     accountId: v.id("accounts"),
-    tokenId: v.id("tokens"),
+    tokenId: v.union(v.id("tokens"), v.null()),
     needsApproval: v.boolean(),
     alreadyActive: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const auth = await requireDomainsBind(ctx, args.bearer);
+    // Two callers, two auth paths:
+    //   - AGENT/CLI (bearer present): `domains:bind` scope is required (the
+    //     privileged, human-gated grant) AND the account's approval policy
+    //     applies — the agent bind may park in `pending-human`.
+    //   - DASHBOARD (no bearer → operator SESSION): the account OWNER is binding
+    //     their OWN domain from the UI. They are the human the approval gate
+    //     defers to, so the bind is auto-approved (no `pending-human` bounce).
+    const isSession = !(args.bearer && args.bearer.trim());
+    const auth = isSession
+      ? await requireReadOperator(ctx, undefined)
+      : await requireDomainsBind(ctx, args.bearer as string);
 
     const existing = await ctx.db
       .query("accountDomains")
@@ -396,7 +396,10 @@ export const authAndContextForAccountBind = internalQuery({
       }
     }
 
-    const needsApproval = await readNeedsApproval(ctx, auth.accountId);
+    // Session (human owner) is self-approved; agent binds honor the policy.
+    const needsApproval = isSession
+      ? false
+      : await readNeedsApproval(ctx, auth.accountId);
     return {
       accountId: auth.accountId,
       tokenId: auth.tokenId,
@@ -537,13 +540,16 @@ async function provisionAccountDomain(
 }
 
 /**
- * bindAccountDomain (POST /v1/domains): bind a subdomain you own to the ACCOUNT.
- * Same gates as the per-page bind — `domains:bind` scope, plan entitlement,
- * `customDomainNeedsApproval` policy — but no `pageId`, and the hostname must be
- * a subdomain. Every page then serves at `<hostname>/<slug>`.
+ * bindAccountDomain: bind a subdomain you own to the ACCOUNT. Two callers:
+ *   - POST /v1/domains (agent/CLI): `bearer` with `domains:bind` scope; the
+ *     account approval policy applies.
+ *   - dashboard (operator SESSION): `bearer` omitted; the account owner binds
+ *     from the UI and is auto-approved.
+ * Plan entitlement (paid) is enforced for both. The hostname must be a subdomain;
+ * every page then serves at `<hostname>/<slug>`.
  */
 export const bindAccountDomain = action({
-  args: { bearer: v.string(), hostname: v.string() },
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
   returns: accountBindResultValidator,
   handler: async (ctx, args): Promise<AccountDomainBindResult> => {
     const check = isBindableSubdomain(args.hostname);
@@ -693,5 +699,97 @@ export const approveAccountDomain = action({
       tokenId: auth.tokenId,
       hostname,
     });
+  },
+});
+
+/** Auth + the domain's CF hostname id, for a status re-check. */
+export const authAndDomainForRecheck = internalQuery({
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
+  returns: v.object({
+    accountId: v.id("accounts"),
+    tokenId: v.union(v.id("tokens"), v.null()),
+    cloudflareHostnameId: v.union(v.string(), v.null()),
+    status: accountDomainStatus,
+  }),
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const domain = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_hostname", (q) => q.eq("hostname", args.hostname))
+      .first();
+    if (!domain || domain.accountId !== auth.accountId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Domain not found" });
+    }
+    return {
+      accountId: auth.accountId,
+      tokenId: auth.tokenId,
+      cloudflareHostnameId: domain.cloudflareHostnameId,
+      status: domain.status,
+    };
+  },
+});
+
+/**
+ * recheckAccountDomain: re-poll a pending domain's Cloudflare cert and update
+ * its status (the "Check status" action after the customer adds their CNAME).
+ * Cloudflare state-change webhooks are enterprise-only, so activation is
+ * poll-driven (PRD §9). Operator session or read bearer.
+ */
+export const recheckAccountDomain = action({
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
+  returns: accountBindResultValidator,
+  handler: async (ctx, args): Promise<AccountDomainBindResult> => {
+    const check = isBindableSubdomain(args.hostname);
+    if (!check.ok) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: check.reason });
+    }
+    const hostname = check.hostname;
+    const info = await ctx.runQuery(internal.domains.authAndDomainForRecheck, {
+      bearer: args.bearer,
+      hostname,
+    });
+    // No Cloudflare hostname yet (e.g. still pending-human) → nothing to poll.
+    if (!info.cloudflareHostnameId) {
+      return { state: info.status, hostname, cloudflareHostnameId: null };
+    }
+    const record = await cfClient.getCustomHostname(info.cloudflareHostnameId);
+    const verdict = classifyCertStatus(record.certStatus);
+    const state: DomainBindState =
+      verdict === "active"
+        ? "active"
+        : verdict === "failed"
+          ? "failed"
+          : "pending-cert";
+    const reason = verdict === "failed" ? "cloudflare cert issuance failed" : null;
+    await ctx.runMutation(internal.domains.upsertAccountDomainStatus, {
+      accountId: info.accountId,
+      tokenId: info.tokenId,
+      hostname,
+      status: state,
+      cloudflareHostnameId: record.id,
+      reason,
+    });
+    return {
+      state,
+      hostname,
+      cloudflareHostnameId: record.id,
+      ...(reason ? { reason } : {}),
+    };
+  },
+});
+
+/**
+ * domainSetupInfo: the DNS record a customer must add to point their subdomain
+ * at Shortwind — the CNAME target (our Cloudflare-for-SaaS fallback origin).
+ * Env-driven so it tracks the real fallback origin; the dashboard renders it.
+ */
+export const domainSetupInfo = query({
+  args: { bearer: v.optional(v.string()) },
+  returns: v.object({ cnameTarget: v.string() }),
+  handler: async (ctx, args) => {
+    await requireReadOperator(ctx, args.bearer);
+    return {
+      cnameTarget: process.env.CUSTOM_DOMAIN_CNAME_TARGET ?? "cname.shortwind.app",
+    };
   },
 });

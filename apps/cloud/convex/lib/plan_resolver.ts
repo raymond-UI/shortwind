@@ -25,7 +25,22 @@ export interface PlanResolver {
 }
 
 const defaultResolver: PlanResolver = {
-  resolve: async () => FREE_PLAN,
+  // Production default: resolve the account's REAL plan via the Stripe-backed
+  // resolver. Loaded LAZILY (dynamic import) so `lib/` carries no static
+  // billing-component dependency — offline tests inject a resolver via
+  // `__setPlanResolver` and never reach this branch, so `billingStripe` (and
+  // `components.stripe`) never load under convex-test. An account with no active
+  // subscription resolves to `free`.
+  resolve: async (ctx, accountId) => {
+    try {
+      const { makeStripePlanResolver } = await import("../billingStripe/plan.js");
+      return await makeStripePlanResolver().resolve(ctx, accountId);
+    } catch {
+      // If billing is unreachable/unconfigured, fail CLOSED (treat as free →
+      // custom-domain bind is blocked) rather than granting entitlement.
+      return FREE_PLAN;
+    }
+  },
 };
 
 let resolver: PlanResolver = defaultResolver;
