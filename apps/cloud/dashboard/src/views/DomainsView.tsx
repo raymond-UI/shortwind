@@ -14,6 +14,26 @@ import type { AccountDomainRow, DomainStatus } from "../lib/types";
  * `domains:bind` scope + approval policy.
  */
 
+/**
+ * Extract a human message + code from a thrown error. A Convex function that
+ * throws `ConvexError({ code, message })` surfaces that payload on `error.data`
+ * (NOT `error.message`, which is the generic "[Request ID …] Server Error"
+ * wrapper). Fall back to a clean generic line.
+ */
+function readError(e: unknown): { message: string; code?: string } {
+  const data = (e as { data?: unknown } | null | undefined)?.data;
+  if (data && typeof data === "object") {
+    const d = data as { code?: unknown; message?: unknown };
+    if (typeof d.message === "string" && d.message.length > 0) {
+      return {
+        message: d.message,
+        code: typeof d.code === "string" ? d.code : undefined,
+      };
+    }
+  }
+  return { message: "Something went wrong. Please try again." };
+}
+
 const STATUS_LABEL: Record<DomainStatus, string> = {
   "pending-human": "Awaiting approval",
   queued: "Queued (Cloudflare rate limit)",
@@ -58,7 +78,9 @@ export function DomainsView() {
 
   const [hostname, setHostname] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; code?: string } | null>(
+    null,
+  );
 
   if (accountDomains === undefined) {
     return <div className="@muted">Loading domains…</div>;
@@ -70,11 +92,7 @@ export function DomainsView() {
     try {
       await fn();
     } catch (e) {
-      setError(
-        e instanceof Error && e.message
-          ? e.message.replace(/^\[.*?\]\s*/, "")
-          : "Something went wrong. Please try again.",
-      );
+      setError(readError(e));
     } finally {
       setBusy(null);
     }
@@ -171,9 +189,19 @@ export function DomainsView() {
       ))}
 
       {error ? (
-        <p className="@caption text-destructive" data-testid="domain-error">
-          {error}
-        </p>
+        <div
+          className="rounded-md border border-destructive/40 bg-destructive/10 p-3"
+          data-testid="domain-error"
+          role="alert"
+        >
+          <p className="text-sm text-destructive">{error.message}</p>
+          {error.code === "NOT_ENTITLED" ? (
+            <p className="@caption mt-1">
+              Open the <span className="font-medium">Billing</span> tab to
+              upgrade to Pro, then bind your domain.
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
