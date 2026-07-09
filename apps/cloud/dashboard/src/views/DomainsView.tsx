@@ -8,17 +8,15 @@ import type { AccountDomainRow, DomainStatus } from "../lib/types";
  * `<hostname>/<slug>` (plus its `<slug>.shortwind.app` vanity URL).
  *
  * Flow: enter a subdomain you own → we create the Cloudflare-for-SaaS custom
- * hostname (HTTP DV) → you add ONE CNAME to your DNS → click "Check status"
- * until the cert goes active. Binding here uses the operator SESSION (the
- * account owner), so it's auto-approved; agent/CLI binds still honor the
- * `domains:bind` scope + approval policy.
+ * hostname → you add ONE CNAME → click "Check status" until the cert is active.
+ * Binding here uses the operator SESSION (auto-approved); agent/CLI binds honor
+ * the `domains:bind` scope + approval policy.
  */
 
 /**
  * Extract a human message + code from a thrown error. A Convex function that
- * throws `ConvexError({ code, message })` surfaces that payload on `error.data`
- * (NOT `error.message`, which is the generic "[Request ID …] Server Error"
- * wrapper). Fall back to a clean generic line.
+ * throws `ConvexError({ code, message })` surfaces the payload on `error.data`
+ * (NOT `error.message`, the "[Request ID …] Server Error" wrapper).
  */
 function readError(e: unknown): { message: string; code?: string } {
   const data = (e as { data?: unknown } | null | undefined)?.data;
@@ -34,13 +32,84 @@ function readError(e: unknown): { message: string; code?: string } {
   return { message: "Something went wrong. Please try again." };
 }
 
-const STATUS_LABEL: Record<DomainStatus, string> = {
-  "pending-human": "Awaiting approval",
-  queued: "Queued (Cloudflare rate limit)",
-  "pending-cert": "Verifying — add the CNAME below, then Check status",
-  active: "Active",
-  failed: "Verification failed — check the CNAME, then Check status",
+/** Per-status presentation: label + colored dot + badge classes. */
+const STATUS_STYLE: Record<
+  DomainStatus,
+  { label: string; dot: string; badge: string; hint: string }
+> = {
+  active: {
+    label: "Active",
+    dot: "bg-emerald-500",
+    badge: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
+    hint: "Live — your pages serve on this domain.",
+  },
+  "pending-cert": {
+    label: "Verifying",
+    dot: "bg-amber-500 animate-pulse",
+    badge: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+    hint: "Add the CNAME below, then Check status.",
+  },
+  queued: {
+    label: "Queued",
+    dot: "bg-amber-500 animate-pulse",
+    badge: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+    hint: "Waiting on Cloudflare — retry shortly.",
+  },
+  "pending-human": {
+    label: "Needs approval",
+    dot: "bg-sky-500",
+    badge: "border-sky-500/40 bg-sky-500/10 text-sky-400",
+    hint: "Approve to provision the certificate.",
+  },
+  failed: {
+    label: "Failed",
+    dot: "bg-red-500",
+    badge: "border-red-500/40 bg-red-500/10 text-red-400",
+    hint: "Check the CNAME record, then Check status.",
+  },
 };
+
+function StatusBadge({ status }: { status: DomainStatus }) {
+  const s = STATUS_STYLE[status];
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${s.badge}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />
+      {s.label}
+    </span>
+  );
+}
+
+/** A mono value with a one-click copy affordance. */
+function CopyValue({ value, testId }: { value: string; testId?: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* clipboard blocked — no-op */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      data-testid={testId}
+      title="Copy"
+      className="group inline-flex max-w-full items-center gap-2 rounded px-1.5 py-0.5 font-mono text-sm hover:bg-secondary"
+    >
+      <span className="truncate">{value}</span>
+      <span
+        className={`shrink-0 text-[11px] ${copied ? "text-emerald-400" : "text-muted-foreground opacity-0 group-hover:opacity-100"}`}
+      >
+        {copied ? "Copied ✓" : "Copy"}
+      </span>
+    </button>
+  );
+}
 
 /** DNS record the customer must add. CF for SaaS uses HTTP DV → one CNAME. */
 function DnsInstructions({
@@ -50,19 +119,36 @@ function DnsInstructions({
   hostname: string;
   cnameTarget: string | undefined;
 }) {
+  const rows: Array<{ label: string; value: string; copy: boolean }> = [
+    { label: "Type", value: "CNAME", copy: false },
+    { label: "Name", value: hostname, copy: true },
+    { label: "Target", value: cnameTarget ?? "…", copy: Boolean(cnameTarget) },
+  ];
   return (
-    <div className="mt-2 rounded-md border border-border bg-background p-3">
+    <div className="rounded-md border border-border bg-background/60 p-3">
       <div className="@caption mb-2">
-        Add this record at your DNS provider (for {hostname}):
+        Add this record at your DNS provider:
       </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm tabular-nums">
-        <dt className="@caption">Type</dt>
-        <dd>CNAME</dd>
-        <dt className="@caption">Name</dt>
-        <dd className="break-all">{hostname}</dd>
-        <dt className="@caption">Target</dt>
-        <dd className="break-all">{cnameTarget ?? "…"}</dd>
-      </dl>
+      <div className="divide-y divide-border/60 rounded-md border border-border/60">
+        {rows.map((r) => (
+          <div
+            key={r.label}
+            className="flex items-center gap-3 px-3 py-2 text-sm"
+          >
+            <span className="w-16 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
+              {r.label}
+            </span>
+            {r.copy ? (
+              <CopyValue
+                value={r.value}
+                testId={`domain-copy-${r.label.toLowerCase()}`}
+              />
+            ) : (
+              <span className="font-mono">{r.value}</span>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -103,17 +189,20 @@ export function DomainsView() {
   const canBind = accountDomains.length === 0;
 
   return (
-    <div className="space-y-4" data-testid="domains-view">
-      <p className="@caption">
-        A custom domain is account-wide — every page also serves at{" "}
-        <span className="tabular-nums">your-domain/&lt;slug&gt;</span>. Bind a
-        subdomain you own (e.g. <span className="tabular-nums">pages.example.com</span>),
-        not a bare apex.
-      </p>
+    <div className="space-y-5" data-testid="domains-view">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Custom domain</h2>
+        <p className="@caption">
+          Account-wide — every page also serves at{" "}
+          <span className="font-mono">your-domain/&lt;slug&gt;</span>. Bind a
+          subdomain you own (e.g.{" "}
+          <span className="font-mono">pages.example.com</span>), not a bare apex.
+        </p>
+      </div>
 
       {canBind ? (
         <form
-          className="@card flex flex-col gap-2 sm:flex-row sm:items-center"
+          className="@card space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
             const h = hostname.trim();
@@ -121,72 +210,91 @@ export function DomainsView() {
           }}
           data-testid="domain-bind-form"
         >
-          <input
-            type="text"
-            value={hostname}
-            onChange={(e) => setHostname(e.target.value)}
-            placeholder="pages.example.com"
-            aria-label="Custom domain (a subdomain you own)"
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
-            data-testid="domain-input"
-          />
-          <button
-            type="submit"
-            className="@btn-outline shrink-0"
-            disabled={busy !== null || hostname.trim().length === 0}
-            data-testid="domain-connect"
-          >
-            {busy === "bind" ? "Connecting…" : "Connect"}
-          </button>
+          <label className="@caption block" htmlFor="domain-input">
+            Subdomain you own
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              id="domain-input"
+              type="text"
+              value={hostname}
+              onChange={(e) => setHostname(e.target.value)}
+              placeholder="pages.example.com"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:border-ring focus:outline-none"
+              data-testid="domain-input"
+            />
+            <button
+              type="submit"
+              className="@btn-outline shrink-0"
+              disabled={busy !== null || hostname.trim().length === 0}
+              data-testid="domain-connect"
+            >
+              {busy === "bind" ? "Connecting…" : "Connect"}
+            </button>
+          </div>
         </form>
       ) : null}
 
-      {accountDomains.map((d: AccountDomainRow) => (
-        <div
-          key={d.id}
-          data-testid={`domain-${d.hostname}`}
-          className="@card space-y-2"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col">
-              <span className="font-medium">{d.hostname}</span>
-              <span className="@caption">{STATUS_LABEL[d.status]}</span>
+      {accountDomains.map((d: AccountDomainRow) => {
+        const s = STATUS_STYLE[d.status];
+        return (
+          <div
+            key={d.id}
+            data-testid={`domain-${d.hostname}`}
+            className="@card space-y-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-0.5">
+                <div className="truncate font-mono text-sm font-semibold">
+                  {d.hostname}
+                </div>
+                <div className="@caption">{s.hint}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {d.status === "active" ? (
+                  <StatusBadge status={d.status} />
+                ) : (
+                  <>
+                    <StatusBadge status={d.status} />
+                    {d.status === "pending-human" ? (
+                      <button
+                        type="button"
+                        className="@btn-outline"
+                        disabled={busy !== null}
+                        onClick={() =>
+                          void run("approve", () => approveDomain(d.hostname))
+                        }
+                        data-testid={`domain-approve-${d.hostname}`}
+                      >
+                        {busy === "approve" ? "Approving…" : "Approve"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="@btn-outline"
+                        disabled={busy !== null}
+                        onClick={() =>
+                          void run("recheck", () => recheckDomain(d.hostname))
+                        }
+                        data-testid={`domain-recheck-${d.hostname}`}
+                      >
+                        {busy === "recheck" ? "Checking…" : "Check status"}
+                      </button>
+                    )}
+                  </>
+                )}
+                {d.status === "active" ? (
+                  <span data-testid={`domain-active-${d.hostname}`} hidden />
+                ) : null}
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {d.status === "pending-human" ? (
-                <button
-                  type="button"
-                  className="@btn-outline"
-                  disabled={busy !== null}
-                  onClick={() => void run("approve", () => approveDomain(d.hostname))}
-                  data-testid={`domain-approve-${d.hostname}`}
-                >
-                  {busy === "approve" ? "Approving…" : "Approve"}
-                </button>
-              ) : null}
-              {d.status === "active" ? (
-                <span className="@badge text-term" data-testid={`domain-active-${d.hostname}`}>
-                  active
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="@btn-outline"
-                  disabled={busy !== null}
-                  onClick={() => void run("recheck", () => recheckDomain(d.hostname))}
-                  data-testid={`domain-recheck-${d.hostname}`}
-                >
-                  {busy === "recheck" ? "Checking…" : "Check status"}
-                </button>
-              )}
-            </div>
-          </div>
 
-          {d.status !== "active" ? (
-            <DnsInstructions hostname={d.hostname} cnameTarget={cnameTarget} />
-          ) : null}
-        </div>
-      ))}
+            {d.status !== "active" ? (
+              <DnsInstructions hostname={d.hostname} cnameTarget={cnameTarget} />
+            ) : null}
+          </div>
+        );
+      })}
 
       {error ? (
         <div
