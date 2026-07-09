@@ -110,7 +110,8 @@ function LandingPage() {
             </a>
             {isAuthenticated ? (
               <Link
-                to="/dashboard"
+                to="/dashboard/$section"
+                params={{ section: "overview" }}
                 className="rounded-md border border-border px-3 py-1.5 text-foreground transition-colors hover:bg-secondary"
               >
                 Open dashboard
@@ -156,7 +157,8 @@ function LandingPage() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             {isAuthenticated ? (
               <Link
-                to="/dashboard"
+                to="/dashboard/$section"
+                params={{ section: "overview" }}
                 className="sw-btn-primary rounded-md px-5 py-2.5 text-sm font-semibold"
               >
                 Open dashboard →
@@ -283,7 +285,8 @@ function LandingPage() {
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               {isAuthenticated ? (
                 <Link
-                  to="/dashboard"
+                  to="/dashboard/$section"
+                  params={{ section: "overview" }}
                   className="sw-btn-primary rounded-md px-5 py-2.5 text-sm font-semibold"
                 >
                   Open dashboard →
@@ -314,7 +317,11 @@ function LandingPage() {
             <a href="https://shortwind.dev/docs" className="hover:text-foreground">
               docs
             </a>
-            <Link to="/dashboard" className="hover:text-foreground">
+            <Link
+              to="/dashboard/$section"
+              params={{ section: "overview" }}
+              className="hover:text-foreground"
+            >
               console
             </Link>
             <span className="text-muted-foreground/60">© 2026</span>

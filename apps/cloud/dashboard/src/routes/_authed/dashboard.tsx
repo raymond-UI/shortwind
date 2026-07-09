@@ -48,8 +48,12 @@ function DashboardLayout() {
 
   async function onSignOut() {
     await authClient.signOut();
-    await router.invalidate();
-    await router.navigate({ to: "/login" });
+    // Hard navigation (not router.navigate + invalidate): invalidating in place
+    // re-renders this still-mounted authed tree with a now-dead session, so its
+    // Convex queries throw "Server Error" and flash the error boundary before
+    // the redirect lands. A full reload tears the tree down cleanly; the fresh
+    // load reads no session and renders /login. `/cloud` is the router basepath.
+    window.location.href = "/cloud/login";
   }
 
   return (
