@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
 import { ConvexDataProvider } from "@/convex/provider";
-import { App } from "@/App";
+import { App, isSectionId } from "@/App";
 
 /**
  * The oversight dashboard (CLOUD-35 + CLOUD-43), behind the `_authed` gate.
@@ -23,9 +23,18 @@ function DashboardPage() {
     await router.navigate({ to: "/login" });
   }
 
+  // Deep-link a section via `?section=` (e.g. Stripe checkout returns to
+  // `…/cloud/dashboard?section=billing&checkout=success`). Unknown/absent →
+  // the default Overview. Read from the URL so a redirect lands on the view.
+  const param =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("section")
+      : null;
+  const initialSection = isSectionId(param) ? param : "overview";
+
   return (
     <ConvexDataProvider>
-      <App onSignOut={onSignOut} />
+      <App initialSection={initialSection} onSignOut={onSignOut} />
     </ConvexDataProvider>
   );
 }

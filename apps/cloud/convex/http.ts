@@ -434,6 +434,51 @@ const bindAccountDomainHandler = httpAction(async (ctx, request) => {
   }
 });
 
+/**
+ * GET /v1/domains → list the account's custom domains (hostname + bind status).
+ * The read side of CLI ↔ web parity (mirrors dashboard `listAccountDomains`).
+ */
+const listAccountDomainsHandler = httpAction(async (ctx, request) => {
+  const bearer = bearerFromRequest(request);
+  try {
+    const domains = await ctx.runQuery(api.domains.listAccountDomains, {
+      bearer,
+    });
+    return json({ domains }, 200);
+  } catch (err) {
+    return errorResponse(err);
+  }
+});
+
+/**
+ * POST /v1/domains/approve → approve a `pending-human` account domain and
+ * provision it (the operator/human gate, PRD §7.2). Body: `{ hostname }`.
+ */
+const approveAccountDomainHandler = httpAction(async (ctx, request) => {
+  const bearer = bearerFromRequest(request);
+  const body = await readJsonBody(request);
+  const hostname = body["hostname"];
+  if (typeof hostname !== "string" || !hostname.trim()) {
+    return json(
+      { error: { code: "BAD_REQUEST", message: "`hostname` is required" } },
+      400,
+    );
+  }
+  try {
+    const result = await ctx.runAction(api.domains.approveAccountDomain, {
+      bearer,
+      hostname,
+    });
+    return json(result, 200);
+  } catch (err) {
+    if (err instanceof ConvexError) {
+      const data = err.data as { code?: string } | undefined;
+      if (data?.code === "NOT_FOUND") return json({ error: data }, 404);
+    }
+    return errorResponse(err);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // CLOUD-42 — standards-based discovery (PRD §7.3). PUBLIC, no auth. Two
 // `/.well-known/...` documents let a modern agent self-discover HOW to
@@ -662,6 +707,12 @@ http.route({ path: "/v1/abuse", method: "POST", handler: abuseHandler });
 
 // Account-level custom-domain bind (a subdomain you own). No `pageId`.
 http.route({ path: "/v1/domains", method: "POST", handler: bindAccountDomainHandler });
+http.route({ path: "/v1/domains", method: "GET", handler: listAccountDomainsHandler });
+http.route({
+  path: "/v1/domains/approve",
+  method: "POST",
+  handler: approveAccountDomainHandler,
+});
 
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });
 http.route({ path: "/v1/pages", method: "POST", handler: publishHandler });

@@ -42,19 +42,26 @@ export const authManage = internalQuery({
  * Absolute base URL the checkout/portal redirects return to — the DASHBOARD
  * origin (where `/dashboard/billing` lives), NOT `SITE_URL` (which is the Convex
  * backend `*.convex.site`). `DASHBOARD_URL` is a comma-separated allow-list of
- * origins (CORS); the FIRST entry is the canonical dashboard URL we redirect to.
+ * origins (CORS); the FIRST entry is the canonical dashboard ORIGIN.
+ *
+ * The dashboard (TanStack Start) is served under the `/cloud` BASEPATH, and the
+ * billing surface is the Billing SECTION of the single `/cloud/dashboard` shell
+ * (there is no `/dashboard/billing` route). So checkout/portal return to
+ * `<origin>/cloud/dashboard` — a bare `/dashboard/billing` 404s.
  */
-function dashboardBaseUrl(): string {
+const DASHBOARD_BILLING_PATH = "/cloud/dashboard";
+
+function dashboardBillingUrl(query = ""): string {
   const raw = process.env.DASHBOARD_URL;
-  const first = (raw ?? "").split(",")[0].trim().replace(/\/+$/, "");
-  if (!first) {
+  const origin = (raw ?? "").split(",")[0].trim().replace(/\/+$/, "");
+  if (!origin) {
     throw new ConvexError({
       code: "BILLING_DASHBOARD_URL_NOT_CONFIGURED",
       message:
         "DASHBOARD_URL is not set. `npx convex env set DASHBOARD_URL https://…`.",
     });
   }
-  return first;
+  return `${origin}${DASHBOARD_BILLING_PATH}${query}`;
 }
 
 /**
@@ -106,13 +113,12 @@ export const createCheckoutSession = action({
       userId: customerKey(scope),
     });
 
-    const base = dashboardBaseUrl();
     const session = await stripeClient.createCheckoutSession(ctx, {
       priceId,
       customerId: customer.customerId,
       mode: "subscription",
-      successUrl: `${base}/dashboard/billing?checkout=success`,
-      cancelUrl: `${base}/dashboard/billing?checkout=canceled`,
+      successUrl: dashboardBillingUrl("?section=billing&checkout=success"),
+      cancelUrl: dashboardBillingUrl("?section=billing&checkout=canceled"),
       // Lands on the subscription row's indexed `orgId` column (our account id).
       subscriptionMetadata: { orgId: scope.accountId },
       metadata: {
@@ -154,7 +160,7 @@ export const portalUrl = action({
 
     const session = await stripeClient.createCustomerPortalSession(ctx, {
       customerId,
-      returnUrl: `${dashboardBaseUrl()}/dashboard/billing`,
+      returnUrl: dashboardBillingUrl("?section=billing"),
     });
     return { url: session.url };
   },

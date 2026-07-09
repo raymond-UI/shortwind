@@ -36,7 +36,12 @@ const SECTIONS = [
   { id: "settings", label: "Settings", render: () => <SettingsView /> },
 ] as const;
 
-type SectionId = (typeof SECTIONS)[number]["id"];
+export type SectionId = (typeof SECTIONS)[number]["id"];
+
+/** Narrow an arbitrary string (e.g. a `?section=` param) to a known section id. */
+export function isSectionId(value: string | null | undefined): value is SectionId {
+  return SECTIONS.some((s) => s.id === value);
+}
 
 /** Overview: the page-card grid, drilling into a single page's detail. */
 function OverviewSection() {

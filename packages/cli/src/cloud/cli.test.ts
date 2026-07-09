@@ -68,11 +68,10 @@ describe("argument parsing", () => {
     expect(r.parsed.file).toBe("./page.html");
   });
 
-  it("find parses query, domain, and repeatable tags", () => {
-    const r = parse(["find", "--q", "status", "--domain", "acme.com", "--tag", "ops"]);
+  it("find parses query and repeatable tags", () => {
+    const r = parse(["find", "--q", "status", "--tag", "ops"]);
     expect(r.verb).toBe("find");
     expect(r.parsed.q).toBe("status");
-    expect(r.parsed.domain).toBe("acme.com");
     expect(r.parsed.tags).toEqual(["ops"]);
   });
 
@@ -99,10 +98,9 @@ describe("argument parsing", () => {
     expect(bad.parsed.validLevel).toBe(false);
   });
 
-  it("bind-domain parses id and hostname", () => {
-    const r = parse(["bind-domain", "pg_abc", "status.acme.com"]);
+  it("bind-domain parses the account hostname", () => {
+    const r = parse(["bind-domain", "status.acme.com"]);
     expect(r.verb).toBe("bind-domain");
-    expect(r.parsed.id).toBe("pg_abc");
     expect(r.parsed.hostname).toBe("status.acme.com");
   });
 
@@ -116,7 +114,7 @@ describe("argument parsing", () => {
       get: ["get", "pg_1"],
       delete: ["delete", "pg_1"],
       visibility: ["visibility", "pg_1", "public"],
-      "bind-domain": ["bind-domain", "pg_1", "h.example.com"],
+      "bind-domain": ["bind-domain", "h.example.com"],
     };
     for (const argv of Object.values(samples)) {
       const r = parse(argv);

@@ -2,9 +2,10 @@ import { toArray, type StubResult } from "./stub.js";
 import type { ApiClient, FindQuery, PageSummary } from "../api-client.js";
 
 /**
- * `find` — GET /v1/pages?q=&domain=&tag= : the load-bearing verb that lets a
- * stateless agent locate an existing page before acting, preventing duplicate
- * publishes (PRD §4). `--tag` is repeatable.
+ * `find` — GET /v1/pages?q=&tag= : the load-bearing verb that lets a stateless
+ * agent locate an existing page before acting, preventing duplicate publishes
+ * (PRD §4). `--tag` is repeatable. (The per-page `--domain` filter was removed
+ * with the per-page custom-domain model; domains are account-level now.)
  *
  * The pure {@link find} parse function below is retained for the CLI skeleton's
  * parse-only assertions (CLOUD-04 wiring + cli.test.ts). The REAL behavior —
@@ -15,7 +16,6 @@ import type { ApiClient, FindQuery, PageSummary } from "../api-client.js";
  */
 export interface FindOptions {
   q?: string;
-  domain?: string;
   tag?: string | string[];
   json?: boolean;
 }
@@ -26,7 +26,6 @@ export function find(opts: FindOptions): StubResult {
     implementedBy: "CLOUD-25",
     parsed: {
       q: opts.q ?? null,
-      domain: opts.domain ?? null,
       tags: toArray(opts.tag),
       json: Boolean(opts.json),
     },
@@ -37,7 +36,6 @@ export function find(opts: FindOptions): StubResult {
 export function toFindQuery(opts: FindOptions): FindQuery {
   return {
     ...(opts.q ? { q: opts.q } : {}),
-    ...(opts.domain ? { domain: opts.domain } : {}),
     tags: toArray(opts.tag),
   };
 }

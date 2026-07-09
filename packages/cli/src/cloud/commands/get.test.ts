@@ -10,7 +10,6 @@ const RESULT: GetResult = {
     slug: "status",
     url: "https://shortwind.dev/status",
     visibility: "unlisted",
-    customDomain: "status.acme.com",
     currentVersion: 2,
     tags: ["ops"],
     updatedAt: 1717000000000,
@@ -25,16 +24,10 @@ describe("renderGet — golden output", () => {
   it("renders metadata + a version table (human)", () => {
     const out = renderGet(RESULT, false);
     expect(out).toContain("id:         pg_1");
-    expect(out).toContain("domain:     status.acme.com");
     expect(out).toContain("version:    v2");
     expect(out).toContain("VERSION");
     expect(out).toContain("v1");
     expect(out).toContain("v2");
-  });
-
-  it("shows (none) for an absent custom domain", () => {
-    const out = renderGet({ ...RESULT, page: { ...RESULT.page, customDomain: null } }, false);
-    expect(out).toContain("domain:     (none)");
   });
 
   it("emits the raw { page, versions } envelope under --json", () => {

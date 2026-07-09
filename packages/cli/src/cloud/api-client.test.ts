@@ -56,20 +56,18 @@ describe("resolveBaseUrl", () => {
 });
 
 describe("findPages", () => {
-  it("builds the query string (q, domain, repeatable tags) and sends the bearer", async () => {
+  it("builds the query string (q, repeatable tags) and sends the bearer", async () => {
     const calls: Recorded[] = [];
     const client = createApiClient({
       baseUrl: "https://api.test/",
       token: "swc_secret",
       fetch: fakeFetch({ ok: true, status: 200, body: '{"pages":[]}' }, calls),
     });
-    const result = await client.findPages({ q: "status", domain: "acme.com", tags: ["a", "b"] });
+    const result = await client.findPages({ q: "status", tags: ["a", "b"] });
     expect(result).toEqual({ pages: [] });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.method).toBe("GET");
-    expect(calls[0]!.url).toBe(
-      "https://api.test/v1/pages?q=status&domain=acme.com&tag=a&tag=b",
-    );
+    expect(calls[0]!.url).toBe("https://api.test/v1/pages?q=status&tag=a&tag=b");
     expect(calls[0]!.headers?.Authorization).toBe("Bearer swc_secret");
   });
 
@@ -103,7 +101,6 @@ describe("getPage", () => {
         slug: "status",
         url: "https://shortwind.dev/status",
         visibility: "public",
-        customDomain: null,
         currentVersion: 2,
         tags: ["ops"],
         updatedAt: 1000,
@@ -285,7 +282,6 @@ describe("setVisibility (CLOUD-34)", () => {
     slug: "status",
     url: "https://shortwind.dev/status",
     visibility: "private",
-    customDomain: null,
     currentVersion: 2,
     tags: [],
     updatedAt: 1000,

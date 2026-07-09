@@ -20,6 +20,8 @@ import {
   BIND_SCOPE,
   type StepUpOutcome,
 } from "./commands/bind-domain.js";
+import { runListDomains } from "./commands/list-domains.js";
+import { runApproveDomain } from "./commands/approve-domain.js";
 import { runSkill } from "./commands/skill.js";
 import {
   ApiError,
@@ -145,12 +147,11 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
     });
 
   cli
-    .command("find", "Locate existing pages (GET /v1/pages?q=&domain=&tag=)")
+    .command("find", "Locate existing pages (GET /v1/pages?q=&tag=)")
     .option("--q <query>", "Free-text query")
-    .option("--domain <domain>", "Filter by bound domain")
     .option("--tag <tag>", "Filter by tag (repeatable)")
     .option("--json", "Emit machine-readable JSON")
-    .action((opts: { q?: string; domain?: string; tag?: string | string[]; json?: boolean }) => {
+    .action((opts: { q?: string; tag?: string | string[]; json?: boolean }) => {
       onStub(find(opts));
     });
 
@@ -178,12 +179,12 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
 
   cli
     .command(
-      "bind-domain <id> <hostname>",
-      "Bind a custom hostname (POST /v1/pages/{id}/domain — requires domains:bind)",
+      "bind-domain <hostname>",
+      "Bind an account custom domain (POST /v1/domains — requires domains:bind)",
     )
     .option("--json", "Emit machine-readable JSON")
-    .action((id: string, hostname: string, opts: { json?: boolean }) => {
-      onStub(bindDomain(id, hostname, opts));
+    .action((hostname: string, opts: { json?: boolean }) => {
+      onStub(bindDomain(hostname, opts));
     });
 
   cli.help();
@@ -295,16 +296,14 @@ export function buildRealCli(): CAC {
     );
 
   cli
-    .command("find", "Locate existing pages (GET /v1/pages?q=&domain=&tag=)")
+    .command("find", "Locate existing pages (GET /v1/pages?q=&tag=)")
     .option("--q <query>", "Free-text query")
-    .option("--domain <domain>", "Filter by bound domain")
     .option("--tag <tag>", "Filter by tag (repeatable)")
     .option("--endpoint <url>", "Cloud API origin")
     .option("--json", "Emit machine-readable JSON")
     .action(
       async (opts: {
         q?: string;
-        domain?: string;
         tag?: string | string[];
         endpoint?: string;
         json?: boolean;
@@ -368,15 +367,15 @@ export function buildRealCli(): CAC {
 
   cli
     .command(
-      "bind-domain <id> <hostname>",
-      "Bind a custom hostname (POST /v1/pages/{id}/domain — requires domains:bind)",
+      "bind-domain <hostname>",
+      "Bind an account custom domain (POST /v1/domains — requires domains:bind)",
     )
     .option("--endpoint <url>", "Cloud API origin")
     .option("--json", "Emit machine-readable JSON")
-    .action(async (id: string, hostname: string, opts: { endpoint?: string; json?: boolean }) => {
+    .action(async (hostname: string, opts: { endpoint?: string; json?: boolean }) => {
       try {
         const client = makeClient(opts.endpoint) as DomainCapableClient;
-        const output = await runBindDomain(id, hostname, opts, {
+        const output = await runBindDomain(hostname, opts, {
           client,
           readScopes: () => activeScopes(),
           stepUp: () => stepUpBindScope(opts.endpoint),
@@ -384,6 +383,42 @@ export function buildRealCli(): CAC {
         process.stdout.write(output + "\n");
       } catch (err) {
         if (err instanceof StepUpDeniedError || err instanceof InvalidHostnameError) {
+          process.stderr.write(`error: ${err.message}\n`);
+          process.exitCode = 1;
+          return;
+        }
+        reportApiError(err);
+      }
+    });
+
+  cli
+    .command("domains", "List the account's custom domains (GET /v1/domains)")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--json", "Emit machine-readable JSON")
+    .action(async (opts: { endpoint?: string; json?: boolean }) => {
+      try {
+        const client = makeClient(opts.endpoint) as DomainCapableClient;
+        const output = await runListDomains(opts, client);
+        process.stdout.write(output + "\n");
+      } catch (err) {
+        reportApiError(err);
+      }
+    });
+
+  cli
+    .command(
+      "approve-domain <hostname>",
+      "Approve a pending-human account domain (POST /v1/domains/approve)",
+    )
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--json", "Emit machine-readable JSON")
+    .action(async (hostname: string, opts: { endpoint?: string; json?: boolean }) => {
+      try {
+        const client = makeClient(opts.endpoint) as DomainCapableClient;
+        const output = await runApproveDomain(hostname, opts, client);
+        process.stdout.write(output + "\n");
+      } catch (err) {
+        if (err instanceof InvalidHostnameError) {
           process.stderr.write(`error: ${err.message}\n`);
           process.exitCode = 1;
           return;
