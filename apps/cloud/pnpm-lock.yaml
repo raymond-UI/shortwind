@@ -40,6 +40,9 @@ importers:
       hono:
         specifier: 4.12.26
         version: 4.12.26
+      stripe:
+        specifier: 20.4.1
+        version: 20.4.1(@types/node@22.20.0)
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: 0.16.18
