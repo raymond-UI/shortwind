@@ -31,7 +31,7 @@ describe("UsageView (CLOUD-43 metered billing surface)", () => {
 
   it("shows the loading branch while usage is undefined", () => {
     renderWithData(<UsageView />, { usage: undefined });
-    expect(screen.getByText(/Loading usage/)).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /loading usage/i })).toBeInTheDocument();
   });
 
   it("renders zeros for a never-published account", () => {

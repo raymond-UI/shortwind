@@ -105,6 +105,6 @@ describe("BillingView (Stripe billing surface)", () => {
 
   it("shows the loading branch while billing is undefined", () => {
     renderWithData(<BillingView />, { billing: undefined });
-    expect(screen.getByText(/Loading billing/)).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /loading billing/i })).toBeInTheDocument();
   });
 });

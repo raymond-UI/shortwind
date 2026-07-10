@@ -27,6 +27,6 @@ describe("PolicyView (operator policy toggle — the one mutation)", () => {
 
   it("shows the loading branch while policy is undefined", () => {
     renderWithData(<PolicyView />, { policy: undefined });
-    expect(screen.getByText(/Loading policy/)).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /loading policy/i })).toBeInTheDocument();
   });
 });

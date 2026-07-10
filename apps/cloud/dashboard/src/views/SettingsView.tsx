@@ -5,6 +5,7 @@ import { PolicyView } from "./PolicyView";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { SectionHeader } from "../components/SectionHeader";
+import { SkeletonRows } from "../components/Skeleton";
 import type { TokenRow } from "../lib/types";
 
 /**
@@ -42,7 +43,7 @@ function TokenList() {
   const { tokens } = useDashboardData();
 
   if (tokens === undefined) {
-    return <div className="@muted">Loading tokens…</div>;
+    return <SkeletonRows count={3} label="Loading tokens" />;
   }
   if (tokens.length === 0) {
     return (

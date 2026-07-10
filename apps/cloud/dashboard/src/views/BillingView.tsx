@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { SectionHeader } from "../components/SectionHeader";
+import { SkeletonPanel } from "../components/Skeleton";
 import type { PlanId } from "../lib/types";
 
 /**
@@ -51,8 +52,22 @@ export function BillingView() {
   const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The header is static — render it immediately and skeleton only the plan card.
+  const header = (
+    <SectionHeader
+      eyebrow="Billing"
+      title="Plan & subscription"
+      description="Custom domains require a paid plan — publishing and serving stay free."
+    />
+  );
+
   if (billing === undefined) {
-    return <div className="@muted">Loading billing…</div>;
+    return (
+      <div className="max-w-xl space-y-5">
+        {header}
+        <SkeletonPanel lines={4} label="Loading billing" />
+      </div>
+    );
   }
 
   const isPro = billing.plan !== "free";
@@ -92,11 +107,7 @@ export function BillingView() {
 
   return (
     <div className="max-w-xl space-y-5" data-testid="billing-view">
-      <SectionHeader
-        eyebrow="Billing"
-        title="Plan & subscription"
-        description="Custom domains require a paid plan — publishing and serving stay free."
-      />
+      {header}
 
       <div
         className={

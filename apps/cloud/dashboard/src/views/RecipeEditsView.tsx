@@ -1,6 +1,7 @@
 import { useDashboardData } from "../lib/data";
 import { describeRecipeEdit, formatTime, shortHash } from "../lib/format";
 import { EmptyState } from "../components/EmptyState";
+import { SkeletonRows } from "../components/Skeleton";
 
 /**
  * Recipe-edits view (CLOUD-35, PRD §5.4) — THE distinct feed, restyled
@@ -13,9 +14,7 @@ export function RecipeEditsView() {
   const { recipeEdits } = useDashboardData();
 
   if (recipeEdits === undefined) {
-    return (
-      <div className="@muted">Loading recipe edits…</div>
-    );
+    return <SkeletonRows count={3} label="Loading recipe edits" />;
   }
   if (recipeEdits.length === 0) {
     return <EmptyState icon="✎" title="No recipe edits yet" />;

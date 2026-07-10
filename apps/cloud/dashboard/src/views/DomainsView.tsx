@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { CopyValue } from "../components/CopyValue";
 import { SectionHeader } from "../components/SectionHeader";
+import { SkeletonPanel } from "../components/Skeleton";
 import type { AccountDomainRow, DomainStatus } from "../lib/types";
 
 /**
@@ -140,8 +141,30 @@ export function DomainsView() {
     null,
   );
 
+  // The header is static — render it immediately and skeleton only the cards.
+  const header = (
+    <SectionHeader
+      eyebrow="Custom domain"
+      title="Bring your own domain"
+      description={
+        <>
+          Account-wide — every page also serves at{" "}
+          <span className="font-mono">your-domain/&lt;slug&gt;</span>. Bind a
+          subdomain you own (e.g.{" "}
+          <span className="font-mono">pages.example.com</span>), not a bare
+          apex.
+        </>
+      }
+    />
+  );
+
   if (accountDomains === undefined) {
-    return <div className="@muted">Loading domains…</div>;
+    return (
+      <div className="space-y-5">
+        {header}
+        <SkeletonPanel lines={3} label="Loading domains" />
+      </div>
+    );
   }
 
   async function run(key: string, fn: () => Promise<unknown>) {
@@ -162,19 +185,7 @@ export function DomainsView() {
 
   return (
     <div className="space-y-5" data-testid="domains-view">
-      <SectionHeader
-        eyebrow="Custom domain"
-        title="Bring your own domain"
-        description={
-          <>
-            Account-wide — every page also serves at{" "}
-            <span className="font-mono">your-domain/&lt;slug&gt;</span>. Bind a
-            subdomain you own (e.g.{" "}
-            <span className="font-mono">pages.example.com</span>), not a bare
-            apex.
-          </>
-        }
-      />
+      {header}
 
       {canBind ? (
         <form

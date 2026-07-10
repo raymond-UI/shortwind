@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { formatTime } from "../lib/format";
+import { SkeletonPanel } from "../components/Skeleton";
 
 /**
  * Policy toggles (CLOUD-35, PRD §7.2) — restyled and folded into Settings
@@ -12,7 +13,7 @@ export function PolicyView() {
   const [saving, setSaving] = useState(false);
 
   if (policy === undefined) {
-    return <div className="@muted">Loading policy…</div>;
+    return <SkeletonPanel lines={2} label="Loading policy" />;
   }
 
   async function toggleCustomDomain() {

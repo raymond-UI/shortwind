@@ -1,6 +1,7 @@
 import { useDashboardData } from "../lib/data";
 import { formatBytes, formatTime } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
+import { SkeletonStats } from "../components/Skeleton";
 
 /**
  * Usage view (CLOUD-43, PRD §6.4) — the metered-billing surface, restyled in
@@ -13,8 +14,27 @@ import { SectionHeader } from "../components/SectionHeader";
 export function UsageView() {
   const { usage } = useDashboardData();
 
+  // The header is static — render it immediately and skeleton only the meters.
+  const header = (
+    <SectionHeader
+      eyebrow="Usage"
+      title="What this account is using"
+      description={
+        <span data-testid="usage-cost-note">
+          Metered to what costs money (PRD §6.4): publishes, custom domains,
+          and storage. Page views are not billed — a viral page costs nothing.
+        </span>
+      }
+    />
+  );
+
   if (usage === undefined) {
-    return <div className="@muted">Loading usage…</div>;
+    return (
+      <div className="space-y-5">
+        {header}
+        <SkeletonStats label="Loading usage" />
+      </div>
+    );
   }
 
   const meters = [
@@ -43,16 +63,7 @@ export function UsageView() {
 
   return (
     <div className="space-y-5" data-testid="usage-view">
-      <SectionHeader
-        eyebrow="Usage"
-        title="What this account is using"
-        description={
-          <span data-testid="usage-cost-note">
-            Metered to what costs money (PRD §6.4): publishes, custom domains,
-            and storage. Page views are not billed — a viral page costs nothing.
-          </span>
-        }
-      />
+      {header}
 
       <div className="grid gap-4 sm:grid-cols-3">
         {meters.map((m) => (

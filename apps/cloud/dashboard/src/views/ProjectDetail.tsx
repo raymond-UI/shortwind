@@ -9,6 +9,7 @@ import {
 } from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
+import { SkeletonDetail } from "../components/Skeleton";
 import { Dialog } from "../components/Dialog";
 import { Menu, MenuItem } from "../components/Menu";
 import type {
@@ -53,7 +54,7 @@ export function ProjectDetail({
   const setTab = onTabChange ?? setInternalTab;
 
   if (pages === undefined) {
-    return <div className="@muted">Loading…</div>;
+    return <SkeletonDetail />;
   }
   const entry = pages.find((p) => p.page.id === pageId);
   if (!entry) {

@@ -3,6 +3,7 @@ import { formatTime } from "../lib/format";
 import { Badge } from "../components/Badge";
 import { CopyValue } from "../components/CopyValue";
 import { EmptyState } from "../components/EmptyState";
+import { SkeletonRows } from "../components/Skeleton";
 import type { Tone } from "../components/Badge";
 
 /** Destructive actions read as danger; everything else stays neutral. */
@@ -20,7 +21,7 @@ export function AuditView() {
   const { auditLog } = useDashboardData();
 
   if (auditLog === undefined) {
-    return <div className="@muted">Loading audit log…</div>;
+    return <SkeletonRows count={5} label="Loading audit log" />;
   }
   if (auditLog.length === 0) {
     return <EmptyState icon="◷" title="No audit events yet" />;
