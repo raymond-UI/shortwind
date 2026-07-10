@@ -8,11 +8,11 @@
     },
     "button": {
       "version": "0.0.2",
-      "sha": "b0b08652cd757b90"
+      "sha": "f7eef129285cabc5"
     },
     "card": {
       "version": "0.0.1",
-      "sha": "4813cef10cd21824"
+      "sha": "10b45c72678d76e7"
     },
     "code": {
       "version": "0.0.1",
@@ -20,7 +20,7 @@
     },
     "dialog": {
       "version": "0.0.1",
-      "sha": "b4dbf853e99fce75"
+      "sha": "a8ec11f08563af42"
     },
     "empty": {
       "version": "0.0.1",
@@ -32,7 +32,7 @@
     },
     "form": {
       "version": "0.0.2",
-      "sha": "e78b50acd247f5af"
+      "sha": "0f14ca84b84664ee"
     },
     "icon": {
       "version": "0.0.1",
@@ -56,7 +56,7 @@
     },
     "navigation": {
       "version": "0.0.2",
-      "sha": "2bb73370d69e0f65"
+      "sha": "52351d37d173476a"
     },
     "progress": {
       "version": "0.0.1",

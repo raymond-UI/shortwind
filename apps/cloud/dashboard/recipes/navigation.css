@@ -1,4 +1,4 @@
-/* shortwind: navigation@0.0.2 sha:2bb73370d69e0f65 — DO NOT EDIT THIS LINE */
+/* shortwind: navigation@0.0.2 sha:52351d37d173476a — DO NOT EDIT THIS LINE */
 
 /* @guide
    @navigation is the container; links are @navigation-link with
@@ -16,12 +16,12 @@
 
 /* Inactive nav link with hover/focus states. */
 @recipe nav-link {
-  inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+  inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50
 }
 
 /* Active nav link. */
 @recipe nav-link-active {
-  inline-flex items-center gap-2 rounded-md bg-muted px-3 py-1.5 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+  inline-flex items-center gap-2 rounded-md bg-muted px-3 py-1.5 text-sm font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50
 }
 
 /* Breadcrumb trail container. */

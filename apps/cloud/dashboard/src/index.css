@@ -18,8 +18,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* dev-raw: sharp corners, near-square UI */
-  --radius: 0.25rem;
+  /* shadcn-calibrated radius: soft but not bubbly (sm/md/lg/xl derive below) */
+  --radius: 0.5rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   /* terminal accent — active markers, links, status */
@@ -97,10 +97,11 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-term: var(--term);
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: calc(var(--radius) - 1px);
+  /* shadcn spread: sm 4px / md 6px / lg 8px / xl 12px at --radius 0.5rem */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
   /* dev-raw type system: mono-forward UI, clean sans for prose */
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
     Consolas, monospace;

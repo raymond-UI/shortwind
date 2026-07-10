@@ -43,7 +43,7 @@ function TokenList() {
     return (
       <div
         data-testid="tokens-empty"
-        className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground"
+        className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground"
       >
         <span>No API tokens yet. Mint one from the CLI:</span>
         <div className="rounded-md border border-border bg-secondary/50 px-2 py-1">
