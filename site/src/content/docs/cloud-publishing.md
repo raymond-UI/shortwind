@@ -77,8 +77,10 @@ shortwind cloud find --tag launch
 
 ## How recipes travel with a publish
 
-Cloud expands `@recipe` classes server-side, so a publish carries what the
-expander needs:
+Recipes are optional. Plain HTML is uploaded and served untouched. This section
+only applies when a page uses `@recipe` shorthand and you publish from a project
+that has a `recipes/` directory: Cloud then expands the shorthand server-side,
+and the publish carries what the expander needs:
 
 - **`html`**: your source, with `@recipe` shorthand still in the `class`
   attributes.
@@ -87,15 +89,18 @@ expander needs:
   whole palette.
 - **`css`** (optional): extra CSS to include.
 
-The CLI assembles this for you from your Shortwind home's `recipes/` directory.
-The publish itself is the sync: there is no watcher and no separate sync step. A
-recipe edit only affects the next publish that carries it, and published pages
-stay frozen against the version they shipped with.
+The CLI assembles this for you. It reads the palette from the `recipes/`
+directory of the project you run `publish` in (it walks up from the current
+directory to find one); if there is no such project, the palette is empty and
+only plain HTML will publish cleanly. The publish itself is the sync: there is no
+watcher and no separate sync step. A recipe edit only affects the next publish
+that carries it, and published pages stay frozen against the version they
+shipped with.
 
-One practical rule: compose pages only from recipes your account ships. A recipe
-the account does not have expands to nothing and goes out as raw text. Run
-[`shortwind cloud skill`](/docs/cloud-cli) to print the account's current
-palette before composing.
+One practical rule: compose pages only from recipes that are actually present. A
+recipe that is missing expands to nothing and goes out as raw text. Run
+[`shortwind cloud skill`](/docs/cloud-cli) to print the palette available where
+you are publishing from.
 
 ## Finding and removing pages
 

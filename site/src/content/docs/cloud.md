@@ -9,9 +9,14 @@ product: cloud
 
 Shortwind Cloud is agent-native HTML hosting. An agent (or you, from the CLI)
 publishes one HTML file and gets a live URL back. There is no repo, no build
-step, and no deploy config: the platform expands your `@recipe` classes
-server-side, freezes the result as an immutable version, and serves it as static
-files from the edge.
+step, and no deploy config: the platform freezes the file as an immutable
+version and serves it as static files from the edge.
+
+It hosts **any** HTML, whether or not it uses Shortwind. If a page does use
+`@recipe` shorthand, Cloud expands it to Tailwind server-side at publish time;
+plain HTML is served exactly as written. And because identity lives in a
+machine-global home, the `shortwind cloud` command runs from any directory, not
+just inside a project.
 
 > **Just want to publish something?** Skip to the
 > [Quickstart](/docs/cloud-quickstart): create a free account, install the CLI,
@@ -19,15 +24,17 @@ files from the edge.
 
 ## Core vs Cloud
 
-They are two products that share one primitive (recipes), and it is worth being
-clear about which one you are using.
+They are two products, and Core is optional for Cloud: Cloud happily hosts plain
+HTML and only touches recipes when a page has them. It is still worth being clear
+about which one you are using.
 
-| | **Core** (`@shortwind/cli`) | **Cloud** (`shortwind cloud`) |
+| | **Core** | **Cloud** |
 | --- | --- | --- |
-| What it is | A build-time class layer you install into your own project | A hosted service you publish pages to |
+| What it is | A build-time class layer you add to a project | A hosted service you publish pages to |
+| How you install it | `npm i -D` into your project | `npm i -g` (or `npx`), run from any directory |
 | Where it runs | Locally, in your bundler | On the edge, at publish time |
 | You get | Plain Tailwind CSS in your build output | A live URL serving a frozen page |
-| Ships to users | Nothing new (compiles to Tailwind) | The expanded HTML, served static |
+| Needs recipes? | Yes; that is the whole point | No; recipes are optional |
 | Auth | None; it is a local tool | An account and a device-flow token |
 | Cost | Free and open source | Free to publish and serve; Pro for custom domains |
 
@@ -37,17 +44,19 @@ publishing and hosting.
 
 ## How they relate
 
-Cloud runs the same `@shortwind/core` expander you use locally, only it runs at
-publish time on our side. When you publish, the CLI uploads your HTML, your
-lockfile, and just the recipe families your page actually touches. The server
-expands `@card` and friends into byte-identical Tailwind, hashes the artifact,
-and stores it. Serving is then dumb static delivery; there is no runtime
-expansion and no origin compute per view.
+If a page you publish uses recipes, Cloud runs the same `@shortwind/core`
+expander you use locally, only it runs at publish time on our side. The CLI
+uploads your HTML, your lockfile, and just the recipe families the page actually
+touches; the server expands `@card` and friends into byte-identical Tailwind,
+hashes the artifact, and stores it. Serving is then dumb static delivery, with no
+runtime expansion and no origin compute per view.
 
-That means the recipes you author for Core are the recipes Cloud publishes with.
-If you compose a page from a recipe your account does not ship, it expands to
-nothing and goes out as raw text. Run [`shortwind cloud skill`](/docs/cloud-cli)
-to see the palette your account currently has.
+So the recipes you author for Core are the recipes Cloud publishes with, when you
+choose to use them. If a page references a recipe that is not present, that token
+expands to nothing and goes out as raw text, so compose only from recipes you
+actually have. Run [`shortwind cloud skill`](/docs/cloud-cli) to see the palette
+available where you are publishing from. None of this applies to plain HTML,
+which is served untouched.
 
 ## When to use Cloud
 
