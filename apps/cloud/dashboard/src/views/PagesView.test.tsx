@@ -116,7 +116,9 @@ describe("PagesView (Overview cards)", () => {
   it("opens the New Page dialog with the publish command", () => {
     renderWithData(<PagesView />);
     fireEvent.click(screen.getByRole("button", { name: /new page/i }));
-    expect(screen.getByRole("dialog")).toHaveTextContent(/shortwind deploy/);
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      /shortwind cloud publish/,
+    );
   });
 
   it("keeps header and controls visible while pages load", () => {

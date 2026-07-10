@@ -105,11 +105,20 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           Publish a new page
         </h3>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Run next to your HTML file. The page appears here when the deploy
-          lands.
+          Run next to your HTML file. The page appears here when the publish
+          lands. New to the CLI?{" "}
+          <a
+            href="https://shortwind.dev/docs/cloud-quickstart"
+            target="_blank"
+            rel="noreferrer"
+            className="text-foreground underline"
+          >
+            Read the quickstart
+          </a>
+          .
         </p>
         <div className="rounded-md border border-border bg-secondary/50 px-2 py-1.5">
-          <CopyValue value="shortwind deploy ./index.html" />
+          <CopyValue value="shortwind cloud publish ./index.html" />
         </div>
         <div className="flex justify-end">
           <button
@@ -143,15 +152,26 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           title="No pages published yet"
           description={
             <>
-              Publish your first page with{" "}
+              Install the CLI, run{" "}
+              <code className="@code-inline">shortwind cloud login</code>, then
+              publish your first page with{" "}
               <code className="@code-inline">
-                shortwind deploy &lt;file&gt;
+                shortwind cloud publish &lt;file&gt;
               </code>
               .
             </>
           }
           testId="pages-empty"
-        />
+        >
+          <a
+            href="https://shortwind.dev/docs/cloud-quickstart"
+            target="_blank"
+            rel="noreferrer"
+            className="@btn-secondary mt-4 inline-flex"
+          >
+            Read the quickstart →
+          </a>
+        </EmptyState>
       </div>
     );
   }

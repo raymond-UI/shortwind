@@ -140,7 +140,7 @@ function LandingPage() {
           </a>
           <nav className="flex items-center gap-2 text-xs">
             <a
-              href="https://shortwind.dev/docs"
+              href="https://shortwind.dev/docs/cloud"
               className="hidden rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground sm:inline-block"
             >
               docs
@@ -213,10 +213,10 @@ function LandingPage() {
                     Start free →
                   </Link>
                   <a
-                    href="https://shortwind.dev/docs"
+                    href="https://shortwind.dev/docs/cloud-quickstart"
                     className="rounded-md border border-border px-6 py-3 text-sm font-medium transition-colors hover:bg-secondary"
                   >
-                    Read the docs
+                    Read the quickstart
                   </a>
                 </>
               )}
@@ -526,12 +526,20 @@ function LandingPage() {
                   Open dashboard →
                 </Link>
               ) : (
-                <Link
-                  to="/signup"
-                  className="sw-btn-primary rounded-md px-6 py-3 text-sm font-semibold"
-                >
-                  Create an account →
-                </Link>
+                <>
+                  <Link
+                    to="/signup"
+                    className="sw-btn-primary rounded-md px-6 py-3 text-sm font-semibold"
+                  >
+                    Create an account →
+                  </Link>
+                  <a
+                    href="https://shortwind.dev/docs/cloud-quickstart"
+                    className="rounded-md border border-border px-6 py-3 text-sm font-medium transition-colors hover:bg-secondary"
+                  >
+                    Read the quickstart
+                  </a>
+                </>
               )}
             </div>
           </div>
@@ -548,7 +556,10 @@ function LandingPage() {
             <a href="https://shortwind.dev" className="hover:text-foreground">
               shortwind.dev
             </a>
-            <a href="https://shortwind.dev/docs" className="hover:text-foreground">
+            <a
+              href="https://shortwind.dev/docs/cloud"
+              className="hover:text-foreground"
+            >
               docs
             </a>
             <Link

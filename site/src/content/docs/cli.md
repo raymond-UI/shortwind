@@ -11,6 +11,11 @@ Run it one-off with `npx @shortwind/cli@beta <command>`, or install it
 (`npm i -D @shortwind/cli@beta`) to use the `shortwind` command in scripts. The
 commands below assume it's installed.
 
+> **Looking for `shortwind cloud`?** The hosting verbs (`login`, `publish`,
+> `update`, `find`, `delete`, and more) are a separate command group for
+> [Shortwind Cloud](/docs/cloud), documented in the
+> [Cloud CLI reference](/docs/cloud-cli).
+
 ## `shortwind new <family>`
 
 Scaffold a new custom recipe family file (`recipes/<family>.css`) with a header,
