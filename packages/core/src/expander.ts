@@ -250,7 +250,15 @@ export function expandClassList(
   // recipe must not change the rendering of recipe-free markup.
   if (!expandedAny) return classList;
   const joined = out.join(" ");
-  const result = mergeConflicts ? twMerge(joined) : joined;
+  const merged = mergeConflicts ? twMerge(joined) : joined;
+  // Edge whitespace is load-bearing: callers concatenate class strings
+  // (`"@card p-5 " + (cond ? "border-x" : "")`), so trimming the edges would
+  // weld the neighbouring class onto the expansion ("p-5border-x") and
+  // silently disable both. Re-apply the original edges BEFORE the newline
+  // accounting below so newlines living in them aren't double-counted.
+  const leading = /^\s*/.exec(classList)?.[0] ?? "";
+  const trailing = /\s*$/.exec(classList)?.[0] ?? "";
+  const result = leading + merged + trailing;
   // Line stability (#48): a multi-line class value collapses to one line on
   // expansion, which shifts every subsequent source line (breaking stack traces
   // and breakpoints in the absence of a sourcemap). Re-append the newlines the

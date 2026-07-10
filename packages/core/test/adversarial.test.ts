@@ -231,4 +231,25 @@ describe("expandClassList passthrough (#43)", () => {
     const out = expand(src, registry, { mode: "html" });
     expect((out.match(/\n/g) ?? []).length).toBe((src.match(/\n/g) ?? []).length);
   });
+
+  it("preserves a trailing space so string concatenation cannot glue classes", () => {
+    // `"@card p-5 " + (cond ? "border-x" : "")` — the trailing space is
+    // load-bearing; trimming it welds the next class onto the expansion
+    // ("p-5border-x"), silently disabling both classes.
+    expect(expandClassList("@card p-5 ", registry, true)).toBe(
+      "rounded border p-5 ",
+    );
+  });
+
+  it("preserves a leading space (concatenation from the left)", () => {
+    expect(expandClassList(" @card", registry, true)).toBe(
+      " rounded border p-4",
+    );
+  });
+
+  it("preserves trailing-newline edge whitespace without double-counting (#48)", () => {
+    expect(expandClassList("@card\n", registry, true)).toBe(
+      "rounded border p-4\n",
+    );
+  });
 });
