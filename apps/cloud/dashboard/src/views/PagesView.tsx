@@ -40,22 +40,116 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
   const [sort, setSort] = useState<SortKey>("activity");
   const [newPageOpen, setNewPageOpen] = useState(false);
 
+  // Static chrome (/ui: render known elements immediately; mask only data).
+  // The controls are fully functional without data — search/sort just apply
+  // once pages stream in, and the New Page dialog is data-free.
+  const header = <SectionHeader eyebrow="Pages" title="Your hosted pages" />;
+  const controls = (
+    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        aria-label="Search pages"
+        placeholder="Search pages…"
+        data-testid="pages-search"
+        className="@input sm:flex-1"
+      />
+      <Menu
+        align="end"
+        label="Sort pages"
+        trigger={
+          <span className="@button-secondary-sm whitespace-nowrap">
+            Sort: {SORT_LABEL[sort]} ▾
+          </span>
+        }
+      >
+        {(close) => (
+          <>
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
+              <MenuItem
+                key={key}
+                testId={`sort-${key}`}
+                active={sort === key}
+                onSelect={() => {
+                  setSort(key);
+                  close();
+                }}
+              >
+                {SORT_LABEL[key]}
+              </MenuItem>
+            ))}
+          </>
+        )}
+      </Menu>
+      <button
+        type="button"
+        onClick={() => setNewPageOpen(true)}
+        className="@button-primary-sm whitespace-nowrap"
+      >
+        ＋ New Page
+      </button>
+    </div>
+  );
+  const newPageDialog = (
+    <Dialog
+      open={newPageOpen}
+      onClose={() => setNewPageOpen(false)}
+      labelledBy="new-page-title"
+    >
+      <div className="space-y-3">
+        <h3 id="new-page-title" className="text-sm font-semibold">
+          Publish a new page
+        </h3>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Pages ship from the CLI — run this next to your HTML file and it
+          appears here the moment the deploy lands.
+        </p>
+        <div className="rounded-md border border-border bg-secondary/50 px-2 py-1.5">
+          <CopyValue value="shortwind deploy ./index.html" />
+        </div>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setNewPageOpen(false)}
+            className="@button-secondary-sm"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+
   if (pages === undefined) {
-    return <SkeletonCards />;
+    return (
+      <div className="space-y-5">
+        {header}
+        {controls}
+        <SkeletonCards />
+        {newPageDialog}
+      </div>
+    );
   }
   if (pages.length === 0) {
     return (
-      <EmptyState
-        icon="◳"
-        title="No pages published yet"
-        description={
-          <>
-            Publish your first page with{" "}
-            <code className="@code-inline">shortwind deploy &lt;file&gt;</code>.
-          </>
-        }
-        testId="pages-empty"
-      />
+      <div className="space-y-5">
+        {header}
+        <EmptyState
+          icon="◳"
+          title="No pages published yet"
+          description={
+            <>
+              Publish your first page with{" "}
+              <code className="@code-inline">
+                shortwind deploy &lt;file&gt;
+              </code>
+              .
+            </>
+          }
+          testId="pages-empty"
+        />
+      </div>
     );
   }
 
@@ -85,53 +179,8 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
 
   return (
     <div className="space-y-5">
-      <SectionHeader eyebrow="Pages" title="Your hosted pages" />
-
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search pages"
-          placeholder="Search pages…"
-          data-testid="pages-search"
-          className="@input sm:flex-1"
-        />
-        <Menu
-          align="end"
-          label="Sort pages"
-          trigger={
-            <span className="@button-secondary-sm whitespace-nowrap">
-              Sort: {SORT_LABEL[sort]} ▾
-            </span>
-          }
-        >
-          {(close) => (
-            <>
-              {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
-                <MenuItem
-                  key={key}
-                  testId={`sort-${key}`}
-                  active={sort === key}
-                  onSelect={() => {
-                    setSort(key);
-                    close();
-                  }}
-                >
-                  {SORT_LABEL[key]}
-                </MenuItem>
-              ))}
-            </>
-          )}
-        </Menu>
-        <button
-          type="button"
-          onClick={() => setNewPageOpen(true)}
-          className="@button-primary-sm whitespace-nowrap"
-        >
-          ＋ New Page
-        </button>
-      </div>
+      {header}
+      {controls}
 
       <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground">
         {/* No overflow-hidden here: it would clip the Menu's absolute panel. */}
@@ -212,33 +261,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
         </ul>
       )}
 
-      <Dialog
-        open={newPageOpen}
-        onClose={() => setNewPageOpen(false)}
-        labelledBy="new-page-title"
-      >
-        <div className="space-y-3">
-          <h3 id="new-page-title" className="text-sm font-semibold">
-            Publish a new page
-          </h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Pages ship from the CLI — run this next to your HTML file and it
-            appears here the moment the deploy lands.
-          </p>
-          <div className="rounded-md border border-border bg-secondary/50 px-2 py-1.5">
-            <CopyValue value="shortwind deploy ./index.html" />
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setNewPageOpen(false)}
-              className="@button-secondary-sm"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </Dialog>
+      {newPageDialog}
     </div>
   );
 }

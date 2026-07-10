@@ -9,7 +9,7 @@ import {
 } from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
-import { SkeletonDetail } from "../components/Skeleton";
+import { Skeleton, SkeletonDetailBody } from "../components/Skeleton";
 import { Dialog } from "../components/Dialog";
 import { Menu, MenuItem } from "../components/Menu";
 import type {
@@ -53,8 +53,49 @@ export function ProjectDetail({
   const tab = controlledTab ?? internalTab;
   const setTab = onTabChange ?? setInternalTab;
 
+  // Static chrome (/ui: render known elements immediately; mask only data).
+  // The back button and tab labels are known before any data arrives; only
+  // the page identity (slug/URL) and tab content are dynamic.
+  const tablist = (
+    <div
+      role="tablist"
+      aria-label="Project sections"
+      className="flex gap-1 border-b border-border"
+    >
+      {(["overview", "deployments", "settings"] as DetailTab[]).map((t) => (
+        <button
+          key={t}
+          type="button"
+          role="tab"
+          id={`tab-${t}`}
+          aria-selected={t === tab}
+          aria-controls={`panel-${t}`}
+          onClick={() => setTab(t)}
+          className={
+            t === tab ? "@tab-active -mb-px capitalize" : "@tab -mb-px capitalize"
+          }
+        >
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+
   if (pages === undefined) {
-    return <SkeletonDetail />;
+    return (
+      <div className="space-y-6" data-testid="project-detail">
+        <div className="space-y-3">
+          <BackButton onBack={onBack} />
+          <div className="flex flex-wrap items-center gap-3">
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-2 w-2 rounded-full" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+        </div>
+        {tablist}
+        <SkeletonDetailBody />
+      </div>
+    );
   }
   const entry = pages.find((p) => p.page.id === pageId);
   if (!entry) {
@@ -104,28 +145,7 @@ export function ProjectDetail({
         </div>
       </div>
 
-      <div
-        role="tablist"
-        aria-label="Project sections"
-        className="flex gap-1 border-b border-border"
-      >
-        {(["overview", "deployments", "settings"] as DetailTab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            id={`tab-${t}`}
-            aria-selected={t === tab}
-            aria-controls={`panel-${t}`}
-            onClick={() => setTab(t)}
-            className={
-              t === tab ? "@tab-active -mb-px capitalize" : "@tab -mb-px capitalize"
-            }
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      {tablist}
 
       <div
         role="tabpanel"

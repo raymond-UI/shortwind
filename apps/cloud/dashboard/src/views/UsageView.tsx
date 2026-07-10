@@ -1,7 +1,7 @@
 import { useDashboardData } from "../lib/data";
 import { formatBytes, formatTime } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
-import { SkeletonStats } from "../components/Skeleton";
+import { Skeleton } from "../components/Skeleton";
 
 /**
  * Usage view (CLOUD-43, PRD §6.4) — the metered-billing surface, restyled in
@@ -14,7 +14,9 @@ import { SkeletonStats } from "../components/Skeleton";
 export function UsageView() {
   const { usage } = useDashboardData();
 
-  // The header is static — render it immediately and skeleton only the meters.
+  // The header, meter labels, glyphs, and hints are all static (/ui: render
+  // known elements immediately) — only the VALUES wait on data.
+  const loading = usage === undefined;
   const header = (
     <SectionHeader
       eyebrow="Usage"
@@ -28,35 +30,26 @@ export function UsageView() {
     />
   );
 
-  if (usage === undefined) {
-    return (
-      <div className="space-y-5">
-        {header}
-        <SkeletonStats label="Loading usage" />
-      </div>
-    );
-  }
-
   const meters = [
     {
       key: "publishes",
       glyph: "▲",
       label: "Publishes",
-      value: String(usage.publishes),
+      value: usage === undefined ? null : String(usage.publishes),
       hint: "one per published version",
     },
     {
       key: "customDomains",
       glyph: "⊞",
       label: "Custom domains",
-      value: String(usage.customDomains),
+      value: usage === undefined ? null : String(usage.customDomains),
       hint: "Cloudflare-for-SaaS hostname + cert",
     },
     {
       key: "storage",
       glyph: "⛁",
       label: "Storage",
-      value: formatBytes(usage.storageBytes),
+      value: usage === undefined ? null : formatBytes(usage.storageBytes),
       hint: "frozen artifact footprint",
     },
   ];
@@ -65,7 +58,12 @@ export function UsageView() {
     <div className="space-y-5" data-testid="usage-view">
       {header}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div
+        className="grid gap-4 sm:grid-cols-3"
+        {...(loading
+          ? { role: "status", "aria-label": "Loading usage", "aria-busy": true }
+          : {})}
+      >
         {meters.map((m) => (
           <div
             key={m.key}
@@ -78,12 +76,16 @@ export function UsageView() {
                 {m.glyph}
               </span>
             </div>
-            <div
-              className="mt-3 text-3xl font-semibold tabular-nums leading-none tracking-tight"
-              data-testid={`usage-value-${m.key}`}
-            >
-              {m.value}
-            </div>
+            {m.value === null ? (
+              <Skeleton className="mt-3 h-8 w-16" />
+            ) : (
+              <div
+                className="mt-3 text-3xl font-semibold tabular-nums leading-none tracking-tight"
+                data-testid={`usage-value-${m.key}`}
+              >
+                {m.value}
+              </div>
+            )}
             <div className="mt-2 text-xs text-muted-foreground">{m.hint}</div>
           </div>
         ))}
@@ -91,13 +93,17 @@ export function UsageView() {
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="h-1.5 w-1.5 rounded-full bg-term" aria-hidden="true" />
-        <span className="tabular-nums">
-          period:{" "}
-          {usage.periodStart === null
-            ? "since account start"
-            : formatTime(usage.periodStart)}{" "}
-          → {formatTime(usage.periodEnd)}
-        </span>
+        {usage === undefined ? (
+          <Skeleton className="h-3 w-56" />
+        ) : (
+          <span className="tabular-nums">
+            period:{" "}
+            {usage.periodStart === null
+              ? "since account start"
+              : formatTime(usage.periodStart)}{" "}
+            → {formatTime(usage.periodEnd)}
+          </span>
+        )}
       </div>
     </div>
   );

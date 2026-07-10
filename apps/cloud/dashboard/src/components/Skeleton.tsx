@@ -41,36 +41,7 @@ export function SkeletonRows({
   );
 }
 
-/** Stat-tile grid placeholder — the Usage meters. */
-export function SkeletonStats({
-  count = 3,
-  label = "Loading",
-}: {
-  count?: number;
-  label?: string;
-}) {
-  return (
-    <div
-      role="status"
-      aria-label={label}
-      aria-busy="true"
-      className="grid gap-4 sm:grid-cols-3"
-    >
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-lg border border-border bg-card p-5">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-3.5 w-24" />
-            <Skeleton className="h-4 w-4" />
-          </div>
-          <Skeleton className="mt-3 h-8 w-16" />
-          <Skeleton className="mt-2 h-3 w-32" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Single summary/settings panel placeholder — billing card, policy card. */
+/** Single summary/settings panel placeholder — billing card, domains card. */
 export function SkeletonPanel({
   lines = 3,
   label = "Loading",
@@ -95,46 +66,35 @@ export function SkeletonPanel({
   );
 }
 
-/** Page-detail placeholder mirroring the header + tabs + hero/properties grid. */
-export function SkeletonDetail() {
+/**
+ * Page-detail BODY placeholder — the hero/properties grid only. The detail
+ * view renders its real back button and tabs while loading (/ui: static
+ * chrome is known — mask only the data).
+ */
+export function SkeletonDetailBody() {
   return (
     <div
       role="status"
       aria-label="Loading page"
       aria-busy="true"
-      className="space-y-6"
+      className="grid gap-4 lg:grid-cols-3"
     >
-      <div className="space-y-3">
-        <Skeleton className="h-4 w-20" />
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-2 w-2 rounded-full" />
-          <Skeleton className="h-3 w-40" />
+      <div className="@card flex flex-col p-5 lg:col-span-2">
+        <Skeleton className="h-3.5 w-36" />
+        <Skeleton className="mt-3 h-8 w-14" />
+        <Skeleton className="mt-2 h-3 w-40" />
+        <div className="mt-6 space-y-2 border-t border-border pt-3">
+          <Skeleton className="h-3 w-52" />
+          <Skeleton className="h-3 w-60" />
         </div>
       </div>
-      <div className="flex gap-4 border-b border-border pb-3">
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-14" />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="@card flex flex-col p-5 lg:col-span-2">
-          <Skeleton className="h-3.5 w-36" />
-          <Skeleton className="mt-3 h-8 w-14" />
-          <Skeleton className="mt-2 h-3 w-40" />
-          <div className="mt-6 space-y-2 border-t border-border pt-3">
-            <Skeleton className="h-3 w-52" />
-            <Skeleton className="h-3 w-60" />
+      <div className="@card space-y-4 p-5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between">
+            <Skeleton className="h-3 w-14" />
+            <Skeleton className="h-3.5 w-16" />
           </div>
-        </div>
-        <div className="@card space-y-4 p-5">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <Skeleton className="h-3 w-14" />
-              <Skeleton className="h-3.5 w-16" />
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
     </div>
   );

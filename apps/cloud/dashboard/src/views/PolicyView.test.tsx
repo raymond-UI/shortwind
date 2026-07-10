@@ -25,8 +25,14 @@ describe("PolicyView (operator policy toggle — the one mutation)", () => {
     });
   });
 
-  it("shows the loading branch while policy is undefined", () => {
+  it("keeps static text visible while policy loads (/ui: mask only dynamics)", () => {
     renderWithData(<PolicyView />, { policy: undefined });
-    expect(screen.getByRole("status", { name: /loading policy/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: /loading policy/i }),
+    ).toBeInTheDocument();
+    // The toggle's label/description are known — they render immediately.
+    expect(
+      screen.getByText("Custom domain needs approval"),
+    ).toBeInTheDocument();
   });
 });

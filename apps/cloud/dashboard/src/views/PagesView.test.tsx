@@ -119,6 +119,13 @@ describe("PagesView (Overview cards)", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent(/shortwind deploy/);
   });
 
+  it("keeps header and controls visible while pages load", () => {
+    renderWithData(<PagesView />, { pages: undefined });
+    expect(screen.getByText("Your hosted pages")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search pages")).toBeInTheDocument();
+    expect(screen.getByTestId("pages-loading")).toBeInTheDocument();
+  });
+
   it("renders the empty state", () => {
     renderWithData(<PagesView />, { pages: [] });
     expect(screen.getByTestId("pages-empty")).toBeInTheDocument();

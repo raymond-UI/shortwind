@@ -49,6 +49,19 @@ describe("ProjectDetail", () => {
     expect(onBack).toHaveBeenCalled();
   });
 
+  it("keeps back button and tabs visible while pages load", () => {
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />, {
+      pages: undefined,
+    });
+    expect(
+      screen.getByRole("button", { name: /All pages/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "overview" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: /loading page/i }),
+    ).toBeInTheDocument();
+  });
+
   it("handles an unknown page id", () => {
     renderWithData(<ProjectDetail pageId="nope" onBack={() => {}} />);
     expect(screen.getByText("Page not found")).toBeInTheDocument();
