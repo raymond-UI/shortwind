@@ -1,37 +1,94 @@
 ---
-import { docHref } from "../lib/docs-nav";
+import { docHref, docsForProduct, landingFor, PRODUCTS } from "../lib/docs-nav";
 import { rc } from "../lib/expand";
-import type { Doc } from "../lib/docs-nav";
+import type { Doc, Product } from "../lib/docs-nav";
 
 interface Props {
   docs: Doc[];
   current: string;
 }
 const { docs, current } = Astro.props;
+
+// The active product is the one the current page belongs to; the switcher tab
+// for the other product links to that tree's first page.
+const currentDoc = docs.find((d) => d.id === current);
+const activeProduct: Product = currentDoc?.data.product ?? "core";
+const pages = docsForProduct(docs, activeProduct);
 ---
 
-<nav aria-label="Documentation" class="@stack-xs">
-  <p class="@eyebrow mb-3">Documentation</p>
-  {
-    docs.map((d) => {
-      const active = d.id === current;
-      return (
-        <a
-          href={docHref(d.id)}
-          aria-current={active ? "page" : undefined}
-          class={
-            "flex items-center gap-2 rounded-md px-2 py-1 font-mono text-sm transition-colors " +
-            (active
-              ? "text-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground")
-          }
-        >
-          <span class={active ? rc("@term") : "text-transparent"} aria-hidden="true">
-            ›
-          </span>
-          <span class="truncate">{d.data.title}</span>
-        </a>
-      );
-    })
-  }
+<nav aria-label="Documentation" class="@stack-sm">
+  {/* Product switcher — makes Core vs Cloud unmistakable. Tabs are links to
+      each tree's first page; the active one is derived from the current page.
+      Cloud keeps its green dot even when inactive so its identity is constant. */}
+  <div
+    role="tablist"
+    aria-label="Product"
+    class="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1"
+  >
+    {
+      PRODUCTS.map((p) => {
+        const active = p.id === activeProduct;
+        const target = landingFor(docs, p.id);
+        return (
+          <a
+            href={target ? docHref(target.id) : "/docs"}
+            role="tab"
+            aria-selected={active ? "true" : "false"}
+            class={
+              "flex flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5 font-mono transition-colors " +
+              (active
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                : "text-muted-foreground hover:text-foreground")
+            }
+          >
+            <span class="flex items-center gap-1.5 text-sm font-semibold">
+              {p.id === "cloud" && (
+                <span
+                  class={active ? rc("@term") : "text-muted-foreground/60"}
+                  aria-hidden="true"
+                >
+                  ●
+                </span>
+              )}
+              {p.label}
+            </span>
+            <span class="text-[0.6875rem] leading-tight opacity-70">
+              {p.blurb}
+            </span>
+          </a>
+        );
+      })
+    }
+  </div>
+
+  <div class="@stack-xs pt-1">
+    {
+      pages.map((d) => {
+        const active = d.id === current;
+        // Cloud's active marker is its green accent; Core's is the neutral one.
+        const marker =
+          activeProduct === "cloud" ? rc("@term") : "text-foreground";
+        return (
+          <a
+            href={docHref(d.id)}
+            aria-current={active ? "page" : undefined}
+            class={
+              "flex items-center gap-2 rounded-md px-2 py-1 font-mono text-sm transition-colors " +
+              (active
+                ? "text-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground")
+            }
+          >
+            <span
+              class={active ? marker : "text-transparent"}
+              aria-hidden="true"
+            >
+              ›
+            </span>
+            <span class="truncate">{d.data.title}</span>
+          </a>
+        );
+      })
+    }
+  </div>
 </nav>
