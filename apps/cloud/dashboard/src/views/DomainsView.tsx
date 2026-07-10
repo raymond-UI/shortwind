@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
+import { formatTime, relativeTime } from "../lib/format";
 import { CopyValue } from "../components/CopyValue";
 import { SectionHeader } from "../components/SectionHeader";
 import { SkeletonPanel } from "../components/Skeleton";
@@ -152,11 +153,8 @@ export function DomainsView() {
       title="Bring your own domain"
       description={
         <>
-          Account-wide — every page also serves at{" "}
-          <span className="font-mono">your-domain/&lt;slug&gt;</span>. Bind a
-          subdomain you own (e.g.{" "}
-          <span className="font-mono">pages.example.com</span>), not a bare
-          apex.
+          Bind a subdomain you own — every page also serves at{" "}
+          <span className="font-mono">your-domain/&lt;slug&gt;</span>.
         </>
       }
     />
@@ -211,12 +209,12 @@ export function DomainsView() {
               value={hostname}
               onChange={(e) => setHostname(e.target.value)}
               placeholder="pages.example.com"
-              className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:border-ring focus:outline-none"
+              className="@input min-w-0 sm:flex-1"
               data-testid="domain-input"
             />
             <button
               type="submit"
-              className="@btn-outline shrink-0"
+              className="@button-primary-sm shrink-0"
               disabled={busy !== null || hostname.trim().length === 0}
               data-testid="domain-connect"
             >
@@ -228,61 +226,99 @@ export function DomainsView() {
 
       {accountDomains.map((d: AccountDomainRow) => {
         const s = STATUS_STYLE[d.status];
+        const active = d.status === "active";
+        // Same anatomy as the Overview cards: identity block + semibold name
+        // over a dim sub-line, dot-only for the good state (words are for
+        // exceptions), and a quiet border-separated footer with the meta +
+        // the action that applies.
         return (
           <div
             key={d.id}
             data-testid={`domain-${d.hostname}`}
-            className="@card space-y-3"
+            className="@card flex flex-col p-5"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-0.5">
-                <div className="truncate font-mono text-sm font-semibold">
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden="true"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary text-xs font-semibold text-term"
+              >
+                ⊞
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-semibold leading-6 tracking-tight">
                   {d.hostname}
                 </div>
-                <div className="@caption">{s.hint}</div>
+                <div className="truncate text-xs text-muted-foreground/80">
+                  {d.hostname}/&lt;slug&gt;
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {d.status === "active" ? (
-                  <StatusBadge status={d.status} />
-                ) : (
-                  <>
-                    <StatusBadge status={d.status} />
-                    {d.status === "pending-human" ? (
-                      <button
-                        type="button"
-                        className="@btn-outline"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void run("approve", () => approveDomain(d.hostname))
-                        }
-                        data-testid={`domain-approve-${d.hostname}`}
-                      >
-                        {busy === "approve" ? "Approving…" : "Approve"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="@btn-outline"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void run("recheck", () => recheckDomain(d.hostname))
-                        }
-                        data-testid={`domain-recheck-${d.hostname}`}
-                      >
-                        {busy === "recheck" ? "Checking…" : "Check status"}
-                      </button>
-                    )}
-                  </>
-                )}
-                {d.status === "active" ? (
+              {active ? (
+                <span className="mt-1.5 flex shrink-0" title="active">
+                  <span
+                    className="h-2 w-2 rounded-full bg-term"
+                    aria-hidden="true"
+                  />
+                  <span className="sr-only">active</span>
                   <span data-testid={`domain-active-${d.hostname}`} hidden />
-                ) : null}
-              </div>
+                </span>
+              ) : (
+                <StatusBadge status={d.status} />
+              )}
             </div>
 
-            {d.status !== "active" ? (
-              <DnsInstructions hostname={d.hostname} cnameTarget={cnameTarget} />
+            {!active ? (
+              <div className="mt-4">
+                <DnsInstructions
+                  hostname={d.hostname}
+                  cnameTarget={cnameTarget}
+                />
+              </div>
             ) : null}
+
+            <div className="mt-6 flex items-center gap-3 border-t border-border pt-3">
+              <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+                {active ? (
+                  d.verifiedAt !== null ? (
+                    <span title={formatTime(d.verifiedAt)}>
+                      verified {relativeTime(d.verifiedAt)}
+                    </span>
+                  ) : (
+                    "verified"
+                  )
+                ) : (
+                  s.hint
+                )}
+              </span>
+              {!active ? (
+                <span className="ml-auto shrink-0">
+                  {d.status === "pending-human" ? (
+                    <button
+                      type="button"
+                      className="@button-secondary-sm"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void run("approve", () => approveDomain(d.hostname))
+                      }
+                      data-testid={`domain-approve-${d.hostname}`}
+                    >
+                      {busy === "approve" ? "Approving…" : "Approve"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="@button-secondary-sm"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void run("recheck", () => recheckDomain(d.hostname))
+                      }
+                      data-testid={`domain-recheck-${d.hostname}`}
+                    >
+                      {busy === "recheck" ? "Checking…" : "Check status"}
+                    </button>
+                  )}
+                </span>
+              ) : null}
+            </div>
           </div>
         );
       })}

@@ -58,20 +58,20 @@ export function PolicyView() {
           </div>
         </div>
         {loading ? (
-          <Skeleton className="h-9 w-20 shrink-0" />
+          <Skeleton className="h-7 w-20 shrink-0" />
         ) : (
           <button
             type="button"
             onClick={toggleCustomDomain}
             disabled={saving}
             data-testid="toggle-custom-domain"
-            className="@btn-outline shrink-0"
+            className="@button-secondary-sm shrink-0"
           >
             {saving ? "Saving…" : on ? "Turn off" : "Turn on"}
           </button>
         )}
       </div>
-      <div className="@caption tabular-nums">
+      <div className="mt-2 border-t border-border pt-3 text-[11px] text-muted-foreground tabular-nums">
         last set:{" "}
         {policy === undefined ? (
           <Skeleton className="inline-block h-3 w-14 align-middle" />

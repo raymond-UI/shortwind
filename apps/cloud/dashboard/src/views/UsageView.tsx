@@ -23,8 +23,8 @@ export function UsageView() {
       title="What this account is using"
       description={
         <span data-testid="usage-cost-note">
-          Metered to what costs money (PRD §6.4): publishes, custom domains,
-          and storage. Page views are not billed — a viral page costs nothing.
+          Publishes, custom domains, and storage — page views aren’t billed; a
+          viral page costs nothing.
         </span>
       }
     />
@@ -71,8 +71,11 @@ export function UsageView() {
             className="rounded-lg border border-border bg-card p-5"
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{m.label}</span>
-              <span className="text-term" aria-hidden="true">
+              <span className="@stat-label">{m.label}</span>
+              <span
+                aria-hidden="true"
+                className="grid h-7 w-7 place-items-center rounded-md border border-border bg-secondary text-xs text-term"
+              >
                 {m.glyph}
               </span>
             </div>

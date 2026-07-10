@@ -3,7 +3,7 @@ import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime } from "../lib/format";
 import { PolicyView } from "./PolicyView";
 import { Badge } from "../components/Badge";
-import { EmptyState } from "../components/EmptyState";
+import { CopyValue } from "../components/CopyValue";
 import { SectionHeader } from "../components/SectionHeader";
 import { SkeletonRows } from "../components/Skeleton";
 import type { TokenRow } from "../lib/types";
@@ -31,7 +31,7 @@ export function SettingsView() {
         <SectionHeader
           eyebrow="Access"
           title="API tokens"
-          description="Scoped bearer tokens used by the CLI and agents. Revoke any you no longer trust."
+          description="Scoped bearer tokens for the CLI and agents."
         />
         <TokenList />
       </section>
@@ -46,13 +46,18 @@ function TokenList() {
     return <SkeletonRows count={3} label="Loading tokens" />;
   }
   if (tokens.length === 0) {
+    // Same ghost pattern as the Overview archive card — compact, with the
+    // CLI command right there to copy instead of a hero-sized empty state.
     return (
-      <EmptyState
-        icon="🔑"
-        title="No API tokens"
-        description="Run `shortwind cloud login` to mint one."
-        testId="tokens-empty"
-      />
+      <div
+        data-testid="tokens-empty"
+        className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground"
+      >
+        <span>No API tokens yet — mint one from the CLI</span>
+        <div className="rounded-md border border-border bg-secondary/50 px-2 py-1">
+          <CopyValue value="shortwind cloud login" />
+        </div>
+      </div>
     );
   }
 
