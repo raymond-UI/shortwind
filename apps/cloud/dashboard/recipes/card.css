@@ -1,4 +1,4 @@
-/* shortwind: card@0.0.1 sha:4813cef10cd21824 — DO NOT EDIT THIS LINE */
+/* shortwind: card@0.0.1 sha:10b45c72678d76e7 — DO NOT EDIT THIS LINE */
 
 /* @guide
    Pick exactly one container: @card (default), @card-elevated (raised shadow),
@@ -7,9 +7,10 @@
    @card-header / @card-body / @card-footer.
 */
 
-/* Default content card with border, padding, and surface color. */
+/* Default content card with border, padding, surface color, and the shadcn
+   whisper of elevation. */
 @recipe card {
-  rounded-lg border border-border bg-card text-card-foreground p-4
+  rounded-xl border border-border bg-card text-card-foreground p-4 shadow-xs
 }
 
 /* Card with raised shadow for emphasis. */
@@ -19,12 +20,12 @@
 
 /* Card without border, on a muted surface. */
 @recipe card-flat {
-  rounded-lg bg-muted text-foreground p-4
+  rounded-xl bg-muted text-foreground p-4
 }
 
-/* Clickable card with hover and focus-visible states. */
+/* Clickable card — border warms and shadow lifts a step on hover. */
 @recipe card-interactive {
-  @card cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+  @card cursor-pointer transition-[border-color,box-shadow] hover:border-ring/40 hover:shadow-sm focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none
 }
 
 /* Card header region with bottom divider. */

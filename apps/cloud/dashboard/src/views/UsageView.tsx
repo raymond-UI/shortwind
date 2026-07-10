@@ -59,7 +59,7 @@ export function UsageView() {
           <div
             key={m.key}
             data-testid={`usage-meter-${m.key}`}
-            className="rounded-lg border border-border bg-card p-5"
+            className="@card p-5"
           >
             <div className="flex items-center justify-between">
               <span className="@stat-label">{m.label}</span>

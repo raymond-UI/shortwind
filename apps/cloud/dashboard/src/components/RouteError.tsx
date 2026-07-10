@@ -55,7 +55,7 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
 
   return (
     <Shell>
-      <div className="rounded-lg border border-border bg-card p-6 text-center">
+      <div className="@card p-6 text-center">
         <div
           className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-destructive/30 bg-destructive/10 text-destructive"
           aria-hidden="true"
@@ -107,7 +107,7 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
 export function RouteNotFound() {
   return (
     <Shell>
-      <div className="rounded-lg border border-border bg-card p-6 text-center">
+      <div className="@card p-6 text-center">
         <div
           className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-border bg-secondary text-muted-foreground"
           aria-hidden="true"

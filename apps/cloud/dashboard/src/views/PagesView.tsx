@@ -233,7 +233,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
       {shown.length === 0 ? (
         <p
           data-testid="pages-no-match"
-          className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
+          className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
         >
           No pages match{q ? <> “{query.trim()}”</> : null}. Try a different
           search or status.
@@ -254,7 +254,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
                 type="button"
                 data-testid="pages-archive-ghost"
                 onClick={() => setStatus("archived")}
-                className="flex h-full min-h-28 w-full items-center justify-center rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+                className="flex h-full min-h-28 w-full items-center justify-center rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
               >
                 View {archivedCount} archived{" "}
                 {archivedCount === 1 ? "page" : "pages"} →
@@ -296,7 +296,7 @@ function PageCard({
       data-testid={`page-card-${page.slug}`}
       className={
         (interactive ? "@card-interactive" : "@card") +
-        " relative flex h-full flex-col p-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
+        " relative flex h-full flex-col p-5 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
       }
     >
       <div className="flex items-start gap-3">
@@ -313,7 +313,7 @@ function PageCard({
                 type="button"
                 onClick={() => onOpen?.(page.id)}
                 title={page.slug}
-                className="after:absolute after:inset-0 after:rounded-lg focus:outline-none"
+                className="after:absolute after:inset-0 after:rounded-xl focus:outline-none"
               >
                 {page.slug}
               </button>

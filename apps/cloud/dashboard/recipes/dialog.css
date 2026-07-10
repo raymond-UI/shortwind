@@ -1,4 +1,4 @@
-/* shortwind: dialog@0.0.1 sha:b4dbf853e99fce75 — DO NOT EDIT THIS LINE */
+/* shortwind: dialog@0.0.1 sha:a8ec11f08563af42 — DO NOT EDIT THIS LINE */
 
 /* @guide
    A modal is three layers: @dialog-overlay (dimmed backdrop), @dialog (the
@@ -12,14 +12,14 @@
   fixed inset-0 z-50 flex items-center justify-center p-4
 }
 
-/* Dimmed overlay behind the dialog. */
+/* Dimmed overlay behind the dialog — token-driven scrim with a soft blur. */
 @recipe dialog-overlay {
-  fixed inset-0 z-40 bg-black/50
+  fixed inset-0 z-40 bg-background/80 backdrop-blur-sm
 }
 
 /* Dialog content panel. */
 @recipe dialog-content {
-  relative z-50 w-full max-w-md rounded-lg border border-border bg-popover text-popover-foreground p-6 shadow-xl
+  relative z-50 w-full max-w-md rounded-xl border border-border bg-popover text-popover-foreground p-6 shadow-lg
 }
 
 /* Dialog header region with title. */

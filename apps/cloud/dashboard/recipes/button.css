@@ -1,4 +1,4 @@
-/* shortwind: button@0.0.2 sha:b0b08652cd757b90 — DO NOT EDIT THIS LINE */
+/* shortwind: button@0.0.2 sha:f7eef129285cabc5 — DO NOT EDIT THIS LINE */
 
 /* @guide
    Name order is @button-<intent>[-<size>]: intent first (primary/secondary/
@@ -10,14 +10,15 @@
    full-word @button-* names are canonical — prefer them.
 */
 
-/* Shared button base — sizing, focus ring, disabled state. */
+/* Shared button base — sizing, ring focus, disabled state (shadcn feel:
+   3px soft ring on focus, whitespace-nowrap, pointer-events off when disabled). */
 @recipe btn-base {
-  inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+  inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium outline-none transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50
 }
 
 /* Primary call-to-action button. */
 @recipe btn-primary {
-  @btn-base bg-primary text-primary-foreground hover:bg-primary/90
+  @btn-base bg-primary text-primary-foreground shadow-xs hover:bg-primary/90
 }
 
 /* Small primary button. */
@@ -32,7 +33,7 @@
 
 /* Secondary button — bordered surface tone. */
 @recipe btn-secondary {
-  @btn-base border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80
+  @btn-base border border-border bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80
 }
 
 /* Small secondary button. */
@@ -62,17 +63,17 @@
 
 /* Destructive button. */
 @recipe btn-danger {
-  @btn-base bg-destructive text-destructive-foreground hover:bg-destructive/90
+  @btn-base bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/30
 }
 
 /* Outline button — bordered without fill. */
 @recipe btn-outline {
-  @btn-base border border-primary text-primary hover:bg-primary/10
+  @btn-base border border-primary text-primary shadow-xs hover:bg-primary/10
 }
 
 /* Square icon-only button. */
 @recipe btn-icon {
-  inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50
+  inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground outline-none transition-all hover:bg-muted focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50
 }
 
 /* Full-word canonical aliases — expand identically to the @btn-* short forms. */
