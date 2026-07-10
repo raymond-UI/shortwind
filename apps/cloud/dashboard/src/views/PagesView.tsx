@@ -85,20 +85,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
 
   return (
     <div className="space-y-5">
-      <SectionHeader
-        eyebrow="Pages"
-        title="Your hosted pages"
-        description="Every published page, its live URL, visibility, and latest version. Open one for its deployment history and settings."
-        actions={
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground tabular-nums">
-            <span
-              className="h-1.5 w-1.5 rounded-full bg-term"
-              aria-hidden="true"
-            />
-            {liveCount} live · {pages.length} total
-          </span>
-        }
-      />
+      <SectionHeader eyebrow="Pages" title="Your hosted pages" />
 
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
         <input
@@ -214,13 +201,10 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
                 type="button"
                 data-testid="pages-archive-ghost"
                 onClick={() => setStatus("archived")}
-                className="flex h-full min-h-28 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+                className="flex h-full min-h-28 w-full items-center justify-center rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
               >
-                <span>
-                  {archivedCount} archived{" "}
-                  {archivedCount === 1 ? "page" : "pages"} hidden by filter
-                </span>
-                <span className="font-medium">View archive →</span>
+                View {archivedCount} archived{" "}
+                {archivedCount === 1 ? "page" : "pages"} →
               </button>
             </li>
           ) : null}
@@ -268,28 +252,35 @@ function PageCard({
   const { page } = entry;
   const host = pageHost(page.slug);
   const interactive = Boolean(onOpen);
+  const live = page.lifecycle === "active";
+  const visibleTags = page.tags.slice(0, 2);
+  const extraTags = page.tags.length - visibleTags.length;
 
   // Accessible clickable card: the title is a real <button> whose hit area is
   // stretched over the whole card (`after:absolute after:inset-0`); the Visit
   // link sits above it (`relative z-10`). Real focusable controls + no nested
   // interactives (button and link are siblings) — unlike a `div role="button"`.
+  //
+  // Hierarchy rule: the card states only EXCEPTIONS. Live (the default under
+  // the Live filter) is just a dot; unlisted (the default visibility) shows no
+  // badge. Version + age live in a separated quiet footer, not a sentence.
   return (
     <article
       data-testid={`page-card-${page.slug}`}
       className={
         (interactive ? "@card-interactive" : "@card") +
-        " @stack-sm relative h-full focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
+        " relative flex h-full flex-col p-5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring"
       }
     >
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-secondary text-xs font-semibold uppercase text-term"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary text-xs font-semibold uppercase text-term"
         >
           {page.slug[0]}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-medium">
+          <h3 className="truncate text-[15px] font-semibold leading-6 tracking-tight">
             {interactive ? (
               <button
                 type="button"
@@ -307,26 +298,41 @@ function PageCard({
             href={pageUrl(page.slug)}
             target="_blank"
             rel="noreferrer"
-            className="@link relative z-10 block truncate text-xs text-muted-foreground hover:text-term"
+            className="@link relative z-10 block truncate text-xs text-muted-foreground/80 hover:text-term"
             title={host}
           >
             {host} ↗
           </a>
         </div>
-        <LifecycleStatus lifecycle={page.lifecycle} />
+        {live ? (
+          <span className="mt-1.5 flex shrink-0" title="live">
+            <span
+              aria-hidden="true"
+              className="h-2 w-2 rounded-full bg-term"
+            />
+            <span className="sr-only">live</span>
+          </span>
+        ) : (
+          <LifecycleStatus lifecycle={page.lifecycle} />
+        )}
       </div>
 
-      <div className="relative z-10 flex flex-wrap items-center gap-2">
-        <VisibilityBadge visibility={page.visibility} />
-        <Badge>v{page.currentVersion}</Badge>
-        {page.tags.map((t) => (
+      <div className="relative z-10 mt-6 flex items-center gap-1.5 border-t border-border pt-3">
+        {page.visibility !== "unlisted" ? (
+          <VisibilityBadge visibility={page.visibility} />
+        ) : null}
+        {visibleTags.map((t) => (
           <Badge key={t}>{t}</Badge>
         ))}
+        {extraTags > 0 ? (
+          <span className="text-[11px] text-muted-foreground">
+            +{extraTags}
+          </span>
+        ) : null}
+        <span className="ml-auto whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
+          v{page.currentVersion} · {relativeTime(page.updatedAt)}
+        </span>
       </div>
-
-      <p className="relative z-10 mt-auto pt-1 text-[11px] text-muted-foreground">
-        Published {relativeTime(page.updatedAt)} via CLI
-      </p>
     </article>
   );
 }
