@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime, shortHash } from "../lib/format";
-import { pageHost, pageUrl } from "../lib/urls";
+import {
+  accountDomainPageHost,
+  accountDomainPageUrl,
+  pageHost,
+  pageUrl,
+} from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { Dialog } from "../components/Dialog";
@@ -151,7 +156,13 @@ function BackButton({ onBack }: { onBack: () => void }) {
   );
 }
 
-function CopyButton({ value }: { value: string }) {
+function CopyButton({
+  value,
+  label = "copy URL",
+}: {
+  value: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -163,7 +174,7 @@ function CopyButton({ value }: { value: string }) {
       }}
       className="@btn-ghost-sm"
     >
-      {copied ? "copied" : "copy URL"}
+      {copied ? "copied" : label}
     </button>
   );
 }
@@ -181,8 +192,14 @@ function OverviewTab({
   entry: PageWithVersions;
   onViewDeployments: () => void;
 }) {
+  const { accountDomains } = useDashboardData();
   const { page, versions } = entry;
   const current = versions.length > 0 ? versions[0] : null;
+  // Account-level custom domains: a page also serves at `<hostname>/<slug>`
+  // for every ACTIVE domain (pending/failed ones don't resolve yet).
+  const activeDomains = (accountDomains ?? []).filter(
+    (d) => d.status === "active",
+  );
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <section
@@ -208,15 +225,22 @@ function OverviewTab({
             {shortHash(current.expandedHash)}
           </p>
         ) : null}
-        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-3 text-xs">
-          <a
-            href={pageUrl(page.slug)}
-            target="_blank"
-            rel="noreferrer"
-            className="@link text-muted-foreground hover:text-term"
-          >
-            Open live page ↗
-          </a>
+        <div className="mt-6 space-y-1.5 border-t border-border pt-3">
+          <AddressRow
+            testId="address-vanity"
+            url={pageUrl(page.slug)}
+            display={pageHost(page.slug)}
+          />
+          {activeDomains.map((d) => (
+            <AddressRow
+              key={d.id}
+              testId="address-domain"
+              url={accountDomainPageUrl(d.hostname, page.slug)}
+              display={accountDomainPageHost(d.hostname, page.slug)}
+            />
+          ))}
+        </div>
+        <div className="mt-3 text-xs">
           <button
             type="button"
             data-testid="view-deployments"
@@ -254,6 +278,32 @@ function OverviewTab({
           </span>
         </PropertyRow>
       </section>
+    </div>
+  );
+}
+
+/** One address a page serves at — open in a new tab, or copy the full URL. */
+function AddressRow({
+  url,
+  display,
+  testId,
+}: {
+  url: string;
+  display: string;
+  testId?: string;
+}) {
+  return (
+    <div data-testid={testId} className="flex items-center gap-1 text-xs">
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="@link truncate text-muted-foreground hover:text-term"
+        title={url}
+      >
+        {display} ↗
+      </a>
+      <CopyButton value={url} label="copy" />
     </div>
   );
 }

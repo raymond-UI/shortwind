@@ -27,6 +27,21 @@ describe("ProjectDetail", () => {
     expect(screen.getByTestId("deployments")).toBeInTheDocument();
   });
 
+  it("lists the custom-domain address alongside shortwind.app when active", () => {
+    // Fixtures: pages.acme.com is active, www.acme.com is pending approval.
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />);
+    expect(screen.getByText(/pages\.acme\.com\/launch/)).toBeInTheDocument();
+    expect(screen.queryByText(/www\.acme\.com/)).not.toBeInTheDocument();
+  });
+
+  it("shows only the vanity address when no domain is active", () => {
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />, {
+      accountDomains: [],
+    });
+    expect(screen.getByTestId("address-vanity")).toBeInTheDocument();
+    expect(screen.queryByTestId("address-domain")).not.toBeInTheDocument();
+  });
+
   it("calls onBack from the back button", () => {
     const onBack = vi.fn();
     renderWithData(<ProjectDetail pageId="page_1" onBack={onBack} />);
