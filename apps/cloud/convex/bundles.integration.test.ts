@@ -3,17 +3,18 @@ import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
 import { api, internal } from "./_generated/api.js";
+import type { Lockfile } from "../shared/src/lockfile-diff.js";
 
 /**
  * CLOUD-50 — handler-level INTEGRATION test for the bundle publish pipeline,
  * against the REAL `schema.ts` (+ the additive `bundleVersions` table) and the
- * real `bundles.ts` action/query/mutation, wired through `_generated` anyApi.
+ * real `bundles.ts` action/mutation, wired through `_generated` anyApi.
  *
- * Proves end-to-end: a bundle with internal cross-file links publishes; the
- * links resolve to served siblings (the rewrite landed in the stored version's
- * file set + the entry routes to the entry file); the bundle is versioned
- * forward-only and a re-publish retains the prior version (rollback). Runs
- * OFFLINE under convex-test (same pinning note as integration.test.ts).
+ * Proves end-to-end (ENTRY-AS-PAGE model): a bundle publishes the entry as a
+ * real `pages` row, records the sibling sub-pages in a linked `bundleVersions`
+ * row, and the serve resolver (`api.serve.resolveRoute`) returns the ENTRY for
+ * `/` and the SIBLING artifact for `/about.html`. Re-publishing an occupied slug
+ * 409s (like a single-file page). Runs OFFLINE under convex-test.
  */
 
 declare global {
@@ -22,6 +23,8 @@ declare global {
   }
 }
 const modules = import.meta.glob("./**/*.ts");
+
+const LOCKFILE: Lockfile = { version: 1, registry: "default", families: {} };
 
 async function seedAuth(t: ReturnType<typeof convexTest>): Promise<{
   accountId: string;
@@ -47,8 +50,8 @@ async function seedAuth(t: ReturnType<typeof convexTest>): Promise<{
 const CARD = "@recipe card {\n  rounded-lg border p-4\n}\n";
 const cardSource = `/* shortwind: card@0.4.0 sha:deadbeefdeadbeef */\n${CARD}`;
 
-describe("CLOUD-50 bundle integration — publish, route, version retention", () => {
-  it("publishes a linked bundle; links resolve to served siblings; entry routes", async () => {
+describe("CLOUD-50 bundle integration — entry-as-page publish + serving", () => {
+  it("publishes a bundle: entry becomes a page, siblings recorded + served", async () => {
     const t = convexTest(schema, modules);
     const { accountId, bearer } = await seedAuth(t);
 
@@ -59,57 +62,70 @@ describe("CLOUD-50 bundle integration — publish, route, version retention", ()
       files: [
         {
           path: "index.html",
-          html: '<div class="@card"><a href="./about.html">about</a></div>',
+          html: '<div class="@card"><a href="about.html">about</a></div>',
         },
         { path: "about.html", html: '<a href="index.html">home</a>' },
       ],
       recipes: [{ family: "card", source: cardSource }],
-      lockfile: { card: "0.4.0" },
+      lockfile: LOCKFILE,
     });
 
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unexpected 409");
     expect(result.version).toBe(1);
     expect(result.bundleId).toBe("handbook");
-    expect(result.url).toContain("/handbook");
-    expect(result.files).toHaveLength(2);
+    // Entry-as-page → subdomain URL.
+    expect(result.url).toBe("https://handbook.shortwind.app");
+    // Result lists only the sibling sub-pages (the entry is the page).
+    expect(result.files.map((f) => f.path)).toEqual(["about.html"]);
 
-    const entry = result.files.find((f) => f.entry)!;
-    expect(entry.path).toBe("index.html");
-
-    // the bundleVersions row actually landed (handler-level scoping proof) and
-    // carries the entry + the served sibling keys.
     await t.run(async (ctx) => {
-      const rows = await ctx.db
-        .query("bundleVersions")
+      // The entry landed as a real page row.
+      const page = await ctx.db
+        .query("pages")
         .withIndex("by_slug", (q) =>
           q.eq("accountId", accountId as never).eq("slug", "handbook"),
         )
+        .unique();
+      expect(page).not.toBeNull();
+
+      // A bundleVersions row links to that entry page + records the sibling.
+      const rows = await ctx.db
+        .query("bundleVersions")
+        .withIndex("by_entryPage", (q) => q.eq("entryPageId", page!._id))
         .collect();
       expect(rows).toHaveLength(1);
-      const row = rows[0]!;
-      expect(row.version).toBe(1);
-      expect(row.entryPath).toBe("index.html");
-      expect(row.files.map((f) => f.path).sort()).toEqual([
-        "about.html",
-        "index.html",
-      ]);
-      // exactly one entry file is flagged.
-      expect(row.files.filter((f) => f.entry)).toHaveLength(1);
-      // a bundle.publish audit row was written.
+      expect(rows[0]!.entryPath).toBe("index.html");
+      expect(rows[0]!.files.map((f) => f.path)).toEqual(["about.html"]);
+
+      // A bundle.publish audit row was written.
       const audits = await ctx.db
         .query("auditLog")
         .withIndex("by_account", (q) => q.eq("accountId", accountId as never))
         .collect();
       expect(audits.some((a) => a.action === "bundle.publish")).toBe(true);
     });
+
+    // SERVE: the subdomain root resolves the entry; a sibling path resolves the
+    // sibling artifact; an unknown path falls back to the entry.
+    const host = "handbook.shortwind.app";
+    const rootRoute = await t.query(api.serve.resolveRoute, { host, path: "/" });
+    const siblingRoute = await t.query(api.serve.resolveRoute, {
+      host,
+      path: "/about.html",
+    });
+    expect(rootRoute).not.toBeNull();
+    expect(siblingRoute).not.toBeNull();
+    // The sibling serves a DIFFERENT artifact than the entry.
+    expect(siblingRoute!.artifactKey).not.toBe(rootRoute!.artifactKey);
+    expect(siblingRoute!.artifactKey).toContain("bundles/");
   });
 
-  it("is forward-only: re-publishing the slug bumps the version, retaining v1 for rollback", async () => {
+  it("409s when re-publishing an occupied entry slug (entry-as-page)", async () => {
     const t = convexTest(schema, modules);
-    const { accountId, bearer } = await seedAuth(t);
-
+    const { bearer } = await seedAuth(t);
     const files = [
-      { path: "index.html", html: '<a href="./about.html">about</a>' },
+      { path: "index.html", html: '<a href="about.html">about</a>' },
       { path: "about.html", html: "<p>about</p>" },
     ];
     const v1 = await t.action(api.bundles.publishBundle, {
@@ -118,32 +134,21 @@ describe("CLOUD-50 bundle integration — publish, route, version retention", ()
       entryPath: "index.html",
       files,
       recipes: [],
-      lockfile: {},
+      lockfile: LOCKFILE,
     });
+    expect(v1.ok).toBe(true);
+
     const v2 = await t.action(api.bundles.publishBundle, {
       bearer,
       slug: "site",
       entryPath: "index.html",
-      files: [
-        { path: "index.html", html: '<a href="./about.html">about v2</a>' },
-        { path: "about.html", html: "<p>about v2</p>" },
-      ],
+      files,
       recipes: [],
-      lockfile: {},
+      lockfile: LOCKFILE,
     });
-    expect(v1.version).toBe(1);
-    expect(v2.version).toBe(2);
-
-    await t.run(async (ctx) => {
-      const rows = await ctx.db
-        .query("bundleVersions")
-        .withIndex("by_slug", (q) =>
-          q.eq("accountId", accountId as never).eq("slug", "site"),
-        )
-        .collect();
-      // BOTH versions retained (frozen) — rollback target still present.
-      expect(rows.map((r) => r.version).sort()).toEqual([1, 2]);
-    });
+    expect(v2.ok).toBe(false);
+    if (v2.ok) throw new Error("expected a 409 collision");
+    expect(v2.status).toBe(409);
   });
 
   it("rejects an unscoped/missing bearer at the handler boundary", async () => {
@@ -154,7 +159,7 @@ describe("CLOUD-50 bundle integration — publish, route, version retention", ()
         entryPath: "index.html",
         files: [{ path: "index.html", html: "<p>x</p>" }],
         recipes: [],
-        lockfile: {},
+        lockfile: LOCKFILE,
       }),
     ).rejects.toThrow();
   });

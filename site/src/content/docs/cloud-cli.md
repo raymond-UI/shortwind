@@ -33,6 +33,9 @@ server-side, freezes version 1, and prints the live URL, id, and version.
 - `--tag <tag>`: attach a tag (repeatable).
 - `--visibility <level>`: `public` | `unlisted` | `private`.
 - `--idempotency-key <key>`: safe-retry key.
+- `--bundle`: publish `<file>`'s whole directory as a linked multi-page unit,
+  with `<file>` as the entry point. See
+  [multi-page publishes](/docs/cloud-publishing#multi-page-publishes).
 
 On a slug collision it prints the existing page id and the `update` command to
 reuse it.

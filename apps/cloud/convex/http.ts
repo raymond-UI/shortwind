@@ -217,6 +217,89 @@ const publishHandler = httpAction(async (ctx, request) => {
   }
 });
 
+/**
+ * Validate the `POST /v1/bundles` body BEFORE the action (mirrors
+ * `validatePageWriteBody`): a non-empty `files` array of `{ path, html }`, an
+ * `entryPath` string, and the `lockfile` object. Returns an error string or null.
+ */
+function validateBundleWriteBody(body: Record<string, unknown>): string | null {
+  const files = body["files"];
+  if (!Array.isArray(files) || files.length === 0) {
+    return "`files` is required and must be a non-empty array";
+  }
+  for (const f of files) {
+    if (
+      typeof f !== "object" ||
+      f === null ||
+      typeof (f as Record<string, unknown>)["path"] !== "string" ||
+      typeof (f as Record<string, unknown>)["html"] !== "string"
+    ) {
+      return "each file must be `{ path: string, html: string }`";
+    }
+  }
+  if (typeof body["entryPath"] !== "string" || body["entryPath"] === "") {
+    return "`entryPath` is required and must be a non-empty string";
+  }
+  const lockfile = body["lockfile"];
+  if (typeof lockfile !== "object" || lockfile === null) {
+    return "`lockfile` is required and must be an object";
+  }
+  const visibility = body["visibility"];
+  if (
+    visibility !== undefined &&
+    visibility !== "public" &&
+    visibility !== "unlisted" &&
+    visibility !== "private"
+  ) {
+    return "`visibility` must be one of public | unlisted | private";
+  }
+  return null;
+}
+
+/**
+ * POST /v1/bundles → publish a linked multi-page unit (CLOUD-50). Body is the
+ * api-client's `BundlePayload` (files / entryPath / recipes / lockfile / slug /
+ * title / css / tags / visibility); the bearer rides in the Authorization
+ * header. An occupied entry slug returns 409 with a top-level `existingId`
+ * (same shape as `POST /v1/pages`).
+ */
+const bundleHandler = httpAction(async (ctx, request) => {
+  const bearer = bearerFromRequest(request);
+  const body = await readJsonBody(request);
+  const invalid = validateBundleWriteBody(body);
+  if (invalid) {
+    return json({ error: { code: "BAD_REQUEST", message: invalid } }, 400);
+  }
+  try {
+    const outcome = await ctx.runAction(api.bundles.publishBundle, {
+      bearer,
+      files: body["files"] as { path: string; html: string }[],
+      entryPath: body["entryPath"] as string,
+      slug: body["slug"] as string | undefined,
+      title: body["title"] as string | undefined,
+      recipes: (body["recipes"] ?? []) as { family: string; source: string }[],
+      lockfile: body["lockfile"] as never,
+      tags: body["tags"] as string[] | undefined,
+      visibility: body["visibility"] as never,
+      css: body["css"] as string | undefined,
+    });
+    if (!outcome.ok) {
+      return json({ existingId: outcome.existingId }, outcome.status);
+    }
+    return json(
+      {
+        bundleId: outcome.bundleId,
+        url: outcome.url,
+        version: outcome.version,
+        files: outcome.files,
+      },
+      200,
+    );
+  } catch (err) {
+    return errorResponse(err);
+  }
+});
+
 /** Split a `/v1/pages/...` path into its trailing segments after `pages`. */
 function pagesPathSegments(pathname: string): string[] {
   const parts = pathname.split("/").filter(Boolean); // ["v1","pages",id,...]
@@ -716,6 +799,7 @@ http.route({
 
 http.route({ path: "/v1/pages", method: "GET", handler: findHandler });
 http.route({ path: "/v1/pages", method: "POST", handler: publishHandler });
+http.route({ path: "/v1/bundles", method: "POST", handler: bundleHandler });
 http.route({
   pathPrefix: "/v1/pages/",
   method: "GET",

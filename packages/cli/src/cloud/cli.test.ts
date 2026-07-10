@@ -59,6 +59,15 @@ describe("argument parsing", () => {
     expect(r.parsed.tags).toEqual(["a", "b"]);
     expect(r.parsed.visibility).toBe("unlisted");
     expect(r.parsed.idempotencyKey).toBe("key-1");
+    // --bundle absent → single-file publish.
+    expect(r.parsed.bundle).toBe(false);
+  });
+
+  it("publish --bundle marks a multi-page bundle deploy", () => {
+    const r = parse(["publish", "./site/index.html", "--bundle"]);
+    expect(r.verb).toBe("publish");
+    expect(r.parsed.file).toBe("./site/index.html");
+    expect(r.parsed.bundle).toBe(true);
   });
 
   it("update parses id and file positionals", () => {

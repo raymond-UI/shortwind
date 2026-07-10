@@ -122,6 +122,10 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
     .option("--tag <tag>", "Attach a tag (repeatable)")
     .option("--visibility <level>", "public | unlisted | private")
     .option("--idempotency-key <key>", "Idempotency key for safe retries")
+    .option(
+      "--bundle",
+      "Publish <file>'s directory as a linked multi-page unit (<file> is the entry)",
+    )
     .option("--json", "Emit machine-readable JSON")
     .action(
       (
@@ -131,6 +135,7 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
           tag?: string | string[];
           visibility?: string;
           idempotencyKey?: string;
+          bundle?: boolean;
           json?: boolean;
         },
       ) => {
@@ -247,6 +252,10 @@ export function buildRealCli(): CAC {
     .option("--tag <tag>", "Attach a tag (repeatable)")
     .option("--visibility <level>", "public | unlisted | private")
     .option("--idempotency-key <key>", "Idempotency key for safe retries")
+    .option(
+      "--bundle",
+      "Publish <file>'s directory as a linked multi-page unit (<file> is the entry)",
+    )
     .option("--endpoint <url>", "Cloud API origin")
     .option("--json", "Emit machine-readable JSON")
     .action(
@@ -257,6 +266,7 @@ export function buildRealCli(): CAC {
           tag?: string | string[];
           visibility?: string;
           idempotencyKey?: string;
+          bundle?: boolean;
           endpoint?: string;
           json?: boolean;
         },

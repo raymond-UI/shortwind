@@ -4,45 +4,44 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireWrite } from "./lib/auth_guard.js";
 import { deriveSlug, validateSlug } from "../shared/src/slug.js";
+import { normalizeBundlePath } from "./lib/bundle_path.js";
 import {
   assembleArtifact,
-  pageUrl,
+  lockfileVersions,
+  runPublish,
   type Actor,
+  type CollisionResult,
+  type PublishDeps,
   type StoragePort,
 } from "./lib/publish_core.js";
+import { makeDeps, makeStoragePort, runPublishScan } from "./pages.js";
 import { expandPage, type RecipeSource } from "./expand.js";
+import type { Lockfile } from "../shared/src/lockfile-diff.js";
 
 /**
- * CLOUD-50 — Bundles: linked multi-file deploys with one entry point
- * (PRD §10 Phase 3; the §2.2 fast-follow to single-file deploys).
+ * CLOUD-50 — Bundles: a linked multi-page unit published under ONE entry point.
  *
- * A BUNDLE is a set of HTML files deployed as ONE unit under ONE entry point.
- * Files may link to one another with ordinary relative links (`<a href>`,
- * `<img src>`, …). Because the served artifacts live at content-addressed R2
- * keys (NOT at the author's relative paths), those cross-file links must be
- * REWRITTEN to the served sibling URLs BEFORE deploy ("link-before-deploy",
- * PRD §10). A link that points OUT of the bundle (absolute URL, `mailto:`,
- * anchor-only, or a path with no sibling) is left untouched.
+ * A BUNDLE is a set of HTML files deployed together: an ENTRY page plus sibling
+ * sub-pages, all reachable at `<subdomain>.shortwind.app/<path>`. Files link to
+ * one another with ordinary relative links (`<a href="about.html">`).
  *
- * REUSE (CLAUDE.md dependency direction + the CLOUD-23 single-file machinery):
- * each file is expanded with `expandPage`, assembled with `assembleArtifact`,
- * keyed with `artifactKey`, and written to R2 through the SAME `StoragePort`
- * the single-file publish uses — nothing is re-implemented. Versioning is the
- * same forward-only model as `pageVersions` (PRD §5.6): a `bundleVersions` row
- * is appended per publish, the prior version is retained (frozen) for rollback,
- * and the bundle record re-points at the new version.
+ * ENTRY-AS-PAGE (the resolved model): the entry file is published as a normal
+ * `pages` row via the single-file {@link runPublish} — so it reserves the
+ * globally-unique subdomain and inherits versioning, visibility, lifecycle, the
+ * kill/tombstone path, and the R2 write with ZERO duplication. The sibling files
+ * are expanded + written to R2 and recorded in an additive `bundleVersions` row
+ * linked back to the entry page (`entryPageId`). The serve path resolves the
+ * entry by subdomain (unchanged) and a sibling by looking the page up, then its
+ * bundle, then matching the request path (see `serve.resolveRoute`).
+ *
+ * NO LINK REWRITING: because each file serves at its AUTHORED path on the entry's
+ * subdomain, the author's relative links resolve natively in the browser. The
+ * old "link-before-deploy" rewrite (which assumed files lived at opaque R2 keys)
+ * is gone.
  *
  * As with `lib/publish_core`, ALL business logic is a PURE function over plain
- * serializable data with IO behind injected ports; the Convex action below is
- * the thin adapter that builds the real ports over `ctx`. The pure core is
- * unit/golden tested with in-memory ports (no Convex harness).
- *
- * Schema: ADDITIVE `bundleVersions` table only (see schema.ts). No existing
- * table/field is touched and no separate bundle-record table is added — a bundle
- * is identified by its account-scoped `slug`, and its CURRENT version is the
- * highest `version` row for that (accountId, slug). Bundle SERVING through the
- * worker is a follow-up (CLOUD-30b): this issue lands the publish pipeline + the
- * routed entry point.
+ * serializable data with IO behind injected ports; the Convex action is the thin
+ * adapter that builds the real ports over `ctx` (reusing `pages.ts`'s).
  */
 
 // ===========================================================================
@@ -70,13 +69,17 @@ export interface PublishBundleInput {
   title?: string;
   /** The full recipe set carried on this publish (shared across the bundle). */
   recipes: readonly { family: string; source: string }[];
-  /** The incoming `.shortwind-lock.json` snapshot (family → version map). */
-  lockfile: Record<string, string>;
+  /** The incoming `.shortwind-lock.json` snapshot. */
+  lockfile: Lockfile;
+  /** Discovery tags for the entry page. */
+  tags?: readonly string[];
+  /** Visibility of the whole bundle (applied to the entry page; siblings inherit). */
+  visibility?: "public" | "unlisted" | "private";
   /** Scoped-CSS preamble / theme override applied to every file in the bundle. */
   css?: string;
 }
 
-/** A served file in a published bundle (one immutable R2 artifact). */
+/** A served sibling file in a published bundle (one immutable R2 artifact). */
 export interface BundleFileResult {
   /** The authored bundle-relative path. */
   path: string;
@@ -84,7 +87,7 @@ export interface BundleFileResult {
   artifactKey: string;
   /** Content hash of the expanded+assembled document. */
   sourceHash: string;
-  /** True for the entry file (the one the bundle slug routes to). */
+  /** Always false: the entry is the page, not a bundle file (kept for the wire shape). */
   entry: boolean;
 }
 
@@ -92,38 +95,31 @@ export interface BundleFileResult {
 export interface PublishBundleResult {
   /** The bundle's stable identifier — its account-scoped entry slug. */
   bundleId: string;
+  /** The entry page id (a real `pages` row). */
+  entryPageId: string;
   /** The public URL of the entry point. */
   url: string;
-  /** The bundle version this publish landed (v1 on first deploy; forward-only). */
+  /** The bundle version this publish landed. */
   version: number;
+  /** The served sibling sub-pages. */
   files: BundleFileResult[];
 }
 
-export type PublishBundleOutcome = { ok: true; result: PublishBundleResult };
+/** Either the publish succeeded, or the entry slug collided with an existing page. */
+export type PublishBundleOutcome =
+  | { ok: true; result: PublishBundleResult }
+  | { ok: false; collision: CollisionResult };
 
 // ===========================================================================
-// Ports — the injected IO surface for the bundle pipeline. Plain async; no
-// Convex types. The storage port is the SAME `StoragePort` the single-file
-// publish uses (reuse, not re-implement).
+// Bundle ports — reuse the single-file publish deps for the ENTRY; add only the
+// bundle-version write.
 // ===========================================================================
-
-/**
- * The current HEAD of a bundle (its highest-`version` row) the core reads back to
- * decide publish-vs-collision and the next version number. A bundle is identified
- * by its account-scoped `slug`; there is no separate bundle-record table.
- */
-export interface BundleHead {
-  /** The bundle's stable identifier — its account-scoped entry slug. */
-  slug: string;
-  accountId: string;
-  /** The current (highest) version number for this bundle. */
-  currentVersion: number;
-}
 
 /** Fields for a new immutable `bundleVersions` row. */
 export interface NewBundleVersion {
   accountId: string;
   slug: string;
+  entryPageId: string;
   version: number;
   entryPath: string;
   files: {
@@ -135,149 +131,11 @@ export interface NewBundleVersion {
   lockfile: Record<string, string>;
 }
 
-/** The transactional data port for the bundle pipeline (in prod → `ctx.db`). */
-export interface BundleDataPort {
-  /**
-   * The current HEAD version for the account's bundle at `slug`, or null if no
-   * bundle occupies that slug yet (the slug is free).
-   */
-  bundleHead(accountId: string, slug: string): Promise<BundleHead | null>;
-  /** Append an immutable bundle version (forward-only) → its new row id. */
-  insertBundleVersion(version: NewBundleVersion): Promise<string>;
-}
-
-/** The edge port — register the entry-point route (the slug → entry artifact). */
-export interface BundleEdgePort {
-  /** Register the bundle's entry route in KV (host+path → entry artifact). */
-  putEntryRoute(args: {
-    slug: string;
-    version: number;
-    entryArtifactKey: string;
-    /** Every served sibling key keyed by its `<slug>/<path>` route. */
-    siblings: { path: string; artifactKey: string }[];
-  }): Promise<void>;
-  /** Purge the edge cache for the entry URL on (re)publish. */
-  invalidate(url: string): Promise<void>;
-}
-
-/** Ambient knobs (clock, base URL) the core needs but does not compute. */
-export interface BundleEnv {
-  baseUrl: string;
-}
-
 export interface BundleDeps {
-  data: BundleDataPort;
-  storage: StoragePort;
-  edge: BundleEdgePort;
-  env: BundleEnv;
-}
-
-// ===========================================================================
-// Pure link-rewrite ("link-before-deploy"). Golden-fixture tested.
-// ===========================================================================
-
-/** Normalize a bundle-relative path to a canonical POSIX form (no `./`, no `..`). */
-export function normalizeBundlePath(path: string): string {
-  const parts: string[] = [];
-  for (const seg of path.split("/")) {
-    if (seg === "" || seg === ".") continue;
-    if (seg === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(seg);
-  }
-  return parts.join("/");
-}
-
-/**
- * Resolve a relative href found in `fromPath` against the bundle, returning the
- * normalized target path (sans `#fragment`/`?query`) and the trailing
- * fragment/query suffix to re-attach, or `null` when the link is NOT an
- * in-bundle relative reference (absolute URL, scheme, protocol-relative,
- * root-absolute, anchor-only, or empty).
- */
-export function resolveBundleLink(
-  fromPath: string,
-  href: string,
-): { target: string; suffix: string } | null {
-  const trimmed = href.trim();
-  if (trimmed === "") return null;
-  // Anchor-only or query-only references stay on the same document.
-  if (trimmed.startsWith("#") || trimmed.startsWith("?")) return null;
-  // A scheme (http:, https:, mailto:, tel:, data:, …) or protocol-relative // → external.
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return null;
-  if (trimmed.startsWith("//")) return null;
-  // Root-absolute paths are not bundle-relative (served from the site root).
-  if (trimmed.startsWith("/")) return null;
-
-  // Split off the fragment/query suffix; rewrite only the path portion.
-  const suffixMatch = trimmed.match(/[?#].*$/);
-  const suffix = suffixMatch ? suffixMatch[0] : "";
-  const pathPart = suffix ? trimmed.slice(0, trimmed.length - suffix.length) : trimmed;
-  if (pathPart === "") return null;
-
-  const fromDir = fromPath.includes("/")
-    ? fromPath.slice(0, fromPath.lastIndexOf("/"))
-    : "";
-  const joined = fromDir ? `${fromDir}/${pathPart}` : pathPart;
-  return { target: normalizeBundlePath(joined), suffix };
-}
-
-/** The href-bearing attributes the rewrite scans. */
-const LINK_ATTRS = ["href", "src", "action", "poster"] as const;
-
-/**
- * Rewrite every in-bundle relative link in `html` (a file at `fromPath`) to the
- * served sibling URL produced by `served(target)`. Links that resolve to a path
- * NOT present in the bundle, or that are external/absolute/anchor-only, are left
- * verbatim. Deterministic (stable bytes) so it is golden-fixture testable.
- */
-export function rewriteHtmlLinks(
-  html: string,
-  fromPath: string,
-  served: (targetPath: string) => string | null,
-): string {
-  const attrAlternation = LINK_ATTRS.join("|");
-  // Match `attr="value"` / `attr='value'` for the link-bearing attributes.
-  const re = new RegExp(
-    `\\b(${attrAlternation})\\s*=\\s*("([^"]*)"|'([^']*)')`,
-    "gi",
-  );
-  return html.replace(re, (match, attr: string, _q: string, dq?: string, sq?: string) => {
-    const quote = dq !== undefined ? '"' : "'";
-    const value = dq !== undefined ? dq : (sq ?? "");
-    const resolved = resolveBundleLink(fromPath, value);
-    if (!resolved) return match;
-    const servedUrl = served(resolved.target);
-    if (servedUrl === null) return match;
-    return `${attr}=${quote}${servedUrl}${resolved.suffix}${quote}`;
-  });
-}
-
-/**
- * Rewrite cross-file links across the WHOLE bundle (link-before-deploy). The
- * served-URL of a sibling is `<entrySlugUrl>/<path>` for a non-entry file and
- * `<entrySlugUrl>` for the entry file itself, so an internal `./about.html`
- * resolves to the bundle's served `about.html` rather than the dead authored
- * relative path. Returns each file's path + rewritten HTML, in input order.
- */
-export function rewriteBundleLinks(
-  files: readonly BundleFileInput[],
-  entryPath: string,
-  entryUrl: string,
-): { path: string; html: string }[] {
-  const entry = normalizeBundlePath(entryPath);
-  const known = new Set(files.map((f) => normalizeBundlePath(f.path)));
-  const base = entryUrl.replace(/\/+$/, "");
-  const servedUrl = (target: string): string | null => {
-    if (!known.has(target)) return null;
-    return target === entry ? base : `${base}/${target}`;
-  };
-  return files.map((f) => ({
-    path: f.path,
-    html: rewriteHtmlLinks(f.html, normalizeBundlePath(f.path), servedUrl),
-  }));
+  /** The single-file publish deps used to publish the entry as a page. */
+  publish: PublishDeps;
+  /** Append an immutable bundle version linked to the entry page. */
+  insertBundleVersion(version: NewBundleVersion): Promise<string>;
 }
 
 // ===========================================================================
@@ -293,24 +151,36 @@ async function sha256Hex(s: string): Promise<string> {
   return hex;
 }
 
-/** A bundle file's served R2 key namespaces the bundle (by slug) + its path. */
+/**
+ * A sibling file's served R2 key namespaces the bundle by its ENTRY PAGE id (the
+ * stable identity) + the authored path. Mirrors the single-file
+ * `artifacts/<acct>/<pageId>/<hash>.html` layout under a `bundles/` prefix.
+ */
 export function bundleArtifactKey(
   accountId: string,
-  slug: string,
+  entryPageId: string,
   path: string,
   expandedHash: string,
 ): string {
-  return `bundles/${accountId}/${slug}/${normalizeBundlePath(path)}/${expandedHash}.html`;
+  return `bundles/${accountId}/${entryPageId}/${normalizeBundlePath(path)}/${expandedHash}.html`;
 }
 
-function resolveBundleSlug(input: PublishBundleInput) {
-  if (input.slug !== undefined) return validateSlug(input.slug);
+/** Resolve/validate the bundle's entry slug (account-scoped handle). */
+function resolveBundleSlug(input: PublishBundleInput): string {
+  if (input.slug !== undefined) {
+    const r = validateSlug(input.slug);
+    if (!r.ok) throw new Error(`shortwind bundle: ${r.error}`);
+    return r.value;
+  }
   const seed = input.title ?? input.entryPath.replace(/\.[a-z0-9]+$/i, "");
-  return deriveSlug(seed);
+  const r = deriveSlug(seed);
+  if (!r.ok) throw new Error(`shortwind bundle: ${r.error}`);
+  return r.value;
 }
 
 // ===========================================================================
-// runPublishBundle — the pure pipeline (mirrors runPublish; reuses its machinery).
+// runPublishBundle — the pure pipeline. Publishes the entry as a page (reusing
+// runPublish), writes the siblings, and records the bundle version.
 // ===========================================================================
 
 export async function runPublishBundle(
@@ -324,64 +194,71 @@ export async function runPublishBundle(
     throw new Error("shortwind bundle: a bundle must carry at least one file");
   }
   const entry = normalizeBundlePath(input.entryPath);
-  const hasEntry = input.files.some((f) => normalizeBundlePath(f.path) === entry);
-  if (!hasEntry) {
+  const entryFile = input.files.find((f) => normalizeBundlePath(f.path) === entry);
+  if (!entryFile) {
     throw new Error(
       `shortwind bundle: entry "${input.entryPath}" is not one of the bundle files`,
     );
   }
 
-  // 2. Resolve / validate the entry slug — the bundle's stable identifier.
+  // 2. Resolve the entry slug up front so the stored bundle row and the entry
+  //    page agree on it (we pass it explicitly to runPublish).
   const slug = resolveBundleSlug(input);
-  if (!slug.ok) {
-    throw new Error(`shortwind bundle: ${slug.error}`);
+
+  // 3. Publish the ENTRY as a normal page — reserves the subdomain, versions,
+  //    writes the entry artifact, registers the route, and 409s on a taken slug.
+  const entryOutcome = await runPublish(
+    {
+      actor: input.actor,
+      html: entryFile.html,
+      slug,
+      recipes: input.recipes,
+      lockfile: input.lockfile,
+      tags: input.tags,
+      visibility: input.visibility,
+      css: input.css,
+    },
+    deps.publish,
+  );
+  if (!entryOutcome.ok) {
+    return { ok: false, collision: entryOutcome.collision };
   }
+  const { id: pageId, url, version } = entryOutcome.result;
 
-  // 3. Forward-only versioning (PRD §5.6 — reuse the pageVersions retention
-  //    model): the first deploy is v1; re-deploying the SAME bundle appends the
-  //    next version, retaining every prior version (frozen) for rollback. The
-  //    bundle is identified by (account, slug); the head row carries the counter.
-  const head = await deps.data.bundleHead(acct, slug.value);
-  const version = (head?.currentVersion ?? 0) + 1;
-  const url = pageUrl(deps.env.baseUrl, slug.value);
-
-  // 4. LINK-BEFORE-DEPLOY: rewrite every cross-file link to its served sibling.
-  const rewritten = rewriteBundleLinks(input.files, entry, url);
-
-  // 5. Expand + assemble each file reusing the SINGLE-FILE machinery, write to R2.
+  // 4. Write each SIBLING file to R2 (expand + assemble, same machinery), served
+  //    at its authored path on the entry's subdomain — no link rewriting.
   const recipeSources: RecipeSource[] = input.recipes.map((r) => ({
     filename: `${r.family}.css`,
     source: r.source,
   }));
+  const siblings = input.files.filter(
+    (f) => normalizeBundlePath(f.path) !== entry,
+  );
   const fileResults: BundleFileResult[] = [];
-  let entryArtifactKey = "";
-
-  for (const file of rewritten) {
+  for (const file of siblings) {
+    const path = normalizeBundlePath(file.path);
     const expanded = await expandPage({
       html: file.html,
       recipes: recipeSources,
       css: input.css,
     });
     const document = assembleArtifact(expanded.expandedHtml, expanded.css);
-    const key = bundleArtifactKey(acct, slug.value, file.path, expanded.expandedHash);
-    const isEntry = normalizeBundlePath(file.path) === entry;
-
-    await deps.storage.writeArtifact(key, document, {
+    const key = bundleArtifactKey(acct, pageId, path, expanded.expandedHash);
+    await deps.publish.storage.writeArtifact(key, document, {
       expandedHash: expanded.expandedHash,
       version,
       accountId: acct,
-      pageId: slug.value,
+      pageId,
     });
-
     const sourceHash = await sha256Hex(file.html);
-    fileResults.push({ path: file.path, artifactKey: key, sourceHash, entry: isEntry });
-    if (isEntry) entryArtifactKey = key;
+    fileResults.push({ path, artifactKey: key, sourceHash, entry: false });
   }
 
-  // 6. Append the immutable bundle version (forward-only — prior rows untouched).
-  await deps.data.insertBundleVersion({
+  // 5. Append the immutable bundle version, linked to the entry page.
+  await deps.insertBundleVersion({
     accountId: acct,
-    slug: slug.value,
+    slug,
+    entryPageId: pageId,
     version,
     entryPath: entry,
     files: fileResults.map((f) => ({
@@ -390,65 +267,20 @@ export async function runPublishBundle(
       sourceHash: f.sourceHash,
       entry: f.entry,
     })),
-    lockfile: input.lockfile,
+    lockfile: lockfileVersions(input.lockfile),
   });
-
-  // 7. Edge: route the entry point (+ its served siblings) and invalidate the URL.
-  await deps.edge.putEntryRoute({
-    slug: slug.value,
-    version,
-    entryArtifactKey,
-    siblings: fileResults
-      .filter((f) => !f.entry)
-      .map((f) => ({ path: f.path, artifactKey: f.artifactKey })),
-  });
-  await deps.edge.invalidate(url);
 
   return {
     ok: true,
-    result: { bundleId: slug.value, url, version, files: fileResults },
+    result: { bundleId: slug, entryPageId: pageId, url, version, files: fileResults },
   };
 }
 
 // ===========================================================================
-// Convex adapter — thin ports over the action ctx (mirrors pages.ts).
+// Convex adapter — thin ports over the action ctx (reuses pages.ts's).
 // ===========================================================================
 
 type AccountId = Id<"accounts">;
-type RunnerCtx = {
-  runQuery: (ref: any, args: any) => Promise<any>;
-  runMutation: (ref: any, args: any) => Promise<any>;
-};
-
-const bundleHeadValidator = v.union(
-  v.object({
-    slug: v.string(),
-    accountId: v.id("accounts"),
-    currentVersion: v.number(),
-  }),
-  v.null(),
-);
-
-/**
- * The current HEAD version of the account's bundle at `slug` — its highest
- * `version` row — or null if the slug is free. Drives the forward-only version
- * counter (next = current + 1) and the publish-vs-first-deploy decision.
- */
-export const bundleHead = internalQuery({
-  args: { accountId: v.id("accounts"), slug: v.string() },
-  returns: bundleHeadValidator,
-  handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("bundleVersions")
-      .withIndex("by_slug", (q) =>
-        q.eq("accountId", args.accountId).eq("slug", args.slug),
-      )
-      .collect();
-    if (rows.length === 0) return null;
-    const current = rows.reduce((max, r) => Math.max(max, r.version), 0);
-    return { slug: args.slug, accountId: args.accountId, currentVersion: current };
-  },
-});
 
 const bundleFileValidator = v.object({
   path: v.string(),
@@ -459,15 +291,14 @@ const bundleFileValidator = v.object({
 
 /**
  * Append the immutable `bundleVersions` row (forward-only) + audit, in one
- * mutation so a publish either fully lands or not at all. Prior version rows are
- * never touched (PRD §5.6 — old versions stay frozen for rollback). The current
- * head is the highest-`version` row for (accountId, slug); there is no separate
- * bundle record to re-point.
+ * mutation so a publish either fully lands or not at all. Linked to the entry
+ * page via `entryPageId` (the serve path resolves siblings through it).
  */
 export const commitBundleVersion = internalMutation({
   args: {
     accountId: v.id("accounts"),
     slug: v.string(),
+    entryPageId: v.id("pages"),
     version: v.number(),
     entryPath: v.string(),
     files: v.array(bundleFileValidator),
@@ -480,7 +311,7 @@ export const commitBundleVersion = internalMutation({
     const versionId = await ctx.db.insert("bundleVersions", {
       accountId: args.accountId,
       slug: args.slug,
-      entryPageId: null,
+      entryPageId: args.entryPageId,
       entryPath: args.entryPath,
       version: args.version,
       files: args.files,
@@ -497,95 +328,12 @@ export const commitBundleVersion = internalMutation({
         version: args.version,
         files: args.files.length,
         entryPath: args.entryPath,
+        entryPageId: args.entryPageId,
       },
       createdAt: now,
     });
     return versionId;
   },
-});
-
-/** Build the data port over the action ctx. */
-function makeBundleDataPort(ctx: RunnerCtx, tokenId: Id<"tokens"> | null): BundleDataPort {
-  return {
-    bundleHead: (accountId, slug) =>
-      ctx.runQuery(internal.bundles.bundleHead, {
-        accountId: accountId as AccountId,
-        slug,
-      }),
-    insertBundleVersion: (version) =>
-      ctx.runMutation(internal.bundles.commitBundleVersion, {
-        accountId: version.accountId as AccountId,
-        slug: version.slug,
-        version: version.version,
-        entryPath: version.entryPath,
-        files: version.files,
-        lockfile: version.lockfile,
-        actorTokenId: tokenId,
-      }),
-  };
-}
-
-/** R2 storage port — the SAME write the single-file publish uses. */
-function makeBundleStoragePort(): StoragePort {
-  return {
-    writeArtifact: (key, html, meta) => writeBundleArtifactToR2(key, html, meta),
-  };
-}
-
-/** Edge port — entry-route registration deferred to CLOUD-30b (bundle serving). */
-function makeBundleEdgePort(): BundleEdgePort {
-  return {
-    putEntryRoute: async (route) => putBundleEntryRoute(route),
-    invalidate: async (url) => invalidateBundleEdge(url),
-  };
-}
-
-// IO placeholders — wired with the single-file infra (CLOUD-30/30b). Kept
-// side-effect-free + non-throwing so the pipeline runs in dev/test deployments.
-async function writeBundleArtifactToR2(
-  key: string,
-  html: string,
-  meta: { expandedHash: string; version: number; accountId: string; pageId: string },
-): Promise<void> {
-  void key;
-  void html;
-  void meta;
-}
-async function putBundleEntryRoute(route: {
-  slug: string;
-  version: number;
-  entryArtifactKey: string;
-  siblings: { path: string; artifactKey: string }[];
-}): Promise<void> {
-  // CLOUD-30b: write the host+path → entry artifact route into the Worker KV so
-  // the slug serves the bundle's entry document, and namespace the sibling keys
-  // so `<slug>/<path>` resolves the served sibling. No worker code is imported.
-  void route;
-}
-async function invalidateBundleEdge(url: string): Promise<void> {
-  void url;
-}
-
-// ===========================================================================
-// Public verb.
-// ===========================================================================
-
-const bundleFileInputArg = v.object({ path: v.string(), html: v.string() });
-const recipeArg = v.object({ family: v.string(), source: v.string() });
-
-const bundleOutcomeValidator = v.object({
-  ok: v.literal(true),
-  bundleId: v.string(),
-  url: v.string(),
-  version: v.number(),
-  files: v.array(
-    v.object({
-      path: v.string(),
-      artifactKey: v.string(),
-      sourceHash: v.string(),
-      entry: v.boolean(),
-    }),
-  ),
 });
 
 /** The write-scope auth check (an action cannot read `ctx.db` — validate in a query). */
@@ -598,13 +346,38 @@ export const authForBundleWrite = internalQuery({
   },
 });
 
+// Bundle resource caps (server-side; the CLI enforces the same on the walk).
+export const MAX_BUNDLE_FILES = 2000;
+export const MAX_BUNDLE_BYTES = 50 * 1024 * 1024; // 50 MB
+
+const bundleFileInputArg = v.object({ path: v.string(), html: v.string() });
+const recipeArg = v.object({ family: v.string(), source: v.string() });
+const lockfileArg = v.object({
+  version: v.number(),
+  registry: v.string(),
+  families: v.record(
+    v.string(),
+    v.object({ version: v.string(), sha: v.string() }),
+  ),
+});
+
+const bundleOutcomeValidator = v.union(
+  v.object({
+    ok: v.literal(true),
+    bundleId: v.string(),
+    url: v.string(),
+    version: v.number(),
+    files: v.array(bundleFileValidator),
+  }),
+  v.object({ ok: v.literal(false), status: v.literal(409), existingId: v.string() }),
+);
+
 /**
- * publishBundle (POST /v1/bundles): publish a linked multi-file bundle under one
- * entry point. Cross-file links are rewritten to served siblings before deploy;
- * each file is expanded + assembled + written to R2; the bundle is versioned
- * (forward-only) and the entry point is routed. Returns the bundle id (its
- * slug), the entry URL, the version, and the per-file served keys. Re-publishing
- * the same slug appends the next version, retaining prior versions for rollback.
+ * publishBundle (POST /v1/bundles): publish a linked multi-page unit under one
+ * entry point (entry-as-page). The whole bundle's HTML is content-scanned +
+ * rate-limited ONCE (parity with single-file publish); on a hard block nothing
+ * is materialized. Then the entry publishes as a page and the siblings are
+ * written + versioned. Re-publishing an occupied slug 409s (like a page).
  */
 export const publishBundle = action({
   args: {
@@ -614,7 +387,11 @@ export const publishBundle = action({
     slug: v.optional(v.string()),
     title: v.optional(v.string()),
     recipes: v.array(recipeArg),
-    lockfile: v.record(v.string(), v.string()),
+    lockfile: lockfileArg,
+    tags: v.optional(v.array(v.string())),
+    visibility: v.optional(
+      v.union(v.literal("public"), v.literal("unlisted"), v.literal("private")),
+    ),
     css: v.optional(v.string()),
   },
   returns: bundleOutcomeValidator,
@@ -622,15 +399,73 @@ export const publishBundle = action({
     const auth = await ctx.runQuery(internal.bundles.authForBundleWrite, {
       bearer: args.bearer,
     });
+
     if (args.files.length === 0) {
       throw new ConvexError({ code: "BAD_REQUEST", message: "bundle has no files" });
     }
+    if (args.files.length > MAX_BUNDLE_FILES) {
+      throw new ConvexError({
+        code: "BAD_REQUEST",
+        message: `bundle exceeds ${MAX_BUNDLE_FILES} files`,
+      });
+    }
+    const totalBytes = args.files.reduce(
+      (n, f) => n + new TextEncoder().encode(f.html).byteLength,
+      0,
+    );
+    if (totalBytes > MAX_BUNDLE_BYTES) {
+      throw new ConvexError({
+        code: "BAD_REQUEST",
+        message: `bundle exceeds ${MAX_BUNDLE_BYTES} bytes`,
+      });
+    }
+
+    // Content scan + rate limit ONCE over the whole bundle (parity with a
+    // single-file publish; one rate-limit consumption per publish). A hard block
+    // rejects BEFORE anything is materialized (nothing is stored). NOTE: unlike
+    // the single-file CSAM path, bundles do not materialize-then-preserve on a
+    // CSAM hit yet — a preserve-for-NCMEC parity pass is a follow-up.
+    const combined = args.files.map((f) => f.html).join("\n");
+    const gate = await runPublishScan(ctx, {
+      accountId: auth.accountId,
+      html: combined,
+      css: args.css,
+    });
+    if (!gate.proceed) {
+      if (gate.rejection.code === "RATE_LIMITED") {
+        throw new ConvexError({
+          code: "RATE_LIMITED",
+          message: "Publish rate limit exceeded for this account",
+          retryAfter: gate.rejection.retryAfter,
+        });
+      }
+      if (gate.rejection.code === "BLOCKED_CSAM") {
+        throw new ConvexError({
+          code: "CSAM_BLOCKED",
+          message: "Publish blocked: content matched a known-CSAM hash list",
+        });
+      }
+      throw new ConvexError({
+        code: "CONTENT_BLOCKED",
+        message: "Publish blocked by the content classifier",
+      });
+    }
+
     const deps: BundleDeps = {
-      data: makeBundleDataPort(ctx, auth.tokenId),
-      storage: makeBundleStoragePort(),
-      edge: makeBundleEdgePort(),
-      env: { baseUrl: "https://shortwind.app" },
+      publish: makeDeps(ctx, auth.tokenId),
+      insertBundleVersion: (version) =>
+        ctx.runMutation(internal.bundles.commitBundleVersion, {
+          accountId: version.accountId as AccountId,
+          slug: version.slug,
+          entryPageId: version.entryPageId as Id<"pages">,
+          version: version.version,
+          entryPath: version.entryPath,
+          files: version.files,
+          lockfile: version.lockfile,
+          actorTokenId: auth.tokenId,
+        }),
     };
+
     const outcome = await runPublishBundle(
       {
         actor: { accountId: auth.accountId, tokenId: auth.tokenId },
@@ -640,10 +475,32 @@ export const publishBundle = action({
         title: args.title,
         recipes: args.recipes,
         lockfile: args.lockfile,
+        tags: args.tags,
+        visibility: args.visibility,
         css: args.css,
       },
       deps,
     );
+
+    if (!outcome.ok) {
+      return {
+        ok: false as const,
+        status: 409 as const,
+        existingId: outcome.collision.existingId,
+      };
+    }
+
+    // A `review` flag → publish allowed but recorded against the entry page.
+    if (gate.flag) {
+      await ctx.runMutation(internal.pages.commitScanFlag, {
+        pageId: outcome.result.entryPageId as Id<"pages">,
+        accountId: auth.accountId as AccountId,
+        actorTokenId: auth.tokenId as Id<"tokens">,
+        reason: gate.flag.reason,
+        score: gate.flag.score,
+      });
+    }
+
     return {
       ok: true as const,
       bundleId: outcome.result.bundleId,

@@ -3,6 +3,7 @@ import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireRead } from "./lib/auth_guard.js";
 import { isReservedSubdomain } from "../shared/src/slug.js";
+import { normalizeServePath } from "./lib/bundle_path.js";
 
 /**
  * CLOUD-30b — the Worker serve-path COLD SOURCE (PRD §6.1, §6.3).
@@ -129,6 +130,36 @@ export const resolveRoute = query({
       .withIndex("by_subdomain", (q) => q.eq("subdomain", label))
       .first();
     if (page === null) return null;
+
+    // BUNDLE sub-page (CLOUD-50): if this page is a bundle's entry and the
+    // request path names one of its sibling files, serve that sibling's frozen
+    // artifact instead of the entry. Siblings inherit the entry page's
+    // lifecycle/visibility (the whole unit is killed/gated together). A path
+    // that is the root (`""`) or matches no sibling falls through to the entry
+    // — so a single-file page is unaffected (its path is always ignored).
+    const subPath = normalizeServePath(args.path);
+    if (subPath !== "") {
+      const bundleRows = await ctx.db
+        .query("bundleVersions")
+        .withIndex("by_entryPage", (q) => q.eq("entryPageId", page._id))
+        .collect();
+      const bundle =
+        bundleRows.length === 0
+          ? null
+          : bundleRows.reduce((max, r) => (r.version > max.version ? r : max));
+      const file = bundle?.files.find((f) => f.path === subPath);
+      if (bundle && file) {
+        return {
+          pageId: page._id as string,
+          accountId: page.accountId as string,
+          version: bundle.version,
+          artifactKey: file.artifactKey,
+          lifecycle: page.lifecycle,
+          visibility: page.visibility,
+        };
+      }
+    }
+
     const version =
       page.currentVersionId === null
         ? null

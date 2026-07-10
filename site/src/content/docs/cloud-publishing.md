@@ -102,6 +102,39 @@ recipe that is missing expands to nothing and goes out as raw text. Run
 [`shortwind cloud skill`](/docs/cloud-cli) to print the palette available where
 you are publishing from.
 
+## Multi-page publishes
+
+A single publish can ship more than one page. Pass `--bundle` and point it at an
+entry file; the CLI publishes that file's whole directory as one linked unit
+under a single slug:
+
+```bash
+shortwind cloud publish ./site/index.html --bundle --domain handbook
+```
+
+- The **entry** file (`index.html` above) serves at the slug root:
+  `https://handbook.shortwind.app`.
+- Every other `.html` file in the directory serves at its **authored path**:
+  `site/about.html` becomes `https://handbook.shortwind.app/about.html`,
+  `site/docs/guide.html` becomes `.../docs/guide.html`.
+- Links between pages are ordinary **relative** links (`<a href="about.html">`,
+  `<a href="../index.html">`). They resolve exactly as written, because each
+  file is served at the path you authored it at. No rewriting, no absolute URLs.
+
+The whole unit is one page as far as the rest of Cloud is concerned: it has one
+slug, one visibility, one version, and a takedown or delete affects all of its
+pages together.
+
+A few constraints for this first release:
+
+- **`.html` files only.** CSS, JS, and images in the directory are not bundled
+  yet; style with inline CSS or a CDN (for example the Tailwind CDN) for now.
+- **Relative links only.** A root-absolute link (`/about.html`) is treated as a
+  site-root link, not a bundle link.
+- **Re-publishing a slug is a 409**, same as a single page. Pick a new slug, or
+  updating an existing bundle in place will land in a later release.
+- Caps: up to 2000 files and 50 MB per bundle.
+
 ## Finding and removing pages
 
 ```bash

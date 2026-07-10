@@ -234,6 +234,10 @@ export default defineSchema({
   })
     // Resolve a bundle's version history / current head by (account, slug).
     .index("by_slug", ["accountId", "slug"])
+    // Serve path: resolve a bundle by its entry page (the entry reserves the
+    // global subdomain, so serving looks the page up by subdomain, then its
+    // bundle by this index to find the sibling sub-pages).
+    .index("by_entryPage", ["entryPageId"])
     // List an account's bundles.
     .index("by_account", ["accountId"]),
 

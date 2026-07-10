@@ -483,7 +483,7 @@ function makeDataPort(ctx: RunnerCtx, tokenId: TokenId): PublishDataPort {
  * Build the R2 storage port. The write is the action's one true network call.
  * The S3 endpoint + credentials are env placeholders deferred to CLOUD-30.
  */
-function makeStoragePort(): StoragePort {
+export function makeStoragePort(): StoragePort {
   return {
     writeArtifact: (key, html, meta) => writeArtifactToR2(key, html, meta),
   };
@@ -1251,7 +1251,14 @@ export const authForWrite = internalQuery({
 // ---------------------------------------------------------------------------
 
 /** Assemble the full deps bundle over the action ctx. */
-function makeDeps(ctx: RunnerCtx, tokenId: TokenId): PublishDeps {
+/**
+ * Assemble the full single-file `PublishDeps` over the action ctx. Exported so
+ * the bundle publish path (`bundles.ts`) reuses the EXACT same data/storage/edge
+ * ports + env when it publishes a bundle's entry as a page (entry-as-page model)
+ * — no duplicate wiring, and the entry gets subdomain reservation, versioning,
+ * recipe edits, and the R2 write identical to a single-file publish.
+ */
+export function makeDeps(ctx: RunnerCtx, tokenId: TokenId): PublishDeps {
   return {
     data: makeDataPort(ctx, tokenId),
     storage: makeStoragePort(),
