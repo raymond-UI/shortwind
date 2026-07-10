@@ -13,6 +13,10 @@ step, and no deploy config: the platform expands your `@recipe` classes
 server-side, freezes the result as an immutable version, and serves it as static
 files from the edge.
 
+> **Just want to publish something?** Skip to the
+> [Quickstart](/docs/cloud-quickstart): create a free account, install the CLI,
+> and publish an HTML file in three commands. This page is the concept tour.
+
 ## Core vs Cloud
 
 They are two products that share one primitive (recipes), and it is worth being

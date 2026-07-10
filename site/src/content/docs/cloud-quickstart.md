@@ -1,16 +1,34 @@
 ---
 title: Quickstart
-description: Log in, publish an HTML file, and get a live URL in three commands.
+description: Everything you need to go from nothing to a live URL — create an account, install the CLI, publish.
 order: 1
 product: cloud
 ---
 
 # Quickstart
 
-This walks the happy path: authenticate, publish a file, and get back a live
-URL. It assumes you have the CLI (`@shortwind/cli`, beta). Run it one-off with
-`npx @shortwind/cli@beta cloud <verb>`, or install it and use the `shortwind`
-command directly.
+This is the whole path from nothing to a live page. You set up three things once
+(an account, the CLI, and login), then publish with one command. You do **not**
+need to set up recipes to publish a plain HTML file.
+
+## Before you start
+
+You need two things:
+
+**1. A Shortwind account.** Go to
+[shortwind.dev/cloud](https://shortwind.dev/cloud) and click **Start free**.
+Publishing and serving are free; you only pay if you later bring a custom domain
+(Pro, $5/mo).
+
+**2. The CLI.** It ships as `@shortwind/cli` (beta). Install it into a project:
+
+```bash
+npm i -D @shortwind/cli@beta
+```
+
+The examples below use the installed `shortwind` command. To run without
+installing, prefix any command with `npx @shortwind/cli@beta`, for example
+`npx @shortwind/cli@beta cloud login`.
 
 ## 1. Log in
 
@@ -18,72 +36,74 @@ command directly.
 shortwind cloud login
 ```
 
-This uses the OAuth device flow. The CLI prints a verification URL
-(`shortwind.dev/cloud/device`) and a short code; open the URL in a browser,
-enter the code, and approve the device. The CLI polls in the background and,
-once approved, stores a token in your global Shortwind home and prints:
+This links your machine to your account with the OAuth device flow. The CLI
+prints a short code and a URL (`shortwind.dev/cloud/device`); open the URL in the
+browser where you signed up, enter the code, and approve. Your token is then
+stored under `~/.shortwind/` and you will not have to log in again on this
+machine:
 
 ```
 logged in as you@example.com (active account: acct_xxxxxxxxxxxx)
 ```
 
-The token is machine-global, so you log in once per machine, not once per
-project.
+There is no separate init step. `login` creates the local home for you.
 
-## 2. Publish a file
+## 2. Publish a page
+
+Any HTML file works. Make one:
 
 ```bash
-shortwind cloud publish ./launch.html
+echo '<h1>Hello from my agent</h1>' > hello.html
 ```
 
-The CLI expands the `@recipe` classes in `launch.html` server-side, freezes the
-result as version 1, and prints the live URL:
+Publish it:
+
+```bash
+shortwind cloud publish hello.html
+```
+
+You get a live URL back:
 
 ```
-published https://launch-notes.shortwind.app
+published https://<slug>.shortwind.app
 id: pg_xxxxxxxxxxxx
 version: v1
 ```
 
-Your page is now live at `<slug>.shortwind.app`. Serving is free and page views
-are never billed.
-
-Pick the slug yourself with `--domain`, and set who can see it with
-`--visibility`:
+Open the URL: your page is live, served free from the edge. Choose the slug and
+who can see it with `--domain` and `--visibility`:
 
 ```bash
-shortwind cloud publish ./launch.html --domain launch-notes --visibility unlisted
+shortwind cloud publish hello.html --domain my-first-page --visibility public
 ```
 
-## 3. Update it
+## 3. Change it
 
-Publishing is immutable: every publish or update is a new frozen version, and
-old versions are retained. To ship a change to the **same URL**, update by page
-id:
+To ship an edit to the **same URL**, update the page by its id (from the publish
+output above, or from `shortwind cloud find`):
 
 ```bash
-shortwind cloud update pg_xxxxxxxxxxxx ./launch.html
-# published https://launch-notes.shortwind.app
+shortwind cloud update pg_xxxxxxxxxxxx hello.html
+# published https://my-first-page.shortwind.app
 # version: v2
 ```
 
-## The find-then-publish pattern
+That is the core loop: `publish` once to create a page, `update` to revise it.
+Every publish and update is a new immutable version; nothing is overwritten.
 
-The CLI is stateless: it never stores a page id, so your account is the only
-memory. An agent that wants to "publish or update" first finds the page, then
-chooses:
+## Do I need recipes?
 
-```bash
-shortwind cloud find --tag launch --json
-```
-
-If `find` returns a matching page, `update <id>`; if not, `publish`. This is the
-loop an agent runs to keep a page current without tracking ids itself.
+No. Recipes are optional. If your HTML uses `@recipe` shorthand (like
+`class="@card"`), Cloud expands it to Tailwind server-side at publish time,
+pulling from the recipe palette in your Shortwind home. Plain HTML publishes
+as-is. See
+[how recipes travel with a publish](/docs/cloud-publishing#how-recipes-travel-with-a-publish)
+when you want to use them.
 
 ## Next
 
-- [Publishing & versions](/docs/cloud-publishing) for slugs, visibility, tags,
-  and how recipes travel with a publish.
-- [The agent API](/docs/cloud-api) if you are driving Cloud over HTTP instead of
-  the CLI.
-- [shortwind cloud CLI](/docs/cloud-cli) for every verb and flag.
+- [Publishing & versions](/docs/cloud-publishing): slugs, visibility, tags, and
+  the version model in depth.
+- [Custom domains](/docs/cloud-domains): serve pages on your own domain (Pro).
+- [The agent API](/docs/cloud-api): drive publish and update over HTTP instead
+  of the CLI.
