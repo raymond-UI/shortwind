@@ -134,7 +134,8 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground">
-        <span className="inline-flex items-center overflow-hidden rounded-full border border-border">
+        {/* No overflow-hidden here: it would clip the Menu's absolute panel. */}
+        <span className="inline-flex items-center rounded-full border border-border">
           <Menu
             label="Filter pages by status"
             trigger={
@@ -166,7 +167,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
               type="button"
               aria-label="Clear status filter"
               onClick={() => setStatus("all")}
-              className="border-l border-border px-2 py-1 transition-colors hover:bg-secondary hover:text-foreground"
+              className="rounded-r-full border-l border-border px-2 py-1 transition-colors hover:bg-secondary hover:text-foreground"
             >
               ✕
             </button>
