@@ -53,8 +53,7 @@ export function PolicyView() {
         <div className="flex-1">
           <div className="text-sm font-medium">Custom domain needs approval</div>
           <div className="@caption">
-            When on, a custom-domain bind waits for human approval before going
-            live (PRD §7.2).
+            Binds wait for your approval before going live.
           </div>
         </div>
         {loading ? (

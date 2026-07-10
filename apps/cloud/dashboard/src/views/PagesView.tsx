@@ -102,8 +102,8 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           Publish a new page
         </h3>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Pages ship from the CLI — run this next to your HTML file and it
-          appears here the moment the deploy lands.
+          Run next to your HTML file. The page appears here when the deploy
+          lands.
         </p>
         <div className="rounded-md border border-border bg-secondary/50 px-2 py-1.5">
           <CopyValue value="shortwind deploy ./index.html" />
@@ -232,7 +232,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           data-testid="pages-no-match"
           className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground"
         >
-          No pages match{q ? <> “{query.trim()}”</> : null} — try a different
+          No pages match{q ? <> “{query.trim()}”</> : null}. Try a different
           search or status.
         </p>
       ) : (

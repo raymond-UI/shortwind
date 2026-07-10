@@ -19,20 +19,12 @@ export function SettingsView() {
   return (
     <div className="max-w-2xl space-y-10" data-testid="settings-view">
       <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Policy"
-          title="Account policy"
-          description="Account-wide controls applied to every page."
-        />
+        <SectionHeader eyebrow="Policy" title="Account policy" />
         <PolicyView />
       </section>
 
       <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Access"
-          title="API tokens"
-          description="Scoped bearer tokens for the CLI and agents."
-        />
+        <SectionHeader eyebrow="Access" title="API tokens" />
         <TokenList />
       </section>
     </div>
@@ -53,7 +45,7 @@ function TokenList() {
         data-testid="tokens-empty"
         className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground"
       >
-        <span>No API tokens yet — mint one from the CLI</span>
+        <span>No API tokens yet. Mint one from the CLI:</span>
         <div className="rounded-md border border-border bg-secondary/50 px-2 py-1">
           <CopyValue value="shortwind cloud login" />
         </div>

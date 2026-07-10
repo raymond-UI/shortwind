@@ -450,8 +450,7 @@ function SettingsTab({
         <div className="space-y-3 rounded-lg border border-destructive/40 p-4">
           <div className="text-sm font-medium text-destructive">Danger zone</div>
           <p className="@caption">
-            Deleting tombstones the page — it stops serving (410) but its versions
-            are retained (§8.2).
+            Stops serving (410); versions are retained.
           </p>
           <button
             type="button"
@@ -477,8 +476,8 @@ function SettingsTab({
             Delete {page.slug}?
           </h3>
           <p className="@caption">
-            This tombstones the page — it stops serving (410). Its versions are
-            retained (§8.2) and it cannot be re-published at this URL.
+            It stops serving (410) and can’t be re-published at this URL.
+            Versions are retained.
           </p>
         </div>
         <div className="@dialog-footer">

@@ -15,11 +15,7 @@ const BARS = [30, 52, 41, 68, 47, 80, 62, 74, 55, 90, 71, 84];
 export function AnalyticsView() {
   return (
     <div className="space-y-5" data-testid="analytics-view">
-      <SectionHeader
-        eyebrow="Analytics"
-        title="Traffic analytics"
-        description="Requests, bandwidth, and visitor trends per page — collected at the edge."
-      />
+      <SectionHeader eyebrow="Analytics" title="Traffic analytics" />
 
       <div
         className="relative overflow-hidden rounded-lg border border-border bg-card p-6"
@@ -48,10 +44,8 @@ export function AnalyticsView() {
             />
             Coming soon
           </span>
-          <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-            Serving is stateless by design, so traffic isn’t collected yet. Edge
-            telemetry will populate this view without any change to how you
-            publish.
+          <p className="mt-3 text-xs text-muted-foreground">
+            Edge telemetry lands here soon. Publishing doesn’t change.
           </p>
         </div>
       </div>

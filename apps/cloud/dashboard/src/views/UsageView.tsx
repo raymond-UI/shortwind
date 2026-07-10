@@ -18,16 +18,7 @@ export function UsageView() {
   // known elements immediately) — only the VALUES wait on data.
   const loading = usage === undefined;
   const header = (
-    <SectionHeader
-      eyebrow="Usage"
-      title="What this account is using"
-      description={
-        <span data-testid="usage-cost-note">
-          Publishes, custom domains, and storage — page views aren’t billed; a
-          viral page costs nothing.
-        </span>
-      }
-    />
+    <SectionHeader eyebrow="Usage" title="What this account is using" />
   );
 
   const meters = [
@@ -107,6 +98,10 @@ export function UsageView() {
             → {formatTime(usage.periodEnd)}
           </span>
         )}
+        <span aria-hidden="true">·</span>
+        <span data-testid="usage-cost-note">
+          views aren’t billed; a viral page costs nothing
+        </span>
       </div>
     </div>
   );

@@ -22,21 +22,6 @@ const PLAN_LABEL: Record<PlanId, string> = {
   pro: "Pro",
 };
 
-const PLAN_FEATURES: Record<PlanId, string[]> = {
-  free: [
-    "Unlimited publishes",
-    "<slug>.shortwind.app URLs",
-    "Public / unlisted / private",
-    "Free serving — views aren’t billed",
-  ],
-  pro: [
-    "Everything in Free",
-    "Bring your own domain",
-    "your-domain/<slug>",
-    "Auto-issued TLS certificate",
-  ],
-};
-
 /** Stripe period-end is unix SECONDS; render as a local date. */
 function formatPeriodEnd(currentPeriodEnd: number | null): string | null {
   if (!currentPeriodEnd) return null;
@@ -53,13 +38,7 @@ export function BillingView() {
   const [error, setError] = useState<string | null>(null);
 
   // The header is static — render it immediately and skeleton only the plan card.
-  const header = (
-    <SectionHeader
-      eyebrow="Billing"
-      title="Plan & subscription"
-      description="Custom domains require a paid plan — publishing and serving stay free."
-    />
-  );
+  const header = <SectionHeader eyebrow="Billing" title="Plan & subscription" />;
 
   if (billing === undefined) {
     return (
@@ -73,13 +52,12 @@ export function BillingView() {
   const isPro = billing.plan !== "free";
   const periodLabel = formatPeriodEnd(billing.currentPeriodEnd);
   const renewalText = (() => {
-    if (billing.plan === "free") return "No active subscription.";
+    if (billing.plan === "free") return null;
     if (billing.cancelAtPeriodEnd && periodLabel)
       return `Cancels on ${periodLabel}.`;
     if (periodLabel) return `Renews on ${periodLabel}.`;
     return null;
   })();
-  const features = PLAN_FEATURES[billing.plan];
 
   async function onUpgrade() {
     setBusy("checkout");
@@ -149,18 +127,9 @@ export function BillingView() {
           ) : null}
         </div>
 
-        <ul className="mt-6 space-y-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
-          {features.map((f) => (
-            <li key={f} className="flex items-center gap-2">
-              <span className="text-term" aria-hidden="true">
-                ▚
-              </span>
-              {f}
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-4">
+        {/* Exceptions-only copy: Pro users don't need a feature recap; Free
+            users get the one line that matters. */}
+        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-border pt-3">
           {billing.hasActive ? (
             <button
               type="button"
@@ -182,6 +151,11 @@ export function BillingView() {
               {busy === "checkout" ? "Starting…" : "Upgrade to Pro"}
             </button>
           )}
+          {!isPro ? (
+            <span className="text-[11px] text-muted-foreground">
+              Pro adds your-domain/&lt;slug&gt; with auto TLS ($5/mo)
+            </span>
+          ) : null}
         </div>
 
         {error ? (

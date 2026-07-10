@@ -41,9 +41,8 @@ describe("BillingView (Stripe billing surface)", () => {
     });
     expect(screen.getByTestId("billing-plan")).toHaveTextContent("Free");
     expect(screen.getByTestId("billing-upgrade")).toBeInTheDocument();
-    expect(screen.getByTestId("billing-renewal")).toHaveTextContent(
-      /No active subscription/,
-    );
+    // Free has no renewal line (exceptions-only copy: nothing to renew).
+    expect(screen.queryByTestId("billing-renewal")).not.toBeInTheDocument();
   });
 
   it("says 'Cancels on' when the subscription is set to cancel", () => {

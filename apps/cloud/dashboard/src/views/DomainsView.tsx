@@ -47,7 +47,7 @@ const STATUS_STYLE: Record<
   active: {
     label: "Active",
     tone: "success",
-    hint: "Live — your pages serve on this domain.",
+    hint: "Live. Your pages serve on this domain.",
   },
   "pending-cert": {
     label: "Verifying",
@@ -59,7 +59,7 @@ const STATUS_STYLE: Record<
     label: "Queued",
     tone: "warning",
     pulse: true,
-    hint: "Waiting on Cloudflare — retry shortly.",
+    hint: "Waiting on Cloudflare. Retry shortly.",
   },
   "pending-human": {
     label: "Needs approval",
@@ -148,16 +148,7 @@ export function DomainsView() {
 
   // The header is static — render it immediately and skeleton only the cards.
   const header = (
-    <SectionHeader
-      eyebrow="Custom domain"
-      title="Bring your own domain"
-      description={
-        <>
-          Bind a subdomain you own — every page also serves at{" "}
-          <span className="font-mono">your-domain/&lt;slug&gt;</span>.
-        </>
-      }
-    />
+    <SectionHeader eyebrow="Custom domain" title="Bring your own domain" />
   );
 
   if (accountDomains === undefined) {
@@ -221,6 +212,9 @@ export function DomainsView() {
               {busy === "bind" ? "Connecting…" : "Connect"}
             </button>
           </div>
+          <p className="@help">
+            Pages will also serve at your-domain/&lt;slug&gt;. Subdomains only.
+          </p>
         </form>
       ) : null}
 
