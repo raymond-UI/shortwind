@@ -16,6 +16,17 @@ describe("ProjectDetail", () => {
     expect(deploys.textContent).toContain("v2");
   });
 
+  it("overview leads with the current deployment and cross-links to history", () => {
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />);
+    const hero = screen.getByTestId("current-deployment");
+    expect(hero.textContent).toContain("v3");
+    // Properties card carries visibility (moved out of the header).
+    expect(screen.getByText("public")).toBeInTheDocument();
+    // The hero's history link switches to the deployments tab.
+    fireEvent.click(screen.getByTestId("view-deployments"));
+    expect(screen.getByTestId("deployments")).toBeInTheDocument();
+  });
+
   it("calls onBack from the back button", () => {
     const onBack = vi.fn();
     renderWithData(<ProjectDetail pageId="page_1" onBack={onBack} />);

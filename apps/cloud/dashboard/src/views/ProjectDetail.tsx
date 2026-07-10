@@ -70,10 +70,22 @@ export function ProjectDetail({
     <div className="space-y-6" data-testid="project-detail">
       <div className="space-y-3">
         <BackButton onBack={onBack} />
+        {/* Same exceptions-only rule as the Overview cards: live is a dot,
+            dead states keep their word. Visibility lives in the properties
+            card, not here — the header is identity + address only. */}
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="@heading-md">{page.slug}</h2>
-          <LifecycleStatus lifecycle={page.lifecycle} />
-          <VisibilityBadge visibility={page.visibility} />
+          {page.lifecycle === "active" ? (
+            <span className="flex" title="live">
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 rounded-full bg-term"
+              />
+              <span className="sr-only">live</span>
+            </span>
+          ) : (
+            <LifecycleStatus lifecycle={page.lifecycle} />
+          )}
           <a
             href={url}
             target="_blank"
@@ -116,7 +128,12 @@ export function ProjectDetail({
         tabIndex={0}
         className="focus:outline-none"
       >
-        {tab === "overview" ? <OverviewTab entry={entry} /> : null}
+        {tab === "overview" ? (
+          <OverviewTab
+            entry={entry}
+            onViewDeployments={() => setTab("deployments")}
+          />
+        ) : null}
         {tab === "deployments" ? <DeploymentsTab entry={entry} /> : null}
         {tab === "settings" ? (
           <SettingsTab entry={entry} onBack={onBack} />
@@ -151,50 +168,109 @@ function CopyButton({ value }: { value: string }) {
   );
 }
 
-function OverviewTab({ entry }: { entry: PageWithVersions }) {
-  const { page } = entry;
-  // Semantic description list — the @dl / @dt / @dd recipes (label | value grid).
+/**
+ * Overview tab, reworked (console redesign): no key-value dump repeating the
+ * header. A "Current deployment" hero (the thing an owner checks first) next
+ * to a compact properties card; timestamps are relative with the absolute in
+ * the tooltip.
+ */
+function OverviewTab({
+  entry,
+  onViewDeployments,
+}: {
+  entry: PageWithVersions;
+  onViewDeployments: () => void;
+}) {
+  const { page, versions } = entry;
+  const current = versions.length > 0 ? versions[0] : null;
   return (
-    <dl className="@card @dl max-w-xl">
-      <dt className="@dt">Slug</dt>
-      <dd className="@dd">{page.slug}</dd>
+    <div className="grid gap-4 lg:grid-cols-3">
+      <section
+        data-testid="current-deployment"
+        className="@card flex flex-col p-5 lg:col-span-2"
+      >
+        <div className="flex items-center justify-between">
+          <span className="@stat-label">Current deployment</span>
+          <LifecycleStatus lifecycle={page.lifecycle} />
+        </div>
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="@stat-value">v{page.currentVersion}</span>
+          <span
+            className="text-xs text-muted-foreground"
+            title={formatTime(page.updatedAt)}
+          >
+            published {relativeTime(page.updatedAt)} via CLI
+          </span>
+        </div>
+        {current ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            src {shortHash(current.sourceHash)} · out{" "}
+            {shortHash(current.expandedHash)}
+          </p>
+        ) : null}
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-3 text-xs">
+          <a
+            href={pageUrl(page.slug)}
+            target="_blank"
+            rel="noreferrer"
+            className="@link text-muted-foreground hover:text-term"
+          >
+            Open live page ↗
+          </a>
+          <button
+            type="button"
+            data-testid="view-deployments"
+            onClick={onViewDeployments}
+            className="@link text-muted-foreground hover:text-term"
+          >
+            Deployment history ({versions.length}) →
+          </button>
+        </div>
+      </section>
 
-      <dt className="@dt">Live URL</dt>
-      <dd className="@dd">
-        <a
-          href={pageUrl(page.slug)}
-          target="_blank"
-          rel="noreferrer"
-          className="@link"
-        >
-          {pageHost(page.slug)}
-        </a>
-      </dd>
+      <section className="@card space-y-4 p-5">
+        <PropertyRow label="Visibility">
+          <VisibilityBadge visibility={page.visibility} />
+        </PropertyRow>
+        <PropertyRow label="Tags">
+          {page.tags.length ? (
+            <span className="flex flex-wrap justify-end gap-1.5">
+              {page.tags.map((t) => (
+                <Badge key={t}>{t}</Badge>
+              ))}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </PropertyRow>
+        <PropertyRow label="Created">
+          <span title={formatTime(page.createdAt)}>
+            {relativeTime(page.createdAt)}
+          </span>
+        </PropertyRow>
+        <PropertyRow label="Updated">
+          <span title={formatTime(page.updatedAt)}>
+            {relativeTime(page.updatedAt)}
+          </span>
+        </PropertyRow>
+      </section>
+    </div>
+  );
+}
 
-      <dt className="@dt">Visibility</dt>
-      <dd className="@dd">
-        <VisibilityBadge visibility={page.visibility} />
-      </dd>
-
-      <dt className="@dt">Status</dt>
-      <dd className="@dd">
-        <LifecycleStatus lifecycle={page.lifecycle} />
-      </dd>
-
-      <dt className="@dt">Current version</dt>
-      <dd className="@dd">v{page.currentVersion}</dd>
-
-      <dt className="@dt">Tags</dt>
-      <dd className="@dd">{page.tags.length ? page.tags.join(", ") : "—"}</dd>
-
-      <dt className="@dt">Created</dt>
-      <dd className="@dd">{formatTime(page.createdAt)}</dd>
-
-      <dt className="@dt">Updated</dt>
-      <dd className="@dd">
-        {formatTime(page.updatedAt)} ({relativeTime(page.updatedAt)})
-      </dd>
-    </dl>
+/** One quiet label/value line in the properties card. */
+function PropertyRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      {children}
+    </div>
   );
 }
 
