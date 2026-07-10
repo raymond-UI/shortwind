@@ -55,6 +55,6 @@ describe("RecipeEditsView (PRD §5.4 — distinct recipe-edit feed)", () => {
 
   it("shows a loading branch while the feed is undefined", () => {
     renderWithData(<RecipeEditsView />, { recipeEdits: undefined });
-    expect(screen.getByText(/Loading recipe edits/)).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /loading recipe edits/i })).toBeInTheDocument();
   });
 });

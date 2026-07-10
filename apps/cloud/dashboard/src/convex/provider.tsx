@@ -88,6 +88,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
   const approveDomainAction = useAction(api.domains.approveAccountDomain);
   const bindDomainAction = useAction(api.domains.bindAccountDomain);
   const recheckDomainAction = useAction(api.domains.recheckAccountDomain);
+  const removeDomainAction = useAction(api.domains.removeAccountDomain);
 
   const value = useMemo<DashboardData>(
     () => ({
@@ -132,6 +133,9 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
         // Bearer omitted → operator-session path (requireReadOperator).
         await approveDomainAction({ hostname });
       },
+      removeDomain: async (hostname) => {
+        await removeDomainAction({ hostname });
+      },
     }),
     [
       pages,
@@ -153,6 +157,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       approveDomainAction,
       bindDomainAction,
       recheckDomainAction,
+      removeDomainAction,
     ],
   );
 

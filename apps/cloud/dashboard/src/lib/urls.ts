@@ -23,3 +23,17 @@ export function pageUrl(slug: string): string {
 export function pageHost(slug: string): string {
   return `${slug}.${PAGES_BASE}`;
 }
+
+/**
+ * A page's URL under an ACTIVE account-level custom domain — domains alias the
+ * account and pages are path-routed beneath them (`<hostname>/<slug>`, see
+ * serve.resolveAccountDomainRoute).
+ */
+export function accountDomainPageUrl(hostname: string, slug: string): string {
+  return `https://${hostname}/${slug}`;
+}
+
+/** The compact no-scheme display form of `accountDomainPageUrl`. */
+export function accountDomainPageHost(hostname: string, slug: string): string {
+  return `${hostname}/${slug}`;
+}

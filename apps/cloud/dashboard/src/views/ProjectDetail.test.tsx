@@ -16,11 +16,50 @@ describe("ProjectDetail", () => {
     expect(deploys.textContent).toContain("v2");
   });
 
+  it("overview leads with the current deployment and cross-links to history", () => {
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />);
+    const hero = screen.getByTestId("current-deployment");
+    expect(hero.textContent).toContain("v3");
+    // Properties card carries visibility (moved out of the header).
+    expect(screen.getByText("public")).toBeInTheDocument();
+    // The hero's history link switches to the deployments tab.
+    fireEvent.click(screen.getByTestId("view-deployments"));
+    expect(screen.getByTestId("deployments")).toBeInTheDocument();
+  });
+
+  it("lists the custom-domain address alongside shortwind.app when active", () => {
+    // Fixtures: pages.acme.com is active, www.acme.com is pending approval.
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />);
+    expect(screen.getByText(/pages\.acme\.com\/launch/)).toBeInTheDocument();
+    expect(screen.queryByText(/www\.acme\.com/)).not.toBeInTheDocument();
+  });
+
+  it("shows only the vanity address when no domain is active", () => {
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />, {
+      accountDomains: [],
+    });
+    expect(screen.getByTestId("address-vanity")).toBeInTheDocument();
+    expect(screen.queryByTestId("address-domain")).not.toBeInTheDocument();
+  });
+
   it("calls onBack from the back button", () => {
     const onBack = vi.fn();
     renderWithData(<ProjectDetail pageId="page_1" onBack={onBack} />);
     fireEvent.click(screen.getByRole("button", { name: /All pages/ }));
     expect(onBack).toHaveBeenCalled();
+  });
+
+  it("keeps back button and tabs visible while pages load", () => {
+    renderWithData(<ProjectDetail pageId="page_1" onBack={() => {}} />, {
+      pages: undefined,
+    });
+    expect(
+      screen.getByRole("button", { name: /All pages/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "overview" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: /loading page/i }),
+    ).toBeInTheDocument();
   });
 
   it("handles an unknown page id", () => {

@@ -1,8 +1,9 @@
 import { useDashboardData } from "../lib/data";
-import { formatTime } from "../lib/format";
+import { formatTime, relativeTime } from "../lib/format";
 import { Badge } from "../components/Badge";
 import { CopyValue } from "../components/CopyValue";
 import { EmptyState } from "../components/EmptyState";
+import { SkeletonRows } from "../components/Skeleton";
 import type { ModerationState } from "../lib/types";
 
 /**
@@ -23,11 +24,7 @@ export function ModerationView() {
   const { moderation } = useDashboardData();
 
   if (moderation === undefined) {
-    return (
-      <div className="@muted">
-        Loading moderation queue…
-      </div>
-    );
+    return <SkeletonRows count={3} label="Loading moderation queue" />;
   }
   if (moderation.length === 0) {
     return (
@@ -82,8 +79,11 @@ export function ModerationView() {
                 </div>
               ) : null}
             </div>
-            <span className="@caption shrink-0 tabular-nums">
-              {formatTime(m.updatedAt)}
+            <span
+              className="@caption shrink-0 tabular-nums"
+              title={formatTime(m.updatedAt)}
+            >
+              {relativeTime(m.updatedAt)}
             </span>
           </li>
         );

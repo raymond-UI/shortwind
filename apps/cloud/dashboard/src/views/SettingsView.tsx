@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
-import { formatTime } from "../lib/format";
+import { formatTime, relativeTime } from "../lib/format";
 import { PolicyView } from "./PolicyView";
 import { Badge } from "../components/Badge";
-import { EmptyState } from "../components/EmptyState";
+import { CopyValue } from "../components/CopyValue";
 import { SectionHeader } from "../components/SectionHeader";
+import { SkeletonRows } from "../components/Skeleton";
 import type { TokenRow } from "../lib/types";
 
 /**
@@ -18,20 +19,12 @@ export function SettingsView() {
   return (
     <div className="max-w-2xl space-y-10" data-testid="settings-view">
       <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Policy"
-          title="Account policy"
-          description="Account-wide controls applied to every page."
-        />
+        <SectionHeader eyebrow="Policy" title="Account policy" />
         <PolicyView />
       </section>
 
       <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Access"
-          title="API tokens"
-          description="Scoped bearer tokens used by the CLI and agents. Revoke any you no longer trust."
-        />
+        <SectionHeader eyebrow="Access" title="API tokens" />
         <TokenList />
       </section>
     </div>
@@ -42,16 +35,21 @@ function TokenList() {
   const { tokens } = useDashboardData();
 
   if (tokens === undefined) {
-    return <div className="@muted">Loading tokens…</div>;
+    return <SkeletonRows count={3} label="Loading tokens" />;
   }
   if (tokens.length === 0) {
+    // Same ghost pattern as the Overview archive card — compact, with the
+    // CLI command right there to copy instead of a hero-sized empty state.
     return (
-      <EmptyState
-        icon="🔑"
-        title="No API tokens"
-        description="Run `shortwind cloud login` to mint one."
-        testId="tokens-empty"
-      />
+      <div
+        data-testid="tokens-empty"
+        className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground"
+      >
+        <span>No API tokens yet. Mint one from the CLI:</span>
+        <div className="rounded-md border border-border bg-secondary/50 px-2 py-1">
+          <CopyValue value="shortwind cloud login" />
+        </div>
+      </div>
     );
   }
 
@@ -111,7 +109,10 @@ function TokenRowItem({ token }: { token: TokenRow }) {
           ))}
         </div>
         <div className="mt-1.5 text-xs text-muted-foreground tabular-nums">
-          created {formatTime(token.createdAt)}
+          <span title={formatTime(token.createdAt)}>
+            created {relativeTime(token.createdAt)}
+          </span>
+          {/* Expiry is in the future — relative phrasing can't say that. */}
           {token.expiresAt !== null
             ? ` · expires ${formatTime(token.expiresAt)}`
             : ""}

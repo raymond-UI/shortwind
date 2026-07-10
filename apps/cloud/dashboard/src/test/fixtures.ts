@@ -213,6 +213,7 @@ export function makeData(
       cloudflareHostnameId: "cf_test",
     }),
     approveDomain: async () => {},
+    removeDomain: async () => {},
     ...overrides,
   };
 }

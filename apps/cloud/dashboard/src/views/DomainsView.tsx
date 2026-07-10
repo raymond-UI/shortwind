@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
+import { formatTime, relativeTime } from "../lib/format";
 import { CopyValue } from "../components/CopyValue";
+import { Dialog } from "../components/Dialog";
 import { SectionHeader } from "../components/SectionHeader";
+import { SkeletonPanel } from "../components/Skeleton";
 import type { AccountDomainRow, DomainStatus } from "../lib/types";
 
 /**
@@ -34,39 +37,39 @@ function readError(e: unknown): { message: string; code?: string } {
   return { message: "Something went wrong. Please try again." };
 }
 
-/** Per-status presentation: label + colored dot + badge classes. */
+/**
+ * Per-status presentation via the theme's tone system (data-tone on @badge) —
+ * no raw palette colors; the dot inherits the tone's foreground (bg-current).
+ */
 const STATUS_STYLE: Record<
   DomainStatus,
-  { label: string; dot: string; badge: string; hint: string }
+  { label: string; tone: "success" | "warning" | "info" | "danger"; pulse?: boolean; hint: string }
 > = {
   active: {
     label: "Active",
-    dot: "bg-term",
-    badge: "border-term/40 bg-term/10 text-term",
-    hint: "Live — your pages serve on this domain.",
+    tone: "success",
+    hint: "Live. Your pages serve on this domain.",
   },
   "pending-cert": {
     label: "Verifying",
-    dot: "bg-amber-500 animate-pulse",
-    badge: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+    tone: "warning",
+    pulse: true,
     hint: "Add the CNAME below, then Check status.",
   },
   queued: {
     label: "Queued",
-    dot: "bg-amber-500 animate-pulse",
-    badge: "border-amber-500/40 bg-amber-500/10 text-amber-400",
-    hint: "Waiting on Cloudflare — retry shortly.",
+    tone: "warning",
+    pulse: true,
+    hint: "Waiting on Cloudflare. Retry shortly.",
   },
   "pending-human": {
     label: "Needs approval",
-    dot: "bg-sky-500",
-    badge: "border-sky-500/40 bg-sky-500/10 text-sky-400",
+    tone: "info",
     hint: "Approve to provision the certificate.",
   },
   failed: {
     label: "Failed",
-    dot: "bg-red-500",
-    badge: "border-red-500/40 bg-red-500/10 text-red-400",
+    tone: "danger",
     hint: "Check the CNAME record, then Check status.",
   },
 };
@@ -74,10 +77,14 @@ const STATUS_STYLE: Record<
 function StatusBadge({ status }: { status: DomainStatus }) {
   const s = STATUS_STYLE[status];
   return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${s.badge}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />
+    <span className="@badge shrink-0 gap-1.5" data-tone={s.tone}>
+      <span
+        className={
+          "h-1.5 w-1.5 rounded-full bg-current" +
+          (s.pulse ? " animate-pulse" : "")
+        }
+        aria-hidden
+      />
       {s.label}
     </span>
   );
@@ -132,16 +139,28 @@ export function DomainsView() {
     bindDomain,
     recheckDomain,
     approveDomain,
+    removeDomain,
   } = useDashboardData();
 
   const [hostname, setHostname] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; code?: string } | null>(
     null,
   );
 
+  // The header is static — render it immediately and skeleton only the cards.
+  const header = (
+    <SectionHeader eyebrow="Custom domain" title="Bring your own domain" />
+  );
+
   if (accountDomains === undefined) {
-    return <div className="@muted">Loading domains…</div>;
+    return (
+      <div className="space-y-5">
+        {header}
+        <SkeletonPanel lines={3} label="Loading domains" />
+      </div>
+    );
   }
 
   async function run(key: string, fn: () => Promise<unknown>) {
@@ -162,19 +181,7 @@ export function DomainsView() {
 
   return (
     <div className="space-y-5" data-testid="domains-view">
-      <SectionHeader
-        eyebrow="Custom domain"
-        title="Bring your own domain"
-        description={
-          <>
-            Account-wide — every page also serves at{" "}
-            <span className="font-mono">your-domain/&lt;slug&gt;</span>. Bind a
-            subdomain you own (e.g.{" "}
-            <span className="font-mono">pages.example.com</span>), not a bare
-            apex.
-          </>
-        }
-      />
+      {header}
 
       {canBind ? (
         <form
@@ -196,81 +203,177 @@ export function DomainsView() {
               value={hostname}
               onChange={(e) => setHostname(e.target.value)}
               placeholder="pages.example.com"
-              className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:border-ring focus:outline-none"
+              className="@input min-w-0 sm:flex-1"
               data-testid="domain-input"
             />
             <button
               type="submit"
-              className="@btn-outline shrink-0"
+              className="@button-primary-sm shrink-0"
               disabled={busy !== null || hostname.trim().length === 0}
               data-testid="domain-connect"
             >
               {busy === "bind" ? "Connecting…" : "Connect"}
             </button>
           </div>
+          <p className="@help">
+            Pages will also serve at your-domain/&lt;slug&gt;. Subdomains only.
+          </p>
         </form>
       ) : null}
 
       {accountDomains.map((d: AccountDomainRow) => {
         const s = STATUS_STYLE[d.status];
+        const active = d.status === "active";
+        // Same anatomy as the Overview cards: identity block + semibold name
+        // over a dim sub-line, dot-only for the good state (words are for
+        // exceptions), and a quiet border-separated footer with the meta +
+        // the action that applies.
         return (
           <div
             key={d.id}
             data-testid={`domain-${d.hostname}`}
-            className="@card space-y-3"
+            className="@card flex flex-col p-5"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-0.5">
-                <div className="truncate font-mono text-sm font-semibold">
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden="true"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary text-xs font-semibold text-term"
+              >
+                ⊞
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[15px] font-semibold leading-6 tracking-tight">
                   {d.hostname}
                 </div>
-                <div className="@caption">{s.hint}</div>
+                <div className="truncate text-xs text-muted-foreground/80">
+                  {d.hostname}/&lt;slug&gt;
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {d.status === "active" ? (
-                  <StatusBadge status={d.status} />
-                ) : (
-                  <>
-                    <StatusBadge status={d.status} />
-                    {d.status === "pending-human" ? (
-                      <button
-                        type="button"
-                        className="@btn-outline"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void run("approve", () => approveDomain(d.hostname))
-                        }
-                        data-testid={`domain-approve-${d.hostname}`}
-                      >
-                        {busy === "approve" ? "Approving…" : "Approve"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="@btn-outline"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void run("recheck", () => recheckDomain(d.hostname))
-                        }
-                        data-testid={`domain-recheck-${d.hostname}`}
-                      >
-                        {busy === "recheck" ? "Checking…" : "Check status"}
-                      </button>
-                    )}
-                  </>
-                )}
-                {d.status === "active" ? (
+              {active ? (
+                <span className="mt-1.5 flex shrink-0" title="active">
+                  <span
+                    className="h-2 w-2 rounded-full bg-term"
+                    aria-hidden="true"
+                  />
+                  <span className="sr-only">active</span>
                   <span data-testid={`domain-active-${d.hostname}`} hidden />
-                ) : null}
-              </div>
+                </span>
+              ) : (
+                <StatusBadge status={d.status} />
+              )}
             </div>
 
-            {d.status !== "active" ? (
-              <DnsInstructions hostname={d.hostname} cnameTarget={cnameTarget} />
+            {!active ? (
+              <div className="mt-4">
+                <DnsInstructions
+                  hostname={d.hostname}
+                  cnameTarget={cnameTarget}
+                />
+              </div>
             ) : null}
+
+            <div className="mt-6 flex items-center gap-3 border-t border-border pt-3">
+              <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+                {active ? (
+                  d.verifiedAt !== null ? (
+                    <span title={formatTime(d.verifiedAt)}>
+                      verified {relativeTime(d.verifiedAt)}
+                    </span>
+                  ) : (
+                    "verified"
+                  )
+                ) : (
+                  s.hint
+                )}
+              </span>
+              <span className="ml-auto flex shrink-0 items-center gap-2">
+                {!active ? (
+                  d.status === "pending-human" ? (
+                    <button
+                      type="button"
+                      className="@button-secondary-sm"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void run("approve", () => approveDomain(d.hostname))
+                      }
+                      data-testid={`domain-approve-${d.hostname}`}
+                    >
+                      {busy === "approve" ? "Approving…" : "Approve"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="@button-secondary-sm"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        void run("recheck", () => recheckDomain(d.hostname))
+                      }
+                      data-testid={`domain-recheck-${d.hostname}`}
+                    >
+                      {busy === "recheck" ? "Checking…" : "Check status"}
+                    </button>
+                  )
+                ) : null}
+                <button
+                  type="button"
+                  className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  disabled={busy !== null}
+                  onClick={() => setConfirmRemove(d.hostname)}
+                  data-testid={`domain-remove-${d.hostname}`}
+                >
+                  Remove
+                </button>
+              </span>
+            </div>
           </div>
         );
       })}
+
+      {/* Remove confirmation. Removal frees the hostname and, for an active
+          domain, stops it serving immediately. */}
+      <Dialog
+        open={confirmRemove !== null}
+        onClose={() => {
+          if (busy === null) setConfirmRemove(null);
+        }}
+        labelledBy="domain-remove-title"
+      >
+        <div className="space-y-3">
+          <h3 id="domain-remove-title" className="text-sm font-semibold">
+            Remove {confirmRemove}?
+          </h3>
+          <p className="@caption">
+            Pages stop serving at this domain immediately. Its certificate is
+            released; you can bind it again later.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="@button-secondary-sm"
+              disabled={busy !== null}
+              onClick={() => setConfirmRemove(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="@btn-danger px-3 py-1.5 text-xs"
+              disabled={busy !== null}
+              data-testid="domain-remove-confirm"
+              onClick={() => {
+                const h = confirmRemove;
+                if (!h) return;
+                void run("remove", async () => {
+                  await removeDomain(h);
+                  setConfirmRemove(null);
+                });
+              }}
+            >
+              {busy === "remove" ? "Removing…" : "Remove domain"}
+            </button>
+          </div>
+        </div>
+      </Dialog>
 
       {error ? (
         <div

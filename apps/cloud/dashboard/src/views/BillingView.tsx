@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { SectionHeader } from "../components/SectionHeader";
+import { SkeletonPanel } from "../components/Skeleton";
 import type { PlanId } from "../lib/types";
 
 /**
@@ -21,21 +22,6 @@ const PLAN_LABEL: Record<PlanId, string> = {
   pro: "Pro",
 };
 
-const PLAN_FEATURES: Record<PlanId, string[]> = {
-  free: [
-    "Unlimited publishes",
-    "<slug>.shortwind.app URLs",
-    "Public / unlisted / private",
-    "Free serving — views aren’t billed",
-  ],
-  pro: [
-    "Everything in Free",
-    "Bring your own domain",
-    "your-domain/<slug>",
-    "Auto-issued TLS certificate",
-  ],
-};
-
 /** Stripe period-end is unix SECONDS; render as a local date. */
 function formatPeriodEnd(currentPeriodEnd: number | null): string | null {
   if (!currentPeriodEnd) return null;
@@ -51,20 +37,27 @@ export function BillingView() {
   const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The header is static — render it immediately and skeleton only the plan card.
+  const header = <SectionHeader eyebrow="Billing" title="Plan & subscription" />;
+
   if (billing === undefined) {
-    return <div className="@muted">Loading billing…</div>;
+    return (
+      <div className="max-w-xl space-y-5">
+        {header}
+        <SkeletonPanel lines={4} label="Loading billing" />
+      </div>
+    );
   }
 
   const isPro = billing.plan !== "free";
   const periodLabel = formatPeriodEnd(billing.currentPeriodEnd);
   const renewalText = (() => {
-    if (billing.plan === "free") return "No active subscription.";
+    if (billing.plan === "free") return null;
     if (billing.cancelAtPeriodEnd && periodLabel)
       return `Cancels on ${periodLabel}.`;
     if (periodLabel) return `Renews on ${periodLabel}.`;
     return null;
   })();
-  const features = PLAN_FEATURES[billing.plan];
 
   async function onUpgrade() {
     setBusy("checkout");
@@ -92,79 +85,55 @@ export function BillingView() {
 
   return (
     <div className="max-w-xl space-y-5" data-testid="billing-view">
-      <SectionHeader
-        eyebrow="Billing"
-        title="Plan & subscription"
-        description="Custom domains require a paid plan — publishing and serving stay free."
-      />
+      {header}
 
-      <div
+      {/* Same anatomy as the page-detail hero: stat label, big value with
+          quiet meta beside it, and a border-separated footer for actions. */}
+      <section
         className={
-          "rounded-lg border bg-card p-5 " +
-          (isPro ? "border-term/40" : "border-border")
+          "@card flex flex-col p-5 " + (isPro ? "border-term/40" : "")
         }
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
+          <span className="@stat-label">Current plan</span>
+          {billing.hasActive && isPro ? (
+            <span
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              data-testid="billing-active"
+            >
               <span
-                className="text-lg font-semibold tracking-tight"
-                data-testid="billing-plan"
-              >
-                {PLAN_LABEL[billing.plan]}
-              </span>
-              {billing.hasActive && isPro ? (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full border border-term/40 bg-term/10 px-2 py-0.5 text-xs font-medium text-term"
-                  data-testid="billing-active"
-                >
-                  <span
-                    className="h-1.5 w-1.5 rounded-full bg-term"
-                    aria-hidden="true"
-                  />
-                  Active
-                </span>
-              ) : null}
-            </div>
-            {renewalText ? (
-              <div
-                className="text-xs text-muted-foreground"
-                data-testid="billing-renewal"
-              >
-                {renewalText}
-              </div>
-            ) : null}
-          </div>
-          <div className="text-right">
-            <span className="text-2xl font-bold tabular-nums tracking-tight">
-              {isPro ? (
-                <>
-                  <span className="text-term">$5</span>
-                  <span className="text-sm text-muted-foreground">/mo</span>
-                </>
-              ) : (
-                "$0"
-              )}
+                className="h-2 w-2 rounded-full bg-term"
+                aria-hidden="true"
+              />
+              Active
             </span>
-          </div>
+          ) : null}
         </div>
 
-        <ul className="mt-4 space-y-1.5 border-t border-border pt-4 text-sm text-muted-foreground">
-          {features.map((f) => (
-            <li key={f} className="flex items-center gap-2">
-              <span className="text-term" aria-hidden="true">
-                ▚
-              </span>
-              <span className="font-mono text-xs sm:text-sm">{f}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="@stat-value" data-testid="billing-plan">
+            {PLAN_LABEL[billing.plan]}
+          </span>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {isPro ? "$5/mo" : "$0"}
+          </span>
+          {renewalText ? (
+            <span
+              className="text-xs text-muted-foreground"
+              data-testid="billing-renewal"
+            >
+              · {renewalText}
+            </span>
+          ) : null}
+        </div>
 
-        <div className="mt-5">
+        {/* Exceptions-only copy: Pro users don't need a feature recap; Free
+            users get the one line that matters. */}
+        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-border pt-3">
           {billing.hasActive ? (
             <button
               type="button"
-              className="@btn-outline w-full sm:w-auto"
+              className="@button-secondary-sm"
               disabled={busy !== null}
               onClick={onManage}
               data-testid="billing-manage"
@@ -174,7 +143,7 @@ export function BillingView() {
           ) : (
             <button
               type="button"
-              className="sw-btn-primary w-full rounded-md px-4 py-2 text-sm font-semibold sm:w-auto"
+              className="@button-primary-sm"
               disabled={busy !== null}
               onClick={onUpgrade}
               data-testid="billing-upgrade"
@@ -182,6 +151,11 @@ export function BillingView() {
               {busy === "checkout" ? "Starting…" : "Upgrade to Pro"}
             </button>
           )}
+          {!isPro ? (
+            <span className="text-[11px] text-muted-foreground">
+              Pro adds your-domain/&lt;slug&gt; with auto TLS ($5/mo)
+            </span>
+          ) : null}
         </div>
 
         {error ? (
@@ -192,7 +166,7 @@ export function BillingView() {
             {error}
           </p>
         ) : null}
-      </div>
+      </section>
     </div>
   );
 }

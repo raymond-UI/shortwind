@@ -29,9 +29,14 @@ describe("UsageView (CLOUD-43 metered billing surface)", () => {
     );
   });
 
-  it("shows the loading branch while usage is undefined", () => {
+  it("keeps meter labels visible while usage loads (/ui: mask only values)", () => {
     renderWithData(<UsageView />, { usage: undefined });
-    expect(screen.getByText(/Loading usage/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: /loading usage/i }),
+    ).toBeInTheDocument();
+    // Meter labels/hints are static — only the values are dynamic.
+    expect(screen.getByText("Publishes")).toBeInTheDocument();
+    expect(screen.getByText("Storage")).toBeInTheDocument();
   });
 
   it("renders zeros for a never-published account", () => {

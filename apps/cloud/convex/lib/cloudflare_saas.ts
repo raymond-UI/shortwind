@@ -127,5 +127,23 @@ export function makeCloudflareSaaSClient(): CloudflareSaaSClient {
       }
       return toRecord(data.result, data.result.hostname ?? "");
     },
+
+    async deleteCustomHostname(id: string): Promise<void> {
+      const zoneId = requireEnv("CLOUDFLARE_ZONE_ID");
+      const res = await cfFetch(`/zones/${zoneId}/custom_hostnames/${id}`, {
+        method: "DELETE",
+      });
+      // Idempotent: an already-deleted hostname is success, not an error.
+      if (res.status === 404) return;
+      const data = (await res.json()) as CfEnvelope;
+      if (!data.success) {
+        throw new ConvexError({
+          code: "CLOUDFLARE_ERROR",
+          message:
+            data.errors?.[0]?.message ??
+            "cloudflare custom-hostname delete failed",
+        });
+      }
+    },
   };
 }

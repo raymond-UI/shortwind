@@ -1,9 +1,15 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime, shortHash } from "../lib/format";
-import { pageHost, pageUrl } from "../lib/urls";
+import {
+  accountDomainPageHost,
+  accountDomainPageUrl,
+  pageHost,
+  pageUrl,
+} from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
+import { Skeleton, SkeletonDetailBody } from "../components/Skeleton";
 import { Dialog } from "../components/Dialog";
 import { Menu, MenuItem } from "../components/Menu";
 import type {
@@ -47,8 +53,49 @@ export function ProjectDetail({
   const tab = controlledTab ?? internalTab;
   const setTab = onTabChange ?? setInternalTab;
 
+  // Static chrome (/ui: render known elements immediately; mask only data).
+  // The back button and tab labels are known before any data arrives; only
+  // the page identity (slug/URL) and tab content are dynamic.
+  const tablist = (
+    <div
+      role="tablist"
+      aria-label="Project sections"
+      className="flex gap-1 border-b border-border"
+    >
+      {(["overview", "deployments", "settings"] as DetailTab[]).map((t) => (
+        <button
+          key={t}
+          type="button"
+          role="tab"
+          id={`tab-${t}`}
+          aria-selected={t === tab}
+          aria-controls={`panel-${t}`}
+          onClick={() => setTab(t)}
+          className={
+            t === tab ? "@tab-active -mb-px capitalize" : "@tab -mb-px capitalize"
+          }
+        >
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+
   if (pages === undefined) {
-    return <div className="@muted">Loading…</div>;
+    return (
+      <div className="space-y-6" data-testid="project-detail">
+        <div className="space-y-3">
+          <BackButton onBack={onBack} />
+          <div className="flex flex-wrap items-center gap-3">
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-2 w-2 rounded-full" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+        </div>
+        {tablist}
+        <SkeletonDetailBody />
+      </div>
+    );
   }
   const entry = pages.find((p) => p.page.id === pageId);
   if (!entry) {
@@ -70,44 +117,41 @@ export function ProjectDetail({
     <div className="space-y-6" data-testid="project-detail">
       <div className="space-y-3">
         <BackButton onBack={onBack} />
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="@heading-md">{page.slug}</h2>
-          <LifecycleStatus lifecycle={page.lifecycle} />
-          <VisibilityBadge visibility={page.visibility} />
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="@link @caption"
-          >
-            {pageHost(page.slug)} ↗
-          </a>
-          <CopyButton value={url} />
+        {/* Same exceptions-only rule as the Overview cards: live is a dot,
+            dead states keep their word. Visibility lives in the properties
+            card, not here — the header is identity + address only. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <h2 className="@heading-md min-w-0 truncate" title={page.slug}>
+            {page.slug}
+          </h2>
+          {page.lifecycle === "active" ? (
+            <span className="flex" title="live">
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 rounded-full bg-term"
+              />
+              <span className="sr-only">live</span>
+            </span>
+          ) : (
+            <LifecycleStatus lifecycle={page.lifecycle} />
+          )}
+          {/* URL + copy stay one unit: their own line on mobile, inline on sm+. */}
+          <span className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="@link @caption min-w-0 truncate"
+              title={url}
+            >
+              {pageHost(page.slug)} ↗
+            </a>
+            <CopyButton value={url} />
+          </span>
         </div>
       </div>
 
-      <div
-        role="tablist"
-        aria-label="Project sections"
-        className="flex gap-1 border-b border-border"
-      >
-        {(["overview", "deployments", "settings"] as DetailTab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            id={`tab-${t}`}
-            aria-selected={t === tab}
-            aria-controls={`panel-${t}`}
-            onClick={() => setTab(t)}
-            className={
-              t === tab ? "@tab-active -mb-px capitalize" : "@tab -mb-px capitalize"
-            }
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      {tablist}
 
       <div
         role="tabpanel"
@@ -116,7 +160,12 @@ export function ProjectDetail({
         tabIndex={0}
         className="focus:outline-none"
       >
-        {tab === "overview" ? <OverviewTab entry={entry} /> : null}
+        {tab === "overview" ? (
+          <OverviewTab
+            entry={entry}
+            onViewDeployments={() => setTab("deployments")}
+          />
+        ) : null}
         {tab === "deployments" ? <DeploymentsTab entry={entry} /> : null}
         {tab === "settings" ? (
           <SettingsTab entry={entry} onBack={onBack} />
@@ -134,7 +183,13 @@ function BackButton({ onBack }: { onBack: () => void }) {
   );
 }
 
-function CopyButton({ value }: { value: string }) {
+function CopyButton({
+  value,
+  label = "copy URL",
+}: {
+  value: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -146,55 +201,153 @@ function CopyButton({ value }: { value: string }) {
       }}
       className="@btn-ghost-sm"
     >
-      {copied ? "copied" : "copy URL"}
+      {copied ? "copied" : label}
     </button>
   );
 }
 
-function OverviewTab({ entry }: { entry: PageWithVersions }) {
-  const { page } = entry;
-  // Semantic description list — the @dl / @dt / @dd recipes (label | value grid).
+/**
+ * Overview tab, reworked (console redesign): no key-value dump repeating the
+ * header. A "Current deployment" hero (the thing an owner checks first) next
+ * to a compact properties card; timestamps are relative with the absolute in
+ * the tooltip.
+ */
+function OverviewTab({
+  entry,
+  onViewDeployments,
+}: {
+  entry: PageWithVersions;
+  onViewDeployments: () => void;
+}) {
+  const { accountDomains } = useDashboardData();
+  const { page, versions } = entry;
+  const current = versions.length > 0 ? versions[0] : null;
+  // Account-level custom domains: a page also serves at `<hostname>/<slug>`
+  // for every ACTIVE domain (pending/failed ones don't resolve yet).
+  const activeDomains = (accountDomains ?? []).filter(
+    (d) => d.status === "active",
+  );
   return (
-    <dl className="@card @dl max-w-xl">
-      <dt className="@dt">Slug</dt>
-      <dd className="@dd">{page.slug}</dd>
+    <div className="grid gap-4 lg:grid-cols-3">
+      <section
+        data-testid="current-deployment"
+        className="@card flex flex-col p-5 lg:col-span-2"
+      >
+        <div className="flex items-center justify-between">
+          <span className="@stat-label">Current deployment</span>
+          <LifecycleStatus lifecycle={page.lifecycle} />
+        </div>
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="@stat-value">v{page.currentVersion}</span>
+          <span
+            className="text-xs text-muted-foreground"
+            title={formatTime(page.updatedAt)}
+          >
+            published {relativeTime(page.updatedAt)} via CLI
+          </span>
+        </div>
+        {current ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            src {shortHash(current.sourceHash)} · out{" "}
+            {shortHash(current.expandedHash)}
+          </p>
+        ) : null}
+        <div className="mt-6 space-y-1.5 border-t border-border pt-3">
+          <AddressRow
+            testId="address-vanity"
+            url={pageUrl(page.slug)}
+            display={pageHost(page.slug)}
+          />
+          {activeDomains.map((d) => (
+            <AddressRow
+              key={d.id}
+              testId="address-domain"
+              url={accountDomainPageUrl(d.hostname, page.slug)}
+              display={accountDomainPageHost(d.hostname, page.slug)}
+            />
+          ))}
+        </div>
+        <div className="mt-3 text-xs">
+          <button
+            type="button"
+            data-testid="view-deployments"
+            onClick={onViewDeployments}
+            className="@link text-muted-foreground hover:text-term"
+          >
+            Deployment history ({versions.length}) →
+          </button>
+        </div>
+      </section>
 
-      <dt className="@dt">Live URL</dt>
-      <dd className="@dd">
-        <a
-          href={pageUrl(page.slug)}
-          target="_blank"
-          rel="noreferrer"
-          className="@link"
-        >
-          {pageHost(page.slug)}
-        </a>
-      </dd>
+      <section className="@card space-y-4 p-5">
+        <PropertyRow label="Visibility">
+          <VisibilityBadge visibility={page.visibility} />
+        </PropertyRow>
+        <PropertyRow label="Tags">
+          {page.tags.length ? (
+            <span className="flex flex-wrap justify-end gap-1.5">
+              {page.tags.map((t) => (
+                <Badge key={t}>{t}</Badge>
+              ))}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </PropertyRow>
+        <PropertyRow label="Created">
+          <span title={formatTime(page.createdAt)}>
+            {relativeTime(page.createdAt)}
+          </span>
+        </PropertyRow>
+        <PropertyRow label="Updated">
+          <span title={formatTime(page.updatedAt)}>
+            {relativeTime(page.updatedAt)}
+          </span>
+        </PropertyRow>
+      </section>
+    </div>
+  );
+}
 
-      <dt className="@dt">Visibility</dt>
-      <dd className="@dd">
-        <VisibilityBadge visibility={page.visibility} />
-      </dd>
+/** One address a page serves at — open in a new tab, or copy the full URL. */
+function AddressRow({
+  url,
+  display,
+  testId,
+}: {
+  url: string;
+  display: string;
+  testId?: string;
+}) {
+  return (
+    <div data-testid={testId} className="flex items-center gap-1 text-xs">
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="@link min-w-0 truncate text-muted-foreground hover:text-term"
+        title={url}
+      >
+        {display} ↗
+      </a>
+      <CopyButton value={url} label="copy" />
+    </div>
+  );
+}
 
-      <dt className="@dt">Status</dt>
-      <dd className="@dd">
-        <LifecycleStatus lifecycle={page.lifecycle} />
-      </dd>
-
-      <dt className="@dt">Current version</dt>
-      <dd className="@dd">v{page.currentVersion}</dd>
-
-      <dt className="@dt">Tags</dt>
-      <dd className="@dd">{page.tags.length ? page.tags.join(", ") : "—"}</dd>
-
-      <dt className="@dt">Created</dt>
-      <dd className="@dd">{formatTime(page.createdAt)}</dd>
-
-      <dt className="@dt">Updated</dt>
-      <dd className="@dd">
-        {formatTime(page.updatedAt)} ({relativeTime(page.updatedAt)})
-      </dd>
-    </dl>
+/** One quiet label/value line in the properties card. */
+function PropertyRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      {children}
+    </div>
   );
 }
 
@@ -303,8 +456,7 @@ function SettingsTab({
         <div className="space-y-3 rounded-lg border border-destructive/40 p-4">
           <div className="text-sm font-medium text-destructive">Danger zone</div>
           <p className="@caption">
-            Deleting tombstones the page — it stops serving (410) but its versions
-            are retained (§8.2).
+            Stops serving (410); versions are retained.
           </p>
           <button
             type="button"
@@ -330,8 +482,8 @@ function SettingsTab({
             Delete {page.slug}?
           </h3>
           <p className="@caption">
-            This tombstones the page — it stops serving (410). Its versions are
-            retained (§8.2) and it cannot be re-published at this URL.
+            It stops serving (410) and can’t be re-published at this URL.
+            Versions are retained.
           </p>
         </div>
         <div className="@dialog-footer">

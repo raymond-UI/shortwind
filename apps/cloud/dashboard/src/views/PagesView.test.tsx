@@ -86,6 +86,25 @@ describe("PagesView (Overview cards)", () => {
     expect(cardOrder()).toEqual(["page-card-alpha", "page-card-launch"]);
   });
 
+  it("shows only exceptional states on cards — public/private badge yes, unlisted no", () => {
+    renderWithData(<PagesView />, { pages: [...mockPages, alphaPage] });
+    // `launch` is public → badge; `alpha` is unlisted (the default) → no badge.
+    expect(screen.getByText("public")).toBeInTheDocument();
+    expect(screen.queryByText("unlisted")).not.toBeInTheDocument();
+  });
+
+  it("caps visible tags and summarizes the rest", () => {
+    const tagged: PageWithVersions = {
+      ...alphaPage,
+      page: { ...alphaPage.page, id: "page_4", slug: "tagged", tags: ["a", "b", "c", "d"] },
+    };
+    renderWithData(<PagesView />, { pages: [tagged] });
+    expect(screen.getByText("a")).toBeInTheDocument();
+    expect(screen.getByText("b")).toBeInTheDocument();
+    expect(screen.queryByText("c")).not.toBeInTheDocument();
+    expect(screen.getByText("+2")).toBeInTheDocument();
+  });
+
   it("calls onOpen when the card's title button is activated", () => {
     const onOpen = vi.fn();
     renderWithData(<PagesView onOpen={onOpen} />);
@@ -98,6 +117,13 @@ describe("PagesView (Overview cards)", () => {
     renderWithData(<PagesView />);
     fireEvent.click(screen.getByRole("button", { name: /new page/i }));
     expect(screen.getByRole("dialog")).toHaveTextContent(/shortwind deploy/);
+  });
+
+  it("keeps header and controls visible while pages load", () => {
+    renderWithData(<PagesView />, { pages: undefined });
+    expect(screen.getByText("Your hosted pages")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search pages")).toBeInTheDocument();
+    expect(screen.getByTestId("pages-loading")).toBeInTheDocument();
   });
 
   it("renders the empty state", () => {

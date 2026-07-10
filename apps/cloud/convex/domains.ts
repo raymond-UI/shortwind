@@ -113,6 +113,12 @@ export interface CloudflareSaaSClient {
    * for the cert status because state-change webhooks are enterprise-only (§9).
    */
   getCustomHostname(id: string): Promise<CustomHostnameRecord>;
+  /**
+   * Delete a custom hostname (DELETE …/custom_hostnames/{id}) so the cert stops
+   * renewing and the hostname is freed. Idempotent: an already-gone hostname
+   * (404) resolves, it does not throw.
+   */
+  deleteCustomHostname(id: string): Promise<void>;
 }
 
 /**
@@ -791,5 +797,90 @@ export const domainSetupInfo = query({
     return {
       cnameTarget: process.env.CUSTOM_DOMAIN_CNAME_TARGET ?? "cname.shortwind.app",
     };
+  },
+});
+
+/** Auth + the domain row targeted for removal. */
+export const authAndDomainForRemove = internalQuery({
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
+  returns: v.object({
+    accountId: v.id("accounts"),
+    tokenId: v.union(v.id("tokens"), v.null()),
+    domainId: v.id("accountDomains"),
+    cloudflareHostnameId: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const domain = await ctx.db
+      .query("accountDomains")
+      .withIndex("by_hostname", (q) => q.eq("hostname", args.hostname))
+      .first();
+    if (!domain || domain.accountId !== auth.accountId) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Domain not found" });
+    }
+    return {
+      accountId: auth.accountId,
+      tokenId: auth.tokenId,
+      domainId: domain._id,
+      cloudflareHostnameId: domain.cloudflareHostnameId,
+    };
+  },
+});
+
+/** Delete the domain row and audit the removal (`domain.remove`). */
+export const deleteAccountDomainRow = internalMutation({
+  args: {
+    accountId: v.id("accounts"),
+    tokenId: v.union(v.id("tokens"), v.null()),
+    domainId: v.id("accountDomains"),
+    hostname: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.domainId);
+    await ctx.db.insert("auditLog", {
+      accountId: args.accountId,
+      action: "domain.remove",
+      targetId: null,
+      actorTokenId: args.tokenId,
+      metadata: { hostname: args.hostname, scope: "account" },
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * removeAccountDomain (operator action): unbind an account domain in ANY state.
+ * Deletes the Cloudflare custom hostname when one was provisioned (the client
+ * treats an already-gone hostname as success), then removes the row. This is
+ * also the recovery path for failed/stuck binds: the bind form only shows at
+ * zero domains, so without removal a dead bind blocked the account forever.
+ */
+export const removeAccountDomain = action({
+  args: { bearer: v.optional(v.string()), hostname: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const check = isBindableSubdomain(args.hostname);
+    if (!check.ok) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: check.reason });
+    }
+    const hostname = check.hostname;
+    const info = await ctx.runQuery(internal.domains.authAndDomainForRemove, {
+      bearer: args.bearer,
+      hostname,
+    });
+    // CF first, row second: if the CF delete throws, the row survives and the
+    // operator can retry; the reverse order could leak a live cert forever.
+    if (info.cloudflareHostnameId) {
+      await cfClient.deleteCustomHostname(info.cloudflareHostnameId);
+    }
+    await ctx.runMutation(internal.domains.deleteAccountDomainRow, {
+      accountId: info.accountId,
+      tokenId: info.tokenId,
+      domainId: info.domainId,
+      hostname,
+    });
+    return null;
   },
 });

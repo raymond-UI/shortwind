@@ -1,6 +1,12 @@
 import { useDashboardData } from "../lib/data";
-import { describeRecipeEdit, formatTime, shortHash } from "../lib/format";
+import {
+  describeRecipeEdit,
+  formatTime,
+  relativeTime,
+  shortHash,
+} from "../lib/format";
 import { EmptyState } from "../components/EmptyState";
+import { SkeletonRows } from "../components/Skeleton";
 
 /**
  * Recipe-edits view (CLOUD-35, PRD §5.4) — THE distinct feed, restyled
@@ -13,9 +19,7 @@ export function RecipeEditsView() {
   const { recipeEdits } = useDashboardData();
 
   if (recipeEdits === undefined) {
-    return (
-      <div className="@muted">Loading recipe edits…</div>
-    );
+    return <SkeletonRows count={3} label="Loading recipe edits" />;
   }
   if (recipeEdits.length === 0) {
     return <EmptyState icon="✎" title="No recipe edits yet" />;
@@ -36,7 +40,10 @@ export function RecipeEditsView() {
           <div className="flex-1">
             <div className="text-sm">{describeRecipeEdit(e)}</div>
             <div className="@caption tabular-nums">
-              body {shortHash(e.bodySha)} · {formatTime(e.createdAt)}
+              body {shortHash(e.bodySha)} ·{" "}
+              <span title={formatTime(e.createdAt)}>
+                {relativeTime(e.createdAt)}
+              </span>
             </div>
           </div>
         </li>
