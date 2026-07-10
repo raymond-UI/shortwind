@@ -5,7 +5,10 @@
  */
 export function Skeleton({ className = "" }: { className?: string }) {
   // `@skeleton` = the catalog's pulsing block (animate-pulse rounded bg-muted).
-  return <div aria-hidden="true" className={"@skeleton " + className} />;
+  // Space on the non-recipe side: the expander rewrites recipe-bearing
+  // literals and trims their edges, which would glue className onto the
+  // expansion ("bg-mutedh-4 …").
+  return <div aria-hidden="true" className={"@skeleton" + " " + className} />;
 }
 
 /** Bordered-list rows placeholder — audit feed, tokens, moderation queue. */

@@ -91,7 +91,7 @@ export function BillingView() {
           quiet meta beside it, and a border-separated footer for actions. */}
       <section
         className={
-          "@card flex flex-col p-5 " + (isPro ? "border-term/40" : "")
+          "@card flex flex-col p-5" + (isPro ? " border-term/40" : "")
         }
       >
         <div className="flex items-center justify-between">

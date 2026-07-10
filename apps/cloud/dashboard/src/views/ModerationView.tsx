@@ -45,8 +45,8 @@ export function ModerationView() {
             key={m.id}
             data-testid="moderation-row"
             className={
-              "@card flex gap-3 !p-3 text-sm " +
-              (danger ? "border-l-2 border-l-destructive" : "")
+              "@card flex gap-3 !p-3 text-sm" +
+              (danger ? " border-l-2 border-l-destructive" : "")
             }
           >
             <span

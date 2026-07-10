@@ -70,8 +70,9 @@ export function Dialog({
         aria-labelledby={labelledBy}
         tabIndex={-1}
         className={
-          "@dialog-content transition-transform duration-200 outline-none " +
-          (visible ? "scale-100" : "scale-95")
+          // Space on the non-recipe side (expander trims recipe literals).
+          "@dialog-content transition-transform duration-200 outline-none" +
+          (visible ? " scale-100" : " scale-95")
         }
       >
         {children}
