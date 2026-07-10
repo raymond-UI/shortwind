@@ -58,7 +58,13 @@ function SectionRoute() {
         />
       );
     case "analytics":
-      return <AnalyticsView />;
+      return (
+        <AnalyticsView
+          onOpenPage={(id) =>
+            navigate({ to: "/dashboard/pages/$id", params: { id } })
+          }
+        />
+      );
     case "domains":
       return <DomainsView />;
     case "usage":

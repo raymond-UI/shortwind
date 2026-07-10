@@ -100,6 +100,28 @@ describe("DomainsView (UI custom-domain management)", () => {
     expect(screen.getByTestId("domain-error")).toHaveTextContent(/Billing/);
   });
 
+  it("removes a domain via the confirm dialog", async () => {
+    const removeDomain = vi.fn().mockResolvedValue(undefined);
+    renderWithData(<DomainsView />, {
+      accountDomains: [
+        {
+          id: "d1",
+          hostname: "pages.acme.com",
+          status: "failed",
+          verifiedAt: null,
+          createdAt: 1,
+        },
+      ],
+      removeDomain,
+    });
+    fireEvent.click(screen.getByTestId("domain-remove-pages.acme.com"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("domain-remove-confirm"));
+    await waitFor(() =>
+      expect(removeDomain).toHaveBeenCalledWith("pages.acme.com"),
+    );
+  });
+
   it("marks an active domain and hides its DNS instructions", () => {
     renderWithData(<DomainsView />, {
       accountDomains: [

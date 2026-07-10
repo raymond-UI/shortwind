@@ -105,7 +105,7 @@ async function publishPage(
   return out.id;
 }
 
-function activeClient(): CloudflareSaaSClient {
+function activeClient(deleted: string[] = []): CloudflareSaaSClient {
   return {
     createCustomHostname: async (
       hostname,
@@ -117,6 +117,9 @@ function activeClient(): CloudflareSaaSClient {
       hostname: id.replace(/^cf_/, ""),
       certStatus: "active",
     }),
+    deleteCustomHostname: async (id) => {
+      deleted.push(id);
+    },
   };
 }
 const failIfCalled: CloudflareSaaSClient = {
@@ -124,6 +127,9 @@ const failIfCalled: CloudflareSaaSClient = {
     throw new Error("Cloudflare must not be called");
   },
   getCustomHostname: async () => {
+    throw new Error("Cloudflare must not be called");
+  },
+  deleteCustomHostname: async () => {
     throw new Error("Cloudflare must not be called");
   },
 };
@@ -328,6 +334,93 @@ describe("bindAccountDomain — gates", () => {
       hostname: "pages.abc.com",
     });
     expect(result.state).toBe("pending-human");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeAccountDomain.
+// ---------------------------------------------------------------------------
+
+describe("removeAccountDomain — unbind + recovery path", () => {
+  it("removes an active domain and deletes its Cloudflare hostname", async () => {
+    const t = convexTest(schema, modules);
+    const deleted: string[] = [];
+    __setCloudflareSaaSClient(activeClient(deleted));
+    const accountId = await seedAccount(t, "remove");
+    const bearer = await issueBearer(t, accountId, [
+      "pages:write",
+      "domains:bind",
+      "pages:read",
+    ]);
+    await setPolicy(t, bearer, false);
+    await t.action(api.domains.bindAccountDomain, {
+      bearer,
+      hostname: "pages.abc.com",
+    });
+    await t.action(api.domains.removeAccountDomain, {
+      bearer,
+      hostname: "pages.abc.com",
+    });
+    expect(deleted).toEqual(["cf_pages.abc.com"]);
+    const rows = await t.query(api.domains.listAccountDomains, { bearer });
+    expect(rows).toHaveLength(0);
+  });
+
+  it("removes a pending-human domain without any Cloudflare call", async () => {
+    const t = convexTest(schema, modules);
+    __setCloudflareSaaSClient(failIfCalled);
+    const accountId = await seedAccount(t, "remove-pending");
+    const bearer = await issueBearer(t, accountId, [
+      "pages:write",
+      "domains:bind",
+      "pages:read",
+    ]);
+    await setPolicy(t, bearer, true); // parks pending-human; no CF hostname
+    await t.action(api.domains.bindAccountDomain, {
+      bearer,
+      hostname: "pages.abc.com",
+    });
+    await t.action(api.domains.removeAccountDomain, {
+      bearer,
+      hostname: "pages.abc.com",
+    });
+    expect(
+      await t.query(api.domains.listAccountDomains, { bearer }),
+    ).toHaveLength(0);
+  });
+
+  it("rejects removal of a domain the account does not own", async () => {
+    const t = convexTest(schema, modules);
+    const deleted: string[] = [];
+    __setCloudflareSaaSClient(activeClient(deleted));
+    const accA = await seedAccount(t, "owner");
+    const bearerA = await issueBearer(t, accA, [
+      "pages:write",
+      "domains:bind",
+      "pages:read",
+    ]);
+    await setPolicy(t, bearerA, false);
+    await t.action(api.domains.bindAccountDomain, {
+      bearer: bearerA,
+      hostname: "pages.abc.com",
+    });
+    const accB = await seedAccount(t, "intruder");
+    const bearerB = await issueBearer(t, accB, [
+      "pages:write",
+      "domains:bind",
+      "pages:read",
+    ]);
+    const err = await t
+      .action(api.domains.removeAccountDomain, {
+        bearer: bearerB,
+        hostname: "pages.abc.com",
+      })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(errData(err).code).toBe("NOT_FOUND");
+    expect(deleted).toHaveLength(0);
   });
 });
 

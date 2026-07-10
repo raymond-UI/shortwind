@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime } from "../lib/format";
 import { CopyValue } from "../components/CopyValue";
+import { Dialog } from "../components/Dialog";
 import { SectionHeader } from "../components/SectionHeader";
 import { SkeletonPanel } from "../components/Skeleton";
 import type { AccountDomainRow, DomainStatus } from "../lib/types";
@@ -138,10 +139,12 @@ export function DomainsView() {
     bindDomain,
     recheckDomain,
     approveDomain,
+    removeDomain,
   } = useDashboardData();
 
   const [hostname, setHostname] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; code?: string } | null>(
     null,
   );
@@ -283,9 +286,9 @@ export function DomainsView() {
                   s.hint
                 )}
               </span>
-              {!active ? (
-                <span className="ml-auto shrink-0">
-                  {d.status === "pending-human" ? (
+              <span className="ml-auto flex shrink-0 items-center gap-2">
+                {!active ? (
+                  d.status === "pending-human" ? (
                     <button
                       type="button"
                       className="@button-secondary-sm"
@@ -309,13 +312,68 @@ export function DomainsView() {
                     >
                       {busy === "recheck" ? "Checking…" : "Check status"}
                     </button>
-                  )}
-                </span>
-              ) : null}
+                  )
+                ) : null}
+                <button
+                  type="button"
+                  className="rounded-md px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  disabled={busy !== null}
+                  onClick={() => setConfirmRemove(d.hostname)}
+                  data-testid={`domain-remove-${d.hostname}`}
+                >
+                  Remove
+                </button>
+              </span>
             </div>
           </div>
         );
       })}
+
+      {/* Remove confirmation. Removal frees the hostname and, for an active
+          domain, stops it serving immediately. */}
+      <Dialog
+        open={confirmRemove !== null}
+        onClose={() => {
+          if (busy === null) setConfirmRemove(null);
+        }}
+        labelledBy="domain-remove-title"
+      >
+        <div className="space-y-3">
+          <h3 id="domain-remove-title" className="text-sm font-semibold">
+            Remove {confirmRemove}?
+          </h3>
+          <p className="@caption">
+            Pages stop serving at this domain immediately. Its certificate is
+            released; you can bind it again later.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="@button-secondary-sm"
+              disabled={busy !== null}
+              onClick={() => setConfirmRemove(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="@btn-danger px-3 py-1.5 text-xs"
+              disabled={busy !== null}
+              data-testid="domain-remove-confirm"
+              onClick={() => {
+                const h = confirmRemove;
+                if (!h) return;
+                void run("remove", async () => {
+                  await removeDomain(h);
+                  setConfirmRemove(null);
+                });
+              }}
+            >
+              {busy === "remove" ? "Removing…" : "Remove domain"}
+            </button>
+          </div>
+        </div>
+      </Dialog>
 
       {error ? (
         <div

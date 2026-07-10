@@ -186,4 +186,6 @@ export interface DashboardData {
   recheckDomain: (hostname: string) => Promise<DomainBindResult>;
   /** Approve a `pending-human` account domain (operator gate). */
   approveDomain: (hostname: string) => Promise<void>;
+  /** Unbind an account domain in any state (also the stuck-bind recovery). */
+  removeDomain: (hostname: string) => Promise<void>;
 }
