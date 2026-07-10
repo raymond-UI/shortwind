@@ -35,39 +35,39 @@ function readError(e: unknown): { message: string; code?: string } {
   return { message: "Something went wrong. Please try again." };
 }
 
-/** Per-status presentation: label + colored dot + badge classes. */
+/**
+ * Per-status presentation via the theme's tone system (data-tone on @badge) —
+ * no raw palette colors; the dot inherits the tone's foreground (bg-current).
+ */
 const STATUS_STYLE: Record<
   DomainStatus,
-  { label: string; dot: string; badge: string; hint: string }
+  { label: string; tone: "success" | "warning" | "info" | "danger"; pulse?: boolean; hint: string }
 > = {
   active: {
     label: "Active",
-    dot: "bg-term",
-    badge: "border-term/40 bg-term/10 text-term",
+    tone: "success",
     hint: "Live — your pages serve on this domain.",
   },
   "pending-cert": {
     label: "Verifying",
-    dot: "bg-amber-500 animate-pulse",
-    badge: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+    tone: "warning",
+    pulse: true,
     hint: "Add the CNAME below, then Check status.",
   },
   queued: {
     label: "Queued",
-    dot: "bg-amber-500 animate-pulse",
-    badge: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+    tone: "warning",
+    pulse: true,
     hint: "Waiting on Cloudflare — retry shortly.",
   },
   "pending-human": {
     label: "Needs approval",
-    dot: "bg-sky-500",
-    badge: "border-sky-500/40 bg-sky-500/10 text-sky-400",
+    tone: "info",
     hint: "Approve to provision the certificate.",
   },
   failed: {
     label: "Failed",
-    dot: "bg-red-500",
-    badge: "border-red-500/40 bg-red-500/10 text-red-400",
+    tone: "danger",
     hint: "Check the CNAME record, then Check status.",
   },
 };
@@ -75,10 +75,14 @@ const STATUS_STYLE: Record<
 function StatusBadge({ status }: { status: DomainStatus }) {
   const s = STATUS_STYLE[status];
   return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${s.badge}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} aria-hidden />
+    <span className="@badge shrink-0 gap-1.5" data-tone={s.tone}>
+      <span
+        className={
+          "h-1.5 w-1.5 rounded-full bg-current" +
+          (s.pulse ? " animate-pulse" : "")
+        }
+        aria-hidden
+      />
       {s.label}
     </span>
   );

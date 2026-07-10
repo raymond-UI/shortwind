@@ -1,5 +1,5 @@
 import { useDashboardData } from "../lib/data";
-import { formatTime } from "../lib/format";
+import { formatTime, relativeTime } from "../lib/format";
 import { Badge } from "../components/Badge";
 import { CopyValue } from "../components/CopyValue";
 import { EmptyState } from "../components/EmptyState";
@@ -79,8 +79,11 @@ export function ModerationView() {
                 </div>
               ) : null}
             </div>
-            <span className="@caption shrink-0 tabular-nums">
-              {formatTime(m.updatedAt)}
+            <span
+              className="@caption shrink-0 tabular-nums"
+              title={formatTime(m.updatedAt)}
+            >
+              {relativeTime(m.updatedAt)}
             </span>
           </li>
         );

@@ -1,5 +1,10 @@
 import { useDashboardData } from "../lib/data";
-import { describeRecipeEdit, formatTime, shortHash } from "../lib/format";
+import {
+  describeRecipeEdit,
+  formatTime,
+  relativeTime,
+  shortHash,
+} from "../lib/format";
 import { EmptyState } from "../components/EmptyState";
 import { SkeletonRows } from "../components/Skeleton";
 
@@ -35,7 +40,10 @@ export function RecipeEditsView() {
           <div className="flex-1">
             <div className="text-sm">{describeRecipeEdit(e)}</div>
             <div className="@caption tabular-nums">
-              body {shortHash(e.bodySha)} · {formatTime(e.createdAt)}
+              body {shortHash(e.bodySha)} ·{" "}
+              <span title={formatTime(e.createdAt)}>
+                {relativeTime(e.createdAt)}
+              </span>
             </div>
           </div>
         </li>

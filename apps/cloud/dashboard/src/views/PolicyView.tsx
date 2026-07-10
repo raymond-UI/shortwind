@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
-import { formatTime } from "../lib/format";
+import { formatTime, relativeTime } from "../lib/format";
 import { SkeletonPanel } from "../components/Skeleton";
 
 /**
@@ -59,9 +59,13 @@ export function PolicyView() {
       </div>
       <div className="@caption tabular-nums">
         last set:{" "}
-        {policy.updatedAt === null
-          ? "never (defaults)"
-          : formatTime(policy.updatedAt)}
+        {policy.updatedAt === null ? (
+          "never (defaults)"
+        ) : (
+          <span title={formatTime(policy.updatedAt)}>
+            {relativeTime(policy.updatedAt)}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDashboardData } from "../lib/data";
-import { formatTime } from "../lib/format";
+import { formatTime, relativeTime } from "../lib/format";
 import { PolicyView } from "./PolicyView";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
@@ -112,7 +112,10 @@ function TokenRowItem({ token }: { token: TokenRow }) {
           ))}
         </div>
         <div className="mt-1.5 text-xs text-muted-foreground tabular-nums">
-          created {formatTime(token.createdAt)}
+          <span title={formatTime(token.createdAt)}>
+            created {relativeTime(token.createdAt)}
+          </span>
+          {/* Expiry is in the future — relative phrasing can't say that. */}
           {token.expiresAt !== null
             ? ` · expires ${formatTime(token.expiresAt)}`
             : ""}
