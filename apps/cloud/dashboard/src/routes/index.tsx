@@ -54,7 +54,7 @@ const STEPS = [
   {
     n: "01",
     title: "Publish from the CLI or an agent",
-    body: "One call ships an HTML file. @recipe classes expand server-side into a frozen, immutable version.",
+    body: "One call ships any HTML file, frozen as an immutable version. If it uses @recipe shorthand, that expands to Tailwind server-side.",
   },
   {
     n: "02",
@@ -71,8 +71,8 @@ const STEPS = [
 const FEATURES = [
   {
     glyph: "▚",
-    title: "Server-side expansion",
-    body: "Shorthand @recipe classes expand to Tailwind at publish time, not in the prompt. Fewer tokens to author the same page.",
+    title: "Optional recipe expansion",
+    body: "Publish plain HTML and it serves as-is. If a page uses @recipe shorthand, it expands to Tailwind at publish time, not in the prompt, so it takes fewer tokens to author.",
   },
   {
     glyph: "▞",
@@ -191,7 +191,7 @@ function LandingPage() {
               <span className="text-term">We host it.</span>
             </h1>
             <p className="mt-6 max-w-md font-sans text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Agent-native HTML hosting. One call turns an HTML file into a{" "}
+              Agent-native hosting for any HTML. One call turns a file into a{" "}
               <span className="text-foreground">live URL</span>. No repo, no
               build step, no deploy config.
             </p>
