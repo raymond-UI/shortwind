@@ -56,7 +56,10 @@ export function Menu({
         <div
           role="menu"
           className={
-            "@menu absolute z-50 mt-1 " + (align === "end" ? "right-0" : "left-0")
+            // Space lives on the non-recipe side: the expander rewrites
+            // recipe-bearing literals and trims their edges (see #expander bug).
+            "@menu absolute z-50 mt-1" +
+            (align === "end" ? " right-0" : " left-0")
           }
         >
           {children(() => setOpen(false))}
