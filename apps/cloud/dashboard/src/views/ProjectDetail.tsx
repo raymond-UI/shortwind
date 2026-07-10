@@ -120,8 +120,10 @@ export function ProjectDetail({
         {/* Same exceptions-only rule as the Overview cards: live is a dot,
             dead states keep their word. Visibility lives in the properties
             card, not here — the header is identity + address only. */}
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="@heading-md">{page.slug}</h2>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <h2 className="@heading-md min-w-0 truncate" title={page.slug}>
+            {page.slug}
+          </h2>
           {page.lifecycle === "active" ? (
             <span className="flex" title="live">
               <span
@@ -133,15 +135,19 @@ export function ProjectDetail({
           ) : (
             <LifecycleStatus lifecycle={page.lifecycle} />
           )}
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="@link @caption"
-          >
-            {pageHost(page.slug)} ↗
-          </a>
-          <CopyButton value={url} />
+          {/* URL + copy stay one unit: their own line on mobile, inline on sm+. */}
+          <span className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="@link @caption min-w-0 truncate"
+              title={url}
+            >
+              {pageHost(page.slug)} ↗
+            </a>
+            <CopyButton value={url} />
+          </span>
         </div>
       </div>
 
@@ -319,7 +325,7 @@ function AddressRow({
         href={url}
         target="_blank"
         rel="noreferrer"
-        className="@link truncate text-muted-foreground hover:text-term"
+        className="@link min-w-0 truncate text-muted-foreground hover:text-term"
         title={url}
       >
         {display} ↗

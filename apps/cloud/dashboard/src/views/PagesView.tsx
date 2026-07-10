@@ -55,40 +55,43 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
         data-testid="pages-search"
         className="@input sm:flex-1"
       />
-      <Menu
-        align="end"
-        label="Sort pages"
-        trigger={
-          <span className="@button-secondary-sm whitespace-nowrap">
-            Sort: {SORT_LABEL[sort]} ▾
-          </span>
-        }
-      >
-        {(close) => (
-          <>
-            {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
-              <MenuItem
-                key={key}
-                testId={`sort-${key}`}
-                active={sort === key}
-                onSelect={() => {
-                  setSort(key);
-                  close();
-                }}
-              >
-                {SORT_LABEL[key]}
-              </MenuItem>
-            ))}
-          </>
-        )}
-      </Menu>
-      <button
-        type="button"
-        onClick={() => setNewPageOpen(true)}
-        className="@button-primary-sm whitespace-nowrap"
-      >
-        ＋ New Page
-      </button>
+      {/* One row on mobile: sort left, New Page right. Desktop unchanged. */}
+      <div className="flex items-center gap-2.5">
+        <Menu
+          align="end"
+          label="Sort pages"
+          trigger={
+            <span className="@button-secondary-sm whitespace-nowrap">
+              Sort: {SORT_LABEL[sort]} ▾
+            </span>
+          }
+        >
+          {(close) => (
+            <>
+              {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
+                <MenuItem
+                  key={key}
+                  testId={`sort-${key}`}
+                  active={sort === key}
+                  onSelect={() => {
+                    setSort(key);
+                    close();
+                  }}
+                >
+                  {SORT_LABEL[key]}
+                </MenuItem>
+              ))}
+            </>
+          )}
+        </Menu>
+        <button
+          type="button"
+          onClick={() => setNewPageOpen(true)}
+          className="@button-primary-sm ml-auto whitespace-nowrap"
+        >
+          ＋ New Page
+        </button>
+      </div>
     </div>
   );
   const newPageDialog = (

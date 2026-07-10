@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   createFileRoute,
   Link,
@@ -40,6 +41,15 @@ function DashboardLayout() {
   // Highlight the section from the URL; a page detail lives under Overview.
   const activeId = params.section ?? "overview";
 
+  // Mobile: the tab row scrolls horizontally, so a deep link to a late tab
+  // (Moderation, Settings) could land with the active tab off-screen. Keep it
+  // in view. Guarded: jsdom has no scrollIntoView.
+  const tabsRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const active = tabsRef.current?.querySelector('[aria-current="page"]');
+    active?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+  }, [activeId]);
+
   async function onSignOut() {
     await authClient.signOut();
     // Hard navigation (not router.navigate + invalidate): invalidating in place
@@ -77,8 +87,9 @@ function DashboardLayout() {
             </div>
           </div>
           <nav
+            ref={tabsRef}
             aria-label="Dashboard sections"
-            className="flex overflow-x-auto px-2 md:px-4"
+            className="flex overflow-x-auto px-2 [-ms-overflow-style:none] [scrollbar-width:none] md:px-4 [&::-webkit-scrollbar]:hidden"
           >
             {NAV.map((n) => (
               <Link
