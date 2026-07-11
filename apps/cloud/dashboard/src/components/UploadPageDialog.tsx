@@ -2,6 +2,9 @@ import { useRef, useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { CopyValue } from "../components/CopyValue";
 import { Dialog } from "../components/Dialog";
+import { Segmented } from "../components/Segmented";
+import { Select } from "../components/Select";
+import { Switch } from "../components/Switch";
 import type { Visibility } from "../lib/types";
 
 /**
@@ -21,7 +24,11 @@ import type { Visibility } from "../lib/types";
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB per HTML file.
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB per upload (server cap).
 const MAX_FILES = 2000;
-const VISIBILITIES: Visibility[] = ["public", "unlisted", "private"];
+const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
+  { value: "public", label: "Public" },
+  { value: "unlisted", label: "Unlisted" },
+  { value: "private", label: "Private" },
+];
 
 /** One collected file: a bundle-relative POSIX path + its HTML text. */
 type Item = { path: string; html: string };
@@ -302,50 +309,62 @@ export function UploadPageDialog({
         : `${items.length} files`;
 
   return (
-    <Dialog open={open} onClose={close} labelledBy="upload-page-title">
-      <div className="space-y-4">
+    <Dialog open={open} onClose={close} labelledBy="upload-page-title" size="lg">
+      <div className="@stack-lg">
         <div className="@stack-xs">
-          <h3 id="upload-page-title" className="text-sm font-semibold">
+          <h2 id="upload-page-title" className="text-lg font-semibold tracking-tight">
             Publish
-          </h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">
+          </h2>
+          <p className="max-w-md font-sans text-sm leading-relaxed text-muted-foreground">
             Drop an HTML file to host it, or a folder to publish a multi-page
-            site. `@recipe` shorthand is expanded for you.
+            site. Your <code className="@code-inline">@recipe</code> shorthand is
+            expanded for you.
           </p>
         </div>
 
         {done ? (
           done.kind === "single" ? (
             <div className="@stack-sm" data-testid="upload-done">
-              <div className="flex items-center gap-2 text-sm text-term">
-                <span aria-hidden="true">●</span> Published
+              <div className="flex items-center gap-2 text-sm font-medium text-term">
+                <span
+                  className="inline-block h-2 w-2 rounded-full bg-term"
+                  aria-hidden="true"
+                />
+                Published
               </div>
-              <div className="rounded-md border border-border bg-secondary/50 px-2 py-1.5">
+              <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2">
                 <CopyValue value={done.url} />
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <a
                   href={done.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="@button-secondary-sm"
+                  className="@button-secondary"
                 >
                   Visit →
                 </a>
-                <button type="button" onClick={close} className="@button-primary-sm">
+                <button type="button" onClick={close} className="@button-primary">
                   Done
                 </button>
               </div>
             </div>
           ) : (
             <div className="@stack-sm" data-testid="upload-done">
-              <div className="flex items-center gap-2 text-sm text-term">
-                <span aria-hidden="true">●</span> Published{" "}
-                {done.results.filter((r) => r.url).length} of {done.results.length}
+              <div className="flex items-center gap-2 text-sm font-medium text-term">
+                <span
+                  className="inline-block h-2 w-2 rounded-full bg-term"
+                  aria-hidden="true"
+                />
+                Published {done.results.filter((r) => r.url).length} of{" "}
+                {done.results.length}
               </div>
-              <ul className="max-h-56 space-y-1 overflow-y-auto text-sm">
+              <ul className="max-h-64 divide-y divide-border overflow-y-auto rounded-lg border border-border">
                 {done.results.map((r) => (
-                  <li key={r.name} className="flex items-center justify-between gap-3">
+                  <li
+                    key={r.name}
+                    className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                  >
                     <span className="truncate text-muted-foreground">{r.name}</span>
                     {r.url ? (
                       <a
@@ -362,15 +381,15 @@ export function UploadPageDialog({
                   </li>
                 ))}
               </ul>
-              <div className="flex justify-end">
-                <button type="button" onClick={close} className="@button-primary-sm">
+              <div className="flex justify-end pt-1">
+                <button type="button" onClick={close} className="@button-primary">
                   Done
                 </button>
               </div>
             </div>
           )
         ) : (
-          <>
+          <div className="@stack-md">
             {/* Drop zone / picker */}
             <button
               type="button"
@@ -383,21 +402,31 @@ export function UploadPageDialog({
               onDrop={onDrop}
               data-testid="upload-dropzone"
               className={
-                "flex w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-8 text-center transition-colors " +
+                "group flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-12 text-center transition-colors " +
                 (dragging
-                  ? "border-term bg-secondary/60"
-                  : "border-border hover:bg-secondary/40")
+                  ? "border-term bg-term/5"
+                  : items.length > 0
+                    ? "border-term/40 bg-secondary/30"
+                    : "border-border hover:border-muted-foreground/50 hover:bg-secondary/30")
               }
             >
-              <span className="text-lg text-muted-foreground/60" aria-hidden="true">
-                ▚
+              <span
+                className={
+                  "text-2xl transition-colors " +
+                  (items.length > 0
+                    ? "text-term"
+                    : "text-muted-foreground/50 group-hover:text-muted-foreground")
+                }
+                aria-hidden="true"
+              >
+                {items.length > 0 ? "◳" : "▚"}
               </span>
               <span className="text-sm font-medium">{label}</span>
-              {items.length === 0 && (
-                <span className="text-xs text-muted-foreground">
-                  .html files · up to 2 MB each
-                </span>
-              )}
+              <span className="text-xs text-muted-foreground">
+                {items.length === 0
+                  ? ".html files · up to 2 MB each"
+                  : "Click to choose different files"}
+              </span>
             </button>
             <input
               ref={inputRef}
@@ -417,87 +446,83 @@ export function UploadPageDialog({
 
             {/* Multi-file mode choice */}
             {multi && (
-              <div className="@stack-xs rounded-md border border-border bg-secondary/30 p-3">
-                <label className="flex items-start gap-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={asBundle}
-                    onChange={(e) => {
-                      setAsBundle(e.target.checked);
-                      if (error) setError(null);
-                    }}
-                    aria-label="Publish as a linked bundle"
-                    data-testid="upload-bundle-toggle"
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="font-medium">Publish as one linked site</span>
-                    <span className="block text-xs text-muted-foreground">
+              <div className="@stack-sm rounded-xl border border-border bg-secondary/20 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="@stack-xs">
+                    <span className="text-sm font-medium">
+                      Publish as one linked site
+                    </span>
+                    <span className="font-sans text-xs leading-relaxed text-muted-foreground">
                       {asBundle
                         ? "Multi-page bundle under one address; pick the entry page below."
                         : "Off: each file publishes as its own separate page."}
                     </span>
-                  </span>
-                </label>
+                  </div>
+                  <Switch
+                    checked={asBundle}
+                    onChange={(next) => {
+                      setAsBundle(next);
+                      if (error) setError(null);
+                    }}
+                    label="Publish as one linked site"
+                    testId="upload-bundle-toggle"
+                  />
+                </div>
                 {asBundle && (
-                  <label className="@stack-xs text-xs text-muted-foreground">
-                    Entry page (opens at the address)
-                    <select
+                  <div className="@stack-xs border-t border-border pt-3">
+                    <span className="text-xs text-muted-foreground">
+                      Entry page (opens at the address)
+                    </span>
+                    <Select
                       value={entryPath}
-                      onChange={(e) => setEntryPath(e.target.value)}
-                      aria-label="Bundle entry page"
-                      data-testid="upload-entry"
-                      className="@input"
-                    >
-                      {items.map((f) => (
-                        <option key={f.path} value={f.path}>
-                          {f.path}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      options={items.map((f) => f.path)}
+                      onChange={setEntryPath}
+                      label="Bundle entry page"
+                      testId="upload-entry"
+                    />
+                  </div>
                 )}
               </div>
             )}
 
             {/* Options: address (single/bundle only) + visibility */}
-            <div className="grid gap-2.5 sm:grid-cols-2">
+            <div className="@stack-md">
               {mode !== "separate" && (
-                <label className="@stack-xs text-xs text-muted-foreground">
-                  Address (optional)
-                  <input
-                    type="text"
-                    value={slug}
-                    onChange={(e) => {
-                      setSlug(e.target.value);
-                      if (error) setError(null);
-                    }}
-                    onBlur={(e) => {
-                      // Show the normalized address once they leave the field.
-                      const n = normalizeSlug(e.target.value);
-                      if (n !== e.target.value) setSlug(n);
-                    }}
-                    placeholder="my-page"
-                    aria-label="Page address slug"
-                    className="@input"
-                  />
-                </label>
+                <div className="@stack-xs">
+                  <span className="text-xs text-muted-foreground">
+                    Address (optional)
+                  </span>
+                  <div className="flex h-9 items-center rounded-md border border-input bg-transparent pr-3 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30">
+                    <input
+                      type="text"
+                      value={slug}
+                      onChange={(e) => {
+                        setSlug(e.target.value);
+                        if (error) setError(null);
+                      }}
+                      onBlur={(e) => {
+                        const n = normalizeSlug(e.target.value);
+                        if (n !== e.target.value) setSlug(n);
+                      }}
+                      placeholder="my-page"
+                      aria-label="Page address slug"
+                      className="min-w-0 flex-1 bg-transparent px-3 py-1 text-sm outline-none placeholder:text-muted-foreground"
+                    />
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      .shortwind.app
+                    </span>
+                  </div>
+                </div>
               )}
-              <label className="@stack-xs text-xs text-muted-foreground">
-                Visibility
-                <select
+              <div className="@stack-xs">
+                <span className="text-xs text-muted-foreground">Visibility</span>
+                <Segmented
+                  options={VISIBILITY_OPTIONS}
                   value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as Visibility)}
-                  aria-label="Page visibility"
-                  className="@input"
-                >
-                  {VISIBILITIES.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={setVisibility}
+                  label="Page visibility"
+                />
+              </div>
             </div>
 
             {error && (
@@ -510,17 +535,17 @@ export function UploadPageDialog({
               </p>
             )}
 
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
               <a
                 href="https://shortwind.dev/docs/cloud-publishing"
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-muted-foreground underline"
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 or use the CLI
               </a>
               <div className="flex gap-2">
-                <button type="button" onClick={close} className="@button-secondary-sm">
+                <button type="button" onClick={close} className="@button-secondary">
                   Cancel
                 </button>
                 <button
@@ -528,7 +553,7 @@ export function UploadPageDialog({
                   onClick={publish}
                   disabled={items.length === 0 || busy}
                   data-testid="upload-publish"
-                  className="@button-primary-sm disabled:opacity-50"
+                  className="@button-primary disabled:opacity-50"
                 >
                   {busy
                     ? "Publishing…"
@@ -538,7 +563,7 @@ export function UploadPageDialog({
                 </button>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </Dialog>

@@ -227,14 +227,14 @@ describe("UploadPageDialog", () => {
       htmlFile("home.html", "<h1>Home</h1>"),
       htmlFile("two.html", "<h1>2</h1>"),
     ]);
-    // Default is separate (no index); opt into a bundle → an entry selector
-    // appears (no warning, publish enabled). Choose "home.html" as the root.
+    // Default is separate (no index); opt into a bundle → the entry Select
+    // appears (custom dropdown). Open it and choose "two.html" as the root.
     fireEvent.click(await screen.findByTestId("upload-bundle-toggle"));
-    const entry = (await screen.findByTestId("upload-entry")) as HTMLSelectElement;
-    fireEvent.change(entry, { target: { value: "home.html" } });
+    fireEvent.click(await screen.findByTestId("upload-entry")); // open the dropdown
+    fireEvent.click(screen.getByRole("option", { name: /two\.html/ }));
     expect(screen.getByTestId("upload-publish")).not.toBeDisabled();
     fireEvent.click(screen.getByTestId("upload-publish"));
     await screen.findByTestId("upload-done");
-    expect(publishBundle.mock.calls[0]![0].entryPath).toBe("home.html");
+    expect(publishBundle.mock.calls[0]![0].entryPath).toBe("two.html");
   });
 });

@@ -16,11 +16,14 @@ export function Dialog({
   open,
   onClose,
   labelledBy,
+  size = "md",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   labelledBy?: string;
+  /** Panel width. `md` (default) keeps the recipe's max-w-md; `lg` widens it. */
+  size?: "md" | "lg";
   children: ReactNode;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -77,6 +80,8 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
+        // Inline maxWidth wins over the recipe's `max-w-md` for the `lg` size.
+        style={size === "lg" ? { maxWidth: "40rem" } : undefined}
         className={
           // Space on the non-recipe side (expander trims recipe literals).
           "@dialog-content transition-transform duration-200 outline-none" +
