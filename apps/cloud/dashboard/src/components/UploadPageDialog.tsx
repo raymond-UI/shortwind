@@ -22,6 +22,23 @@ const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 type Picked = { name: string; html: string };
 
 /**
+ * Default address for an uploaded file: normalize the FILE NAME to the slug
+ * grammar (strip extension, lowercase, non-alphanumerics → single dashes). This
+ * is the sensible default when the user leaves the address blank — far better
+ * than the server deriving a slug from the raw HTML ("doctype-html-html-lang…").
+ * Returns "" for a name that normalizes to nothing (e.g. all punctuation).
+ */
+function slugFromFilename(name: string): string {
+  return name
+    .replace(/\.[^.]+$/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
+}
+
+/**
  * Map a publish failure to a friendly line. ConvexError codes ride on `.data`;
  * a plain server `Error` has none, and we must NEVER surface its raw message
  * (e.g. the "[CONVEX A(pages:publishFromWeb)] … Server Error" wrapper) to the
@@ -95,6 +112,9 @@ export function UploadPageDialog({
       return;
     }
     setPicked({ name: file.name, html });
+    // Pre-fill the address from the file name (only if the user hasn't typed
+    // one), so the default slug is predictable and editable.
+    setSlug((cur) => (cur.trim() ? cur : slugFromFilename(file.name)));
   }
 
   function onDrop(e: React.DragEvent) {
@@ -106,19 +126,22 @@ export function UploadPageDialog({
 
   async function publish() {
     if (!picked || busy) return;
-    const trimmed = slug.trim();
-    if (trimmed && !SLUG_RE.test(trimmed)) {
+    // Fall back to the file-name slug when the address was cleared, so we never
+    // let the server derive a slug from the raw HTML.
+    const typed = slug.trim();
+    if (typed && !SLUG_RE.test(typed)) {
       setError(
         "Address must be lowercase letters, numbers, and single dashes (no spaces or capitals).",
       );
       return;
     }
+    const finalSlug = typed || slugFromFilename(picked.name) || undefined;
     setBusy(true);
     setError(null);
     try {
       const result = await publishPage({
         html: picked.html,
-        slug: trimmed || undefined,
+        slug: finalSlug,
         visibility,
       });
       if (result.ok) {

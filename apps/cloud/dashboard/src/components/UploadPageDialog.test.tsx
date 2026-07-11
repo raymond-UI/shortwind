@@ -47,9 +47,10 @@ describe("UploadPageDialog", () => {
 
     expect(await screen.findByTestId("upload-done")).toBeInTheDocument();
     expect(screen.getByText("https://my-page.shortwind.app")).toBeInTheDocument();
+    // Address left blank → defaulted from the file name ("index.html" → "index").
     expect(publishPage).toHaveBeenCalledWith({
       html: "<h1>Hello</h1>",
-      slug: undefined,
+      slug: "index",
       visibility: "public",
     });
   });
@@ -69,6 +70,27 @@ describe("UploadPageDialog", () => {
     expect(document.activeElement).toBe(input);
     fireEvent.change(input, { target: { value: "lc" } });
     expect(document.activeElement).toBe(input);
+  });
+
+  it("pre-fills the address from the file name (normalized)", async () => {
+    const publishPage = vi.fn(async () => ({
+      ok: true as const,
+      id: "pg_1",
+      url: "https://managers-calendar-july-2026.shortwind.app",
+      version: 1,
+    }));
+    renderWithData(<UploadPageDialog open onClose={() => {}} />, { publishPage });
+    pick(htmlFile("Managers Calendar July 2026.html", "<h1>Cal</h1>"));
+    await screen.findByText("Managers Calendar July 2026.html");
+    const input = screen.getByLabelText("Page address slug") as HTMLInputElement;
+    expect(input.value).toBe("managers-calendar-july-2026");
+    fireEvent.click(screen.getByTestId("upload-publish"));
+    await screen.findByTestId("upload-done");
+    expect(publishPage).toHaveBeenCalledWith({
+      html: "<h1>Cal</h1>",
+      slug: "managers-calendar-july-2026",
+      visibility: "public",
+    });
   });
 
   it("surfaces a taken-slug 409 without crashing", async () => {
