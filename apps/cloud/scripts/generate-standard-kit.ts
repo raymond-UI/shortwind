@@ -16,10 +16,12 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// This script lives OUTSIDE `convex/` on purpose: Convex bundles everything
+// under convex/ and would reject these node: imports. It only emits the pure
+// data module `convex/lib/standard_kit.generated.ts` (which convex may bundle).
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(
   here,
-  "..",
   "..",
   "..",
   "..",
@@ -28,7 +30,7 @@ const DIST = path.resolve(
   "dist",
   "registry",
 );
-const OUT = path.resolve(here, "..", "lib", "standard_kit.generated.ts");
+const OUT = path.resolve(here, "..", "convex", "lib", "standard_kit.generated.ts");
 
 if (!existsSync(DIST)) {
   console.error(
