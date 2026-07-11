@@ -37,6 +37,7 @@ import type { Lockfile } from "../shared/src/lockfile-diff.js";
 import { deriveSubdomain } from "../shared/src/slug.js";
 import { themePreamble } from "./lib/theme_preamble.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
+import { purgeEdgeByUrl } from "./lib/cloudflare_cache.js";
 
 /**
  * Page publish + update — the thick path (CLOUD-23, PRD §6.2).
@@ -592,8 +593,17 @@ async function writeArtifactToR2(
 }
 
 async function invalidateEdge(url: string): Promise<void> {
-  // CLOUD-30: purge the Cloudflare edge cache for `url` (cache API / purge call).
-  void url;
+  // CLOUD-30 (#207): purge the Cloudflare edge cache for `url` so a republish
+  // serves the new artifact on the next request instead of the stale 60s-TTL
+  // copy. Runs on the PUBLISH path (`makeEdgePort` → runPublish, an ACTION where
+  // `fetch` is allowed). Fail-safe: `purgeEdgeByUrl` swallows every error and
+  // returns false (missing creds / no zone permission / CF 5xx), so a purge
+  // failure degrades to stale-until-60s, never a failed publish.
+  //
+  // NOTE: the LIFECYCLE paths (delete/kill/quarantine/expire) do NOT reach here —
+  // they run in mutations (no `fetch`) and their edge purge rides the scheduled
+  // `evictRouteAction` alongside the KV eviction (see `defaultLifecycleEdgePort`).
+  await purgeEdgeByUrl(url);
 }
 
 async function putEdgeRoute(route: {
@@ -660,7 +670,15 @@ export interface LifecycleEdgePort {
 }
 
 const defaultLifecycleEdgePort: LifecycleEdgePort = {
-  invalidate: (url) => invalidateEdge(url),
+  // Lifecycle cache purge does NOT run here. The delete/kill/quarantine/expiry
+  // call sites are MUTATIONS (Convex forbids `fetch`), and the `url` they pass is
+  // the apex/path summary URL (`https://<root>/<slug>`) — NOT the subdomain host
+  // a page is actually served (and cached) under. So the real edge purge rides
+  // the scheduled `evictRoute` action below, which runs in an ACTION and derives
+  // the correct `https://<subdomain>.<root>/` key (see lib/edge_kv.ts). This
+  // method is retained only for the port shape + the integration-test assertion
+  // that a lifecycle change drove `invalidate`.
+  invalidate: async (_url) => {},
   evictRoute: (route, ctx) => deleteEdgeRoute(route, ctx),
 };
 
