@@ -1,10 +1,15 @@
 import { v, ConvexError } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireReadOperator, requireWriteOperator } from "./lib/operator_auth.js";
 import { authComponent } from "./auth.js";
 import { STANDARD_KIT } from "./lib/standard_kit.generated.js";
+import {
+  DEFAULT_ACCOUNT_THEME,
+  isSafeColor,
+  isSafeRadius,
+} from "./lib/theme_preamble.js";
 
 /**
  * Dashboard oversight queries (CLOUD-35, PRD §3 / §5.4 / §6.3 / §8).
@@ -282,6 +287,182 @@ export const listRecipeEditEvents = query({
       createdAt: r._creationTime,
       affectedPages,
     }));
+  },
+});
+
+const recipeFamilyRowValidator = v.object({
+  family: v.string(),
+  version: v.string(),
+  bodySha: v.string(),
+  createdAt: v.number(),
+  isStandard: v.boolean(),
+});
+
+/**
+ * listRecipeVersions: the account's recipe palette — latest version per family,
+ * flagged standard (∈ the seeded kit) vs custom. Powers the dashboard Recipes
+ * view (P4). Read-only, operator-session scoped.
+ */
+export const listRecipeVersions = query({
+  args: { bearer: v.optional(v.string()) },
+  returns: v.array(recipeFamilyRowValidator),
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const rows = await ctx.db
+      .query("recipeVersions")
+      .withIndex("by_account_family", (q) => q.eq("accountId", auth.accountId))
+      .collect();
+    const latest = new Map<string, Doc<"recipeVersions">>();
+    for (const r of rows) {
+      const cur = latest.get(r.family);
+      // Newest wins; ties on the stamped `createdAt` (two writes in the same ms)
+      // break by insertion order (`_creationTime`) since the table is append-only.
+      const newer =
+        !cur ||
+        r.createdAt > cur.createdAt ||
+        (r.createdAt === cur.createdAt && r._creationTime > cur._creationTime);
+      if (newer) latest.set(r.family, r);
+    }
+    const standard = new Set(STANDARD_KIT.map((k) => k.family));
+    return [...latest.values()]
+      .sort((a, b) => a.family.localeCompare(b.family))
+      .map((r) => ({
+        family: r.family,
+        version: r.version,
+        bodySha: r.bodySha,
+        createdAt: r.createdAt,
+        isStandard: standard.has(r.family),
+      }));
+  },
+});
+
+/**
+ * resetRecipesToStandard: restore standard families to the seeded kit body
+ * (forward-only — appends a new `recipeVersions` row, never deletes history, and
+ * writes no `recipe.edit` audit event). Optionally scoped to one `family`.
+ * Returns how many families were reset (skips families already at the kit body).
+ */
+export const resetRecipesToStandard = mutation({
+  args: { bearer: v.optional(v.string()), family: v.optional(v.string()) },
+  returns: v.object({ reset: v.number() }),
+  handler: async (ctx, args) => {
+    const auth = await requireWriteOperator(ctx, args.bearer);
+    const now = Date.now();
+    let reset = 0;
+    for (const k of STANDARD_KIT) {
+      if (args.family !== undefined && k.family !== args.family) continue;
+      const latest = await ctx.db
+        .query("recipeVersions")
+        .withIndex("by_account_family", (q) =>
+          q.eq("accountId", auth.accountId).eq("family", k.family),
+        )
+        .order("desc")
+        .first();
+      if (latest && latest.bodySha === k.bodySha) continue; // already the kit body
+      await ctx.db.insert("recipeVersions", {
+        accountId: auth.accountId,
+        family: k.family,
+        version: k.version,
+        body: k.body,
+        bodySha: k.bodySha,
+        createdAt: now,
+      });
+      reset += 1;
+    }
+    return { reset };
+  },
+});
+
+const accountThemeValidator = v.object({
+  accent: v.string(),
+  radius: v.string(),
+  // true when the account has no stored theme (the neutral default applies).
+  isDefault: v.boolean(),
+});
+
+/**
+ * getAccountTheme (P5): the account's WEB theme — the accent color + corner
+ * radius injected into fragment-wrapped artifacts published from the dashboard.
+ * Falls back to the neutral default when the account has never set one.
+ */
+export const getAccountTheme = query({
+  args: { bearer: v.optional(v.string()) },
+  returns: accountThemeValidator,
+  handler: async (ctx, args) => {
+    const auth = await requireReadOperator(ctx, args.bearer);
+    const row = await ctx.db
+      .query("accountThemes")
+      .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+      .first();
+    if (!row) return { ...DEFAULT_ACCOUNT_THEME, isDefault: true };
+    return { accent: row.accent, radius: row.radius, isDefault: false };
+  },
+});
+
+/**
+ * setAccountTheme (P5): upsert the account's web theme. Values are validated as
+ * safe CSS tokens (a color that can't break out of the declaration; a length)
+ * so nothing untrusted reaches the served `<style>` block.
+ */
+export const setAccountTheme = mutation({
+  args: {
+    bearer: v.optional(v.string()),
+    accent: v.string(),
+    radius: v.string(),
+  },
+  returns: accountThemeValidator,
+  handler: async (ctx, args) => {
+    const auth = await requireWriteOperator(ctx, args.bearer);
+    const accent = args.accent.trim();
+    const radius = args.radius.trim();
+    if (!isSafeColor(accent)) {
+      throw new ConvexError({
+        code: "INVALID_THEME",
+        message: "Accent must be a valid CSS color (e.g. oklch(...) or #2563eb).",
+      });
+    }
+    if (!isSafeRadius(radius)) {
+      throw new ConvexError({
+        code: "INVALID_THEME",
+        message: "Radius must be a CSS length like 0.5rem, 8px, or 0.",
+      });
+    }
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("accountThemes")
+      .withIndex("by_account", (q) => q.eq("accountId", auth.accountId))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { accent, radius, updatedAt: now });
+    } else {
+      await ctx.db.insert("accountThemes", {
+        accountId: auth.accountId,
+        accent,
+        radius,
+        updatedAt: now,
+      });
+    }
+    return { accent, radius, isDefault: false };
+  },
+});
+
+/**
+ * getAccountThemeInternal: the account's theme (or null) for the WEB publish
+ * ACTIONS, which can't read `ctx.db`. Returns the raw row values; the caller
+ * feeds them to `themePreamble`.
+ */
+export const getAccountThemeInternal = internalQuery({
+  args: { accountId: v.id("accounts") },
+  returns: v.union(
+    v.object({ accent: v.string(), radius: v.string() }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("accountThemes")
+      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+      .first();
+    return row ? { accent: row.accent, radius: row.radius } : null;
   },
 });
 

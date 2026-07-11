@@ -58,6 +58,11 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
     api.dashboard.listRecipeEditEvents,
     skip ? "skip" : args,
   );
+  const recipeVersions = useQuery(
+    api.dashboard.listRecipeVersions,
+    skip ? "skip" : args,
+  );
+  const theme = useQuery(api.dashboard.getAccountTheme, skip ? "skip" : args);
   const moderation = useQuery(
     api.dashboard.listModeration,
     skip ? "skip" : args,
@@ -79,6 +84,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
   const tokens = useQuery(api.dashboard.listTokens, skip ? "skip" : args);
   const publishFromWebAction = useAction(api.pages.publishFromWeb);
   const publishBundleFromWebAction = useAction(api.bundles.publishBundleFromWeb);
+  const resetRecipesMutation = useMutation(api.dashboard.resetRecipesToStandard);
+  const setThemeMutation = useMutation(api.dashboard.setAccountTheme);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
   const setVisibilityMutation = useMutation(api.pages.setVisibility);
   const deletePageMutation = useMutation(api.pages.deletePage);
@@ -97,6 +104,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       pages,
       auditLog,
       recipeEdits,
+      recipeVersions,
+      theme,
       moderation,
       policy,
       usage,
@@ -119,6 +128,17 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
           entryPath: input.entryPath,
           slug: input.slug,
           visibility: input.visibility,
+        });
+      },
+      resetRecipes: async (family) => {
+        return await resetRecipesMutation(
+          family === undefined ? {} : { family },
+        );
+      },
+      setTheme: async (next) => {
+        return await setThemeMutation({
+          accent: next.accent,
+          radius: next.radius,
         });
       },
       setPolicy: async (next) => {
@@ -160,6 +180,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       pages,
       auditLog,
       recipeEdits,
+      recipeVersions,
+      theme,
       moderation,
       policy,
       usage,
@@ -169,6 +191,8 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       tokens,
       publishFromWebAction,
       publishBundleFromWebAction,
+      resetRecipesMutation,
+      setThemeMutation,
       setPolicyMutation,
       setVisibilityMutation,
       deletePageMutation,

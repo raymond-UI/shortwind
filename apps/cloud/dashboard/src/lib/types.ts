@@ -63,6 +63,30 @@ export interface RecipeEditRow {
   affectedPages: number;
 }
 
+/**
+ * One recipe family in the account's palette — latest version. Mirrors
+ * `dashboard.listRecipeVersions` returns. `isStandard` = the family ships in the
+ * seeded standard kit (so it can be reset); custom families cannot.
+ */
+export interface RecipeFamilyRow {
+  family: string;
+  version: string;
+  bodySha: string;
+  createdAt: number;
+  isStandard: boolean;
+}
+
+/**
+ * The account's WEB theme (P5). Mirrors `dashboard.getAccountTheme` returns.
+ * `accent` maps to `--primary`/`--ring`; `radius` to `--radius`. `isDefault` is
+ * true when the account has never set one (the neutral default applies).
+ */
+export interface AccountThemeSettings {
+  accent: string;
+  radius: string;
+  isDefault: boolean;
+}
+
 export interface ModerationRow {
   id: string;
   pageId: string;
@@ -156,6 +180,10 @@ export interface DashboardData {
   pages: PageWithVersions[] | undefined;
   auditLog: AuditRow[] | undefined;
   recipeEdits: RecipeEditRow[] | undefined;
+  /** The account's recipe palette (latest per family). `undefined` = loading. */
+  recipeVersions: RecipeFamilyRow[] | undefined;
+  /** The account's web theme (accent + radius). `undefined` = loading. */
+  theme: AccountThemeSettings | undefined;
   moderation: ModerationRow[] | undefined;
   policy: AccountPolicy | undefined;
   /** Metered billing usage (CLOUD-43): the three cost-aligned meters. */
@@ -196,6 +224,21 @@ export interface DashboardData {
     | { ok: true; bundleId: string; url: string; version: number }
     | { ok: false; status: 409; existingId: string }
   >;
+  /**
+   * Reset standard recipe families to the seeded kit body (forward-only). Pass a
+   * `family` to reset just one; omit to reset the whole standard kit. Resolves to
+   * how many families changed.
+   */
+  resetRecipes: (family?: string) => Promise<{ reset: number }>;
+  /**
+   * Set the account's web theme (accent + radius). Applies to fragment uploads
+   * published afterward; full-document uploads are served verbatim and unthemed.
+   * Resolves to the persisted theme.
+   */
+  setTheme: (next: {
+    accent: string;
+    radius: string;
+  }) => Promise<AccountThemeSettings>;
   /** Persist a policy toggle. Resolves to the new policy. */
   setPolicy: (next: { customDomainNeedsApproval?: boolean }) => Promise<void>;
   /** Change a page's visibility (operator session). */

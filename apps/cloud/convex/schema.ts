@@ -181,6 +181,21 @@ export default defineSchema({
     // Resolve a family's versions within an account.
     .index("by_account_family", ["accountId", "family"]),
 
+  // Per-account WEB theme (P5): the accent color + corner radius injected into
+  // fragment-wrapped artifacts published from the dashboard (and CLI, if it
+  // carries no css of its own). One row per account (upserted). Full-document
+  // uploads own their <head> and are NOT themed. Values are validated CSS
+  // tokens (safe color / length) at the set boundary.
+  accountThemes: defineTable({
+    accountId: v.id("accounts"),
+    // A CSS color for the accent (maps to --primary / --ring). e.g. an
+    // `oklch(...)` or `#rrggbb` string.
+    accent: v.string(),
+    // A CSS length for --radius. e.g. "0.625rem".
+    radius: v.string(),
+    updatedAt: v.number(),
+  }).index("by_account", ["accountId"]),
+
   // Mirrors shared `RecipeEditEvent`. Audit-grade record of a recipe edit that
   // rode up on a publish (PRD 5.4).
   recipeEditEvents: defineTable({

@@ -6,6 +6,7 @@ import { ModerationView } from "@/views/ModerationView";
 import { UsageView } from "@/views/UsageView";
 import { BillingView } from "@/views/BillingView";
 import { DomainsView } from "@/views/DomainsView";
+import { RecipesView } from "@/views/RecipesView";
 import { AnalyticsView } from "@/views/AnalyticsView";
 import { SettingsView } from "@/views/SettingsView";
 import { EmptyState } from "@/components/EmptyState";
@@ -21,6 +22,7 @@ const KNOWN_SECTIONS = [
   "overview",
   "analytics",
   "domains",
+  "recipes",
   "usage",
   "billing",
   "activity",
@@ -67,6 +69,8 @@ function SectionRoute() {
       );
     case "domains":
       return <DomainsView />;
+    case "recipes":
+      return <RecipesView />;
     case "usage":
       return <UsageView />;
     case "billing":

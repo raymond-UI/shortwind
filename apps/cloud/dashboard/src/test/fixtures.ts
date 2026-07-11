@@ -1,11 +1,13 @@
 import type {
   AccountDomainRow,
+  AccountThemeSettings,
   AuditRow,
   BillingSummary,
   DashboardData,
   ModerationRow,
   PageWithVersions,
   RecipeEditRow,
+  RecipeFamilyRow,
   AccountPolicy,
   TokenRow,
   UsageMeters,
@@ -104,6 +106,36 @@ export const mockRecipeEdits: RecipeEditRow[] = [
   },
 ];
 
+export const mockRecipeVersions: RecipeFamilyRow[] = [
+  {
+    family: "button",
+    version: "1.0.0",
+    bodySha: "1111222233334444",
+    createdAt: 1_700_000_000_000,
+    isStandard: true,
+  },
+  {
+    family: "card",
+    version: "1.0.0",
+    bodySha: "5555666677778888",
+    createdAt: 1_700_000_050_000,
+    isStandard: true,
+  },
+  {
+    family: "hero-banner",
+    version: "0.1.0",
+    bodySha: "9999aaaabbbbcccc",
+    createdAt: 1_700_000_100_000,
+    isStandard: false,
+  },
+];
+
+export const mockTheme: AccountThemeSettings = {
+  accent: "oklch(0.205 0 0)",
+  radius: "0.625rem",
+  isDefault: true,
+};
+
 export const mockModeration: ModerationRow[] = [
   {
     id: "mod_1",
@@ -189,6 +221,8 @@ export function makeData(
     pages: mockPages,
     auditLog: mockAuditLog,
     recipeEdits: mockRecipeEdits,
+    recipeVersions: mockRecipeVersions,
+    theme: mockTheme,
     moderation: mockModeration,
     policy: mockPolicy,
     usage: mockUsage,
@@ -208,6 +242,8 @@ export function makeData(
       url: `https://${input.slug ?? "site"}.shortwind.app`,
       version: 1,
     }),
+    resetRecipes: async () => ({ reset: 0 }),
+    setTheme: async (next) => ({ ...next, isDefault: false }),
     setPolicy: async () => {},
     setVisibility: async () => {},
     deletePage: async () => {},

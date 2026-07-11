@@ -35,6 +35,7 @@ import {
 } from "./lib/publish_core.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
 import { deriveSubdomain } from "../shared/src/slug.js";
+import { themePreamble } from "./lib/theme_preamble.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
 
 /**
@@ -1331,6 +1332,16 @@ export const publishFromWeb = action({
     );
     const recipes = palette.map((p) => ({ family: p.family, source: p.body }));
 
+    // Theme the fragment wrap with the account's accent + radius (P5). A caller
+    // that carries its own css keeps it; otherwise we inject the account theme
+    // (or the neutral default). Full-document uploads own their <head> and are
+    // served verbatim, so the preamble never applies to them.
+    const theme = await ctx.runQuery(
+      internal.dashboard.getAccountThemeInternal,
+      { accountId: auth.accountId },
+    );
+    const css = args.css ?? themePreamble(theme);
+
     const deps = makeDeps(ctx, auth.tokenId);
     const outcome = await runPublish(
       {
@@ -1342,7 +1353,7 @@ export const publishFromWeb = action({
         lockfile: { version: 1, registry: "default", families: {} },
         tags: args.tags,
         visibility: args.visibility,
-        css: args.css,
+        css,
       },
       deps,
     );

@@ -17,6 +17,7 @@ import {
 } from "./lib/publish_core.js";
 import { makeDeps, makeStoragePort, runPublishScan } from "./pages.js";
 import { expandPage, type RecipeSource } from "./expand.js";
+import { themePreamble } from "./lib/theme_preamble.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
 
 /**
@@ -658,6 +659,13 @@ export const publishBundleFromWeb = action({
     );
     const recipes = palette.map((p) => ({ family: p.family, source: p.body }));
 
+    // Theme the fragment-wrapped sub-pages with the account accent + radius (P5).
+    const theme = await ctx.runQuery(
+      internal.dashboard.getAccountThemeInternal,
+      { accountId: auth.accountId },
+    );
+    const css = args.css ?? themePreamble(theme);
+
     const deps: BundleDeps = {
       publish: makeDeps(ctx, auth.tokenId),
       insertBundleVersion: (version) =>
@@ -688,7 +696,7 @@ export const publishBundleFromWeb = action({
         lockfile: { version: 1, registry: "default", families: {} },
         tags: args.tags,
         visibility: args.visibility,
-        css: args.css,
+        css,
       },
       deps,
     );

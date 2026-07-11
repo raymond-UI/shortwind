@@ -24,9 +24,147 @@ export function SettingsView() {
       </section>
 
       <section className="space-y-4">
+        <SectionHeader
+          eyebrow="Theme"
+          title="Web theme"
+          description="The accent color and corner radius applied to pages you upload from the web. Full HTML documents that carry their own <head> are served exactly as uploaded and are not themed."
+        />
+        <ThemeEditor />
+      </section>
+
+      <section className="space-y-4">
         <SectionHeader eyebrow="Access" title="API tokens" />
         <TokenList />
       </section>
+    </div>
+  );
+}
+
+function ThemeEditor() {
+  const { theme, setTheme } = useDashboardData();
+  const [accent, setAccent] = useState("");
+  const [radius, setRadius] = useState("");
+  const [dirtyFrom, setDirtyFrom] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Seed the local fields once the theme loads, and whenever it changes from a
+  // save. Track the loaded signature so we only reset the inputs when the
+  // upstream value actually changes (not on every keystroke re-render).
+  const signature = theme ? `${theme.accent}|${theme.radius}` : null;
+  if (signature !== null && signature !== dirtyFrom && !busy) {
+    setDirtyFrom(signature);
+    setAccent(theme!.accent);
+    setRadius(theme!.radius);
+    setError(null);
+  }
+
+  if (theme === undefined) {
+    return <SkeletonRows count={2} label="Loading theme" />;
+  }
+
+  async function onSave() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const next = await setTheme({ accent: accent.trim(), radius: radius.trim() });
+      setDirtyFrom(`${next.accent}|${next.radius}`);
+      setAccent(next.accent);
+      setRadius(next.radius);
+      setSaved(true);
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message
+          ? "Couldn’t save: accent must be a valid CSS color and radius a length like 0.5rem."
+          : "Couldn’t save the theme.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canSave = accent.trim().length > 0 && radius.trim().length > 0 && !busy;
+
+  return (
+    <div data-testid="theme-editor" className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="space-y-1.5 text-sm">
+          <span className="text-muted-foreground">Accent color</span>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              data-testid="accent-swatch"
+              className="h-8 w-8 shrink-0 rounded-md border border-border"
+              style={{ background: accent || "transparent" }}
+            />
+            <input
+              type="text"
+              value={accent}
+              onChange={(e) => {
+                setAccent(e.target.value);
+                setSaved(false);
+              }}
+              spellCheck={false}
+              data-testid="accent-input"
+              placeholder="oklch(0.6 0.2 250) or #2563eb"
+              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none focus:border-term/60"
+            />
+          </div>
+        </label>
+
+        <label className="space-y-1.5 text-sm">
+          <span className="text-muted-foreground">Corner radius</span>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="h-8 w-8 shrink-0 border border-border bg-secondary"
+              style={{ borderRadius: radius || "0" }}
+            />
+            <input
+              type="text"
+              value={radius}
+              onChange={(e) => {
+                setRadius(e.target.value);
+                setSaved(false);
+              }}
+              spellCheck={false}
+              data-testid="radius-input"
+              placeholder="0.625rem"
+              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none focus:border-term/60"
+            />
+          </div>
+        </label>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canSave}
+          data-testid="save-theme"
+          className="rounded-md border border-term/40 bg-term/10 px-3 py-1.5 text-xs text-term transition-colors hover:bg-term/20 disabled:opacity-50"
+        >
+          {busy ? "Saving…" : "Save theme"}
+        </button>
+        {theme.isDefault ? (
+          <span className="text-xs text-muted-foreground">
+            Using the neutral default.
+          </span>
+        ) : null}
+        {saved ? (
+          <span data-testid="theme-saved" className="text-xs text-term">
+            Saved.
+          </span>
+        ) : null}
+      </div>
+
+      {error ? (
+        <p data-testid="theme-error" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

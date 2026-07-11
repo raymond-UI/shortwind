@@ -68,12 +68,17 @@ export const listRecipePalette = internalQuery({
       .query("recipeVersions")
       .withIndex("by_account_family", (q) => q.eq("accountId", args.accountId))
       .collect();
-    // Keep the newest row per family (rows are creation-ordered; a later row is
-    // a newer version).
+    // Keep the newest row per family. Newest wins by stamped `createdAt`; ties
+    // (two writes in the same ms, e.g. a reset appended right after a publish)
+    // break by insertion order (`_creationTime`) since the table is append-only.
     const latest = new Map<string, Doc<"recipeVersions">>();
     for (const r of rows) {
       const cur = latest.get(r.family);
-      if (!cur || r.createdAt > cur.createdAt) latest.set(r.family, r);
+      const newer =
+        !cur ||
+        r.createdAt > cur.createdAt ||
+        (r.createdAt === cur.createdAt && r._creationTime > cur._creationTime);
+      if (newer) latest.set(r.family, r);
     }
     return [...latest.values()].map((r) => ({ family: r.family, body: r.body }));
   },

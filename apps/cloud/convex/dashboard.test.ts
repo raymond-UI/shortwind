@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema.js";
 import { api, internal } from "./_generated/api.js";
+import { STANDARD_KIT } from "./lib/standard_kit.generated.js";
 
 /**
  * CLOUD-35 — dashboard oversight queries, in-harness against the REAL schema +
@@ -439,6 +440,207 @@ describe("dashboard API tokens (operator-gated, account-scoped — epic #184)", 
       t.mutation(api.dashboard.revokeToken, {
         bearer: a.readBearer,
         tokenId: issued.tokenId,
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("dashboard.listRecipeVersions", () => {
+  const KIT = STANDARD_KIT[0]!; // a known-standard family
+  async function seedVersion(
+    t: ReturnType<typeof convexTest>,
+    accountId: string,
+    row: { family: string; version: string; bodySha: string; createdAt: number },
+  ) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert("recipeVersions", {
+        accountId: accountId as never,
+        family: row.family,
+        version: row.version,
+        body: "@recipe x {}\n",
+        bodySha: row.bodySha,
+        createdAt: row.createdAt,
+      });
+    });
+  }
+
+  it("returns the latest version per family, sorted, flagged standard vs custom", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, readBearer } = await seedAccount(t, "acct_recipes");
+    const now = Date.now();
+    // The standard family with two versions — only the newest should surface.
+    await seedVersion(t, accountId, {
+      family: KIT.family,
+      version: "1.0.0",
+      bodySha: "old",
+      createdAt: now,
+    });
+    await seedVersion(t, accountId, {
+      family: KIT.family,
+      version: "1.1.0",
+      bodySha: "new",
+      createdAt: now + 1000,
+    });
+    // A family that is NOT in the standard kit.
+    await seedVersion(t, accountId, {
+      family: "zzz-custom",
+      version: "0.1.0",
+      bodySha: "custom",
+      createdAt: now,
+    });
+
+    const rows = await t.query(api.dashboard.listRecipeVersions, {
+      bearer: readBearer,
+    });
+    // latest-per-family: the KIT family shows 1.1.0, not 1.0.0.
+    const kitRow = rows.find((r) => r.family === KIT.family);
+    expect(kitRow?.version).toBe("1.1.0");
+    expect(kitRow?.bodySha).toBe("new");
+    expect(kitRow?.isStandard).toBe(true);
+    const custom = rows.find((r) => r.family === "zzz-custom");
+    expect(custom?.isStandard).toBe(false);
+    // sorted by family name (custom sorts last here).
+    expect(rows[rows.length - 1]!.family).toBe("zzz-custom");
+  });
+
+  it("does not leak another account's palette", async () => {
+    const t = convexTest(schema, modules);
+    const mine = await seedAccount(t, "acct_r_a");
+    const other = await seedAccount(t, "acct_r_b");
+    await seedVersion(t, other.accountId, {
+      family: "leak",
+      version: "1.0.0",
+      bodySha: "x",
+      createdAt: Date.now(),
+    });
+    const rows = await t.query(api.dashboard.listRecipeVersions, {
+      bearer: mine.readBearer,
+    });
+    expect(rows.find((r) => r.family === "leak")).toBeUndefined();
+  });
+});
+
+describe("dashboard.resetRecipesToStandard", () => {
+  const KIT = STANDARD_KIT[0]!;
+
+  it("restores a diverged standard family to the kit body (forward-only)", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, writeBearer, readBearer } = await seedAccount(
+      t,
+      "acct_reset",
+    );
+    // Diverge the family: a body sha that is NOT the kit's.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("recipeVersions", {
+        accountId: accountId as never,
+        family: KIT.family,
+        version: "9.9.9",
+        body: "@recipe drifted {}\n",
+        bodySha: "drifted-sha",
+        createdAt: Date.now(),
+      });
+    });
+
+    const res = await t.mutation(api.dashboard.resetRecipesToStandard, {
+      bearer: writeBearer,
+      family: KIT.family,
+    });
+    expect(res.reset).toBe(1);
+
+    // The latest version is now the kit body — and history is preserved (append).
+    const rows = await t.query(api.dashboard.listRecipeVersions, {
+      bearer: readBearer,
+    });
+    expect(rows.find((r) => r.family === KIT.family)?.bodySha).toBe(KIT.bodySha);
+
+    // A second reset is a no-op (already the kit body).
+    const again = await t.mutation(api.dashboard.resetRecipesToStandard, {
+      bearer: writeBearer,
+      family: KIT.family,
+    });
+    expect(again.reset).toBe(0);
+  });
+
+  it("requires a write-scoped bearer", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedAccount(t, "acct_reset_ro");
+    await expect(
+      t.mutation(api.dashboard.resetRecipesToStandard, {
+        bearer: a.readBearer,
+        family: KIT.family,
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("dashboard account theme (P5)", () => {
+  it("defaults to the neutral theme when none is set", async () => {
+    const t = convexTest(schema, modules);
+    const { readBearer } = await seedAccount(t, "acct_theme_default");
+    const theme = await t.query(api.dashboard.getAccountTheme, {
+      bearer: readBearer,
+    });
+    expect(theme.isDefault).toBe(true);
+    expect(theme.accent.length).toBeGreaterThan(0);
+    expect(theme.radius.length).toBeGreaterThan(0);
+  });
+
+  it("sets, round-trips, and then updates the theme (upsert)", async () => {
+    const t = convexTest(schema, modules);
+    const { readBearer, writeBearer } = await seedAccount(t, "acct_theme_set");
+
+    const set = await t.mutation(api.dashboard.setAccountTheme, {
+      bearer: writeBearer,
+      accent: "#2563eb",
+      radius: "1rem",
+    });
+    expect(set).toEqual({ accent: "#2563eb", radius: "1rem", isDefault: false });
+
+    const got = await t.query(api.dashboard.getAccountTheme, {
+      bearer: readBearer,
+    });
+    expect(got).toEqual({ accent: "#2563eb", radius: "1rem", isDefault: false });
+
+    // A second set updates the SAME row (upsert), not a duplicate.
+    await t.mutation(api.dashboard.setAccountTheme, {
+      bearer: writeBearer,
+      accent: "oklch(0.6 0.2 250)",
+      radius: "0.25rem",
+    });
+    const rows = await t.run(async (ctx) =>
+      ctx.db.query("accountThemes").collect(),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.accent).toBe("oklch(0.6 0.2 250)");
+  });
+
+  it("rejects an unsafe accent or radius", async () => {
+    const t = convexTest(schema, modules);
+    const { writeBearer } = await seedAccount(t, "acct_theme_bad");
+    await expect(
+      t.mutation(api.dashboard.setAccountTheme, {
+        bearer: writeBearer,
+        accent: "red; } body { display:none }",
+        radius: "1rem",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      t.mutation(api.dashboard.setAccountTheme, {
+        bearer: writeBearer,
+        accent: "#2563eb",
+        radius: "1rem; color:red",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("requires a write-scoped bearer to set", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedAccount(t, "acct_theme_ro");
+    await expect(
+      t.mutation(api.dashboard.setAccountTheme, {
+        bearer: a.readBearer,
+        accent: "#2563eb",
+        radius: "1rem",
       }),
     ).rejects.toThrow();
   });

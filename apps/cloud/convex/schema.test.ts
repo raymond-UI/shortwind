@@ -82,6 +82,9 @@ describe("every shared record type maps 1:1 to a table", () => {
     // Account-level custom domains (bind state + Cloudflare cert). Server-only
     // control-plane state; not a shared `types.ts` record.
     "accountDomains",
+    // Per-account web theme (accent + radius) injected into fragment artifacts
+    // (P5). Server-only control-plane state; not a shared `types.ts` record.
+    "accountThemes",
   ];
 
   it("defines exactly the record tables + infra tables (no extras, none missing)", () => {
