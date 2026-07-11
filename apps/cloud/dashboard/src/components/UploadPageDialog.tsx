@@ -146,7 +146,11 @@ export function UploadPageDialog({
   const [items, setItems] = useState<Item[]>([]);
   const [slug, setSlug] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("public");
-  const [asBundle, setAsBundle] = useState(true);
+  // Whether to publish the files as ONE linked bundle. The choice is always
+  // offered for multiple files, but the DEFAULT keys on whether an index.html is
+  // present (its natural entry) — NOT on folder-vs-multiselect. Five unrelated
+  // files shouldn't default to a bundle; a set that includes index.html should.
+  const [asBundle, setAsBundle] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +166,7 @@ export function UploadPageDialog({
     setItems([]);
     setSlug("");
     setVisibility("public");
-    setAsBundle(true);
+    setAsBundle(false);
     setError(null);
     setDone(null);
     setBusy(false);
@@ -205,10 +209,14 @@ export function UploadPageDialog({
       collected.push({ path, html });
     }
     setItems(collected);
+    // Default to a bundle only when an index.html is present (its entry). Multi
+    // without an index → default to separate pages; the user can still opt in.
+    const indexFile = collected.find((f) => f.path === "index.html");
+    setAsBundle(indexFile !== undefined && collected.length > 1);
     // Default the address from the entry (index.html) or the single file.
-    const entry =
-      collected.find((f) => f.path === "index.html") ?? collected[0]!;
-    setSlug((cur) => (cur.trim() ? cur : slugFromFilename(entry.path)));
+    setSlug((cur) =>
+      cur.trim() ? cur : slugFromFilename((indexFile ?? collected[0]!).path),
+    );
     if (skipped > 0) {
       setError(
         `${skipped} non-HTML file${skipped > 1 ? "s" : ""} skipped (CSS/JS/images aren't bundled yet).`,
