@@ -3,6 +3,11 @@ import { internalMutation, mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireWrite } from "./lib/auth_guard.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
+import {
+  scheduleArtifactSeal,
+  type SealSchedulerCtx,
+} from "./lib/r2_seal.js";
+import { scheduleAbuseNotification } from "./lib/abuse_notify.js";
 
 /**
  * CLOUD-32 — abuse intake + fast global kill + CSAM/NCMEC preservation (PRD §8).
@@ -408,7 +413,7 @@ export const clearReport = mutation({
  * Exported as the seam CLOUD-32's kill path drives.
  */
 export async function applyLifecycle(
-  ctx: { db: any },
+  ctx: { db: any; scheduler?: SealSchedulerCtx["scheduler"] },
   args: {
     pageId: Id<"pages">;
     accountId: AccountId;
@@ -447,6 +452,15 @@ export async function applyLifecycle(
   if (result.moderationState !== null) {
     const liveKey = await currentArtifactKey(ctx, args.pageId);
     sealed = result.seals && liveKey ? sealedKey(liveKey) : null;
+    // #198 item 4: actually MOVE the R2 object to the sealed prefix (copy →
+    // delete-original), preserving the material while removing it from its live
+    // key. The S3 calls are a `fetch`, so we SCHEDULE the seal to run in an
+    // action right after this mutation commits (a mutation cannot fetch), exactly
+    // like the KV eviction. Fail-safe: the scheduled action swallows errors; the
+    // recorded `preservedR2Key` + lifecycle=quarantined stay the source of truth.
+    if (result.seals && liveKey && sealed && ctx.scheduler) {
+      await scheduleArtifactSeal(ctx as SealSchedulerCtx, liveKey, sealed);
+    }
     await upsertModeration(ctx, {
       pageId: args.pageId,
       accountId: args.accountId,
@@ -648,6 +662,15 @@ export const reportAbuse = mutation({
       },
       createdAt: now,
     });
+    // #198 item 3: notify the monitored endpoint (webhook) out-of-band so the
+    // report is actually triaged, not just parked in the table. Scheduled to run
+    // in an action after commit (mutation can't fetch); fail-safe; no reporter PII.
+    await scheduleAbuseNotification(ctx, {
+      pageId: args.pageId,
+      accountId: page.accountId,
+      category: args.category,
+      reason: args.reason,
+    });
     return { state: "reported" as const };
   },
 });
@@ -724,6 +747,29 @@ export const killPage = mutation({
       lifecycle: outcome.lifecycle,
       preservedR2Key: outcome.sealedKey,
     };
+  },
+});
+
+/**
+ * #198 item 2 — stamp the NCMEC CyberTipline report id on a page's moderation
+ * case after a successful auto-submission. internalMutation (called only by the
+ * scheduled `submitCyberTipReportAction`); it patches the existing case, leaving
+ * the preservation clock + lifecycle untouched.
+ */
+export const stampNcmecReportId = internalMutation({
+  args: { pageId: v.id("pages"), ncmecReportId: v.string() },
+  returns: v.object({ stamped: v.boolean() }),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("moderation")
+      .withIndex("by_page", (q) => q.eq("pageId", args.pageId))
+      .first();
+    if (!existing) return { stamped: false };
+    await ctx.db.patch(existing._id, {
+      ncmecReportId: args.ncmecReportId,
+      updatedAt: Date.now(),
+    });
+    return { stamped: true };
   },
 });
 
