@@ -228,6 +228,13 @@ export interface PublishDataPort {
     accountId: string,
     family: string,
   ): Promise<StoredRecipeVersion | null>;
+  /**
+   * The account's full stored recipe palette — latest body per family, body-only
+   * (no seal). Expansion merges this with the recipes carried on the publish so
+   * an unedited standard recipe (seeded into the store) still expands even when
+   * the request carries nothing. Carried recipes override per family.
+   */
+  loadPalette(accountId: string): Promise<{ family: string; body: string }[]>;
   /** Append a new recipe version (forward-only). */
   insertRecipeVersion(write: RecipeVersionWrite): Promise<string>;
   /** Emit a recipe-edit event (audit-grade, PRD §5.4). */
@@ -506,10 +513,19 @@ async function buildAndStore(
   input: Pick<PublishInput, "html" | "recipes" | "css">,
   deps: PublishDeps,
 ): Promise<{ artifactKey: string; expandedHash: string; sourceHash: string }> {
-  const recipeSources: RecipeSource[] = input.recipes.map((r) => ({
-    filename: `${r.family}.css`,
-    source: r.source,
-  }));
+  // Expand against the account's STORED palette merged with the recipes CARRIED
+  // on this publish — carried wins per family (a local edit overrides the stored
+  // body). This is what makes unedited standard recipes (seeded into the store)
+  // expand on every pathway, even when the request carries nothing. Stored
+  // bodies are seal-less; carried sources are sealed — both parse fine.
+  const bySource = new Map<string, RecipeSource>();
+  for (const s of await deps.data.loadPalette(actor.accountId)) {
+    bySource.set(s.family, { filename: `${s.family}.css`, source: s.body });
+  }
+  for (const r of input.recipes) {
+    bySource.set(r.family, { filename: `${r.family}.css`, source: r.source });
+  }
+  const recipeSources: RecipeSource[] = [...bySource.values()];
 
   const expanded = await expandPage({
     html: input.html,

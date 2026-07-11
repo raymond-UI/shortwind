@@ -33,7 +33,7 @@ function sealedTouched(family: string, body: string): string {
 }
 
 describe("assembleBundlePayload", () => {
-  it("ships the entry + linked files (entry first) and ONLY touched recipe bodies", async () => {
+  it("ships the entry + linked files (entry first) and the FULL recipe palette", async () => {
     const candidates: CandidateRecipe[] = [
       { family: "card", source: sealedTouched("card", "@recipe card {\n  p-4\n}\n") },
       {
@@ -63,8 +63,8 @@ describe("assembleBundlePayload", () => {
     expect(payload.slug).toBe("handbook");
     expect(payload.lockfile).toEqual(LOCKFILE);
 
-    // only the TOUCHED family's body rode along (not the whole palette).
-    expect(payload.recipes.map((r) => r.family)).toEqual(["card"]);
+    // the FULL palette rides along (both families), so unedited recipes expand.
+    expect(payload.recipes.map((r) => r.family).sort()).toEqual(["button", "card"]);
   });
 
   it("throws when the entry path is not one of the files", async () => {

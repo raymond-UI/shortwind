@@ -7,10 +7,7 @@ import {
   readHomeLockfile,
   type ResolvedHome,
 } from "../../home.js";
-import {
-  selectTouchedRecipes,
-  type CandidateRecipe,
-} from "../contract/fingerprint.js";
+import { type CandidateRecipe } from "../contract/fingerprint.js";
 import { validateSlug } from "../contract/slug.js";
 import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
@@ -129,13 +126,15 @@ export async function assemblePublishPayload(input: {
   visibility?: string | undefined;
   idempotencyKey?: string | undefined;
 }): Promise<PublishPayload> {
-  const touched = await selectTouchedRecipes(input.candidates);
-  // Carry the SOURCE of exactly the touched families, in the deterministic
-  // family order `selectTouchedRecipes` already sorted by.
-  const recipes: RecipePayload[] = touched.map((t) => {
-    const candidate = input.candidates.find((c) => c.family === t.family)!;
-    return { family: t.family, source: candidate.source };
-  });
+  // Carry the FULL local palette (every candidate), not just the edited/touched
+  // subset — the server merges these into the expansion registry, so a page
+  // using an UNEDITED recipe still expands. (The server's applyTouchedRecipes
+  // re-runs the touched filter, so carrying unedited families writes no
+  // recipe.edit events.)
+  const recipes: RecipePayload[] = input.candidates.map((c) => ({
+    family: c.family,
+    source: c.source,
+  }));
   const visibility = normalizeVisibility(input.visibility);
   return {
     html: input.html,
@@ -259,11 +258,12 @@ export async function assembleBundlePayload(input: {
       `bundle entry "${input.entryPath}" is not one of the bundle files`,
     );
   }
-  const touched = await selectTouchedRecipes(input.candidates);
-  const recipes: RecipePayload[] = touched.map((t) => {
-    const candidate = input.candidates.find((c) => c.family === t.family)!;
-    return { family: t.family, source: candidate.source };
-  });
+  // Carry the FULL local palette (see assemblePublishPayload) so unedited
+  // recipes expand server-side.
+  const recipes: RecipePayload[] = input.candidates.map((c) => ({
+    family: c.family,
+    source: c.source,
+  }));
   // Deterministic order: entry first, then the rest sorted by path.
   const entry = input.files.find((f) => f.path === input.entryPath)!;
   const rest = input.files

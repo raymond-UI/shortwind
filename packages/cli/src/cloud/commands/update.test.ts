@@ -22,7 +22,7 @@ function sealedTouched(family: string, body: string): string {
 }
 
 describe("assembleUpdatePayload", () => {
-  it("carries only touched bodies and never a slug", async () => {
+  it("carries the full palette and never a slug", async () => {
     const candidates: CandidateRecipe[] = [
       { family: "card", source: sealedTouched("card", "@recipe card { base: p-4; }\n") },
       { family: "button", source: await sealedUntouched("button", "@recipe button {}\n") },
@@ -35,7 +35,7 @@ describe("assembleUpdatePayload", () => {
       visibility: "private",
       idempotencyKey: "key-2",
     });
-    expect(payload.recipes.map((r) => r.family)).toEqual(["card"]);
+    expect(payload.recipes.map((r) => r.family).sort()).toEqual(["button", "card"]);
     expect(payload.html).toBe("<h1>v2</h1>");
     expect(payload.tags).toEqual(["ops"]);
     expect(payload.visibility).toBe("private");

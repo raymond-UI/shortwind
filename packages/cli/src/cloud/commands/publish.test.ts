@@ -47,8 +47,8 @@ describe("normalizeVisibility", () => {
   });
 });
 
-describe("assemblePublishPayload — touched bodies only", () => {
-  it("sends ONLY the touched recipe body, not the whole palette", async () => {
+describe("assemblePublishPayload — carries the full palette", () => {
+  it("sends every candidate family (so unedited recipes expand server-side)", async () => {
     const touchedBody = "@recipe card {\n  base: rounded-lg border p-4;\n}\n";
     const untouchedBody = "@recipe button {\n  base: inline-flex px-3;\n}\n";
     const candidates: CandidateRecipe[] = [
@@ -66,12 +66,8 @@ describe("assemblePublishPayload — touched bodies only", () => {
       idempotencyKey: "key-1",
     });
 
-    // The whole palette has two families; only "card" diverged from its seal.
-    expect(payload.recipes).toHaveLength(1);
-    expect(payload.recipes[0]!.family).toBe("card");
-    expect(payload.recipes[0]!.source).toContain("rounded-lg");
-    expect(payload.recipes.map((r) => r.family)).not.toContain("button");
-
+    // The full palette is carried — BOTH families, edited or not.
+    expect(payload.recipes.map((r) => r.family).sort()).toEqual(["button", "card"]);
     expect(payload.html).toBe("<h1>hi</h1>");
     expect(payload.lockfile).toEqual(LOCKFILE);
     expect(payload.slug).toBe("status");
@@ -80,7 +76,7 @@ describe("assemblePublishPayload — touched bodies only", () => {
     expect(payload.idempotencyKey).toBe("key-1");
   });
 
-  it("sends an empty recipes array when nothing diverged", async () => {
+  it("carries an unedited family too (was empty under touched-only)", async () => {
     const candidates: CandidateRecipe[] = [
       { family: "button", source: await sealedUntouched("button", "@recipe button {}\n") },
     ];
@@ -89,7 +85,7 @@ describe("assemblePublishPayload — touched bodies only", () => {
       lockfile: LOCKFILE,
       candidates,
     });
-    expect(payload.recipes).toEqual([]);
+    expect(payload.recipes.map((r) => r.family)).toEqual(["button"]);
     expect(payload.slug).toBeUndefined();
     expect(payload.tags).toBeUndefined();
     expect(payload.visibility).toBeUndefined();

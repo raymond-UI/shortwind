@@ -92,6 +92,11 @@ class MemoryPublishData implements PublishDataPort {
   ): Promise<StoredRecipeVersion | null> {
     return null;
   }
+  async loadPalette(
+    _accountId: string,
+  ): Promise<{ family: string; body: string }[]> {
+    return []; // bundle tests carry recipes explicitly; no stored palette.
+  }
   async insertRecipeVersion(_w: RecipeVersionWrite) {
     return this.id("rv");
   }

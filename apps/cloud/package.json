@@ -7,6 +7,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "gen:standard-kit": "tsx convex/scripts/generate-standard-kit.ts",
     "build": "echo \"build wired up in a later wave (worker bundle + convex deploy)\" && exit 0"
   },
   "dependencies": {

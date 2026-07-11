@@ -427,6 +427,10 @@ function makeDataPort(ctx: RunnerCtx, tokenId: TokenId): PublishDataPort {
         accountId: accountId as AccountId,
         family,
       }),
+    loadPalette: (accountId) =>
+      ctx.runQuery(internal.recipes.listRecipePalette, {
+        accountId: accountId as AccountId,
+      }),
     // Capture the body; the matching edit-event write flushes the transaction.
     insertRecipeVersion: async (write) => {
       pendingRecipe = {

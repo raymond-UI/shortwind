@@ -119,6 +119,16 @@ class MemoryData implements PublishDataPort {
     const last = matches.at(-1);
     return last ? { family, version: last.version, bodySha: last.bodySha } : null;
   }
+  async loadPalette(
+    accountId: string,
+  ): Promise<{ family: string; body: string }[]> {
+    // Latest body per family for this account (mirrors listRecipePalette).
+    const latest = new Map<string, string>();
+    for (const r of this.recipeVersions) {
+      if (r.accountId === accountId) latest.set(r.family, r.body);
+    }
+    return [...latest.entries()].map(([family, body]) => ({ family, body }));
+  }
   async insertRecipeVersion(write: RecipeVersionWrite): Promise<string> {
     const id = this.id("rv");
     this.recipeVersions.push({ ...write, id });
@@ -300,6 +310,32 @@ describe("runPublish — create", () => {
     expect(data.recipeVersions).toHaveLength(0);
     expect(data.recipeEditEvents).toHaveLength(0);
     expect(data.audits.some((a) => a.action === "recipe.edit")).toBe(false);
+  });
+
+  it("expands against the STORED palette when the publish carries no recipes", async () => {
+    // The core fix (P2): a page using @card expands even though the request
+    // carries recipes: [] — because the account's stored palette (seeded kit)
+    // is merged into the expansion registry.
+    const { data, storage, deps } = makeDeps();
+    data.recipeVersions.push({
+      id: "seed_card",
+      accountId: ACCOUNT,
+      family: "card",
+      version: "0.1.0",
+      body: CARD_BODY, // seal-less body, as seeded
+      bodySha: "seedsha",
+    });
+    const out = await runPublish(
+      await basePublishInput({
+        recipes: [], // carries NOTHING — must fall back to the stored palette
+        lockfile: { version: 1, registry: "default", families: {} },
+      }),
+      deps,
+    );
+    if (!out.ok) throw new Error("unexpected collision");
+    const html = storage.artifacts[0]!.html;
+    expect(html).toContain("rounded-lg");
+    expect(html).not.toContain("@card");
   });
 
   it("the served artifact is a complete self-contained Tailwind document", async () => {

@@ -1,8 +1,10 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireReadOperator, requireWriteOperator } from "./lib/operator_auth.js";
 import { authComponent } from "./auth.js";
+import { STANDARD_KIT } from "./lib/standard_kit.generated.js";
 
 /**
  * Dashboard oversight queries (CLOUD-35, PRD §3 / §5.4 / §6.3 / §8).
@@ -482,6 +484,40 @@ export const revokeToken = mutation({
  * dashboard only calls this from inside the authed gate, so that branch is just
  * defensive.
  */
+/**
+ * Seed a new account's recipe palette with the standard kit (P1). Idempotent:
+ * inserts a `recipeVersions` row only for families not already present, so it's
+ * safe to run from both `ensureAccount` and the backfill migration. Bodies are
+ * seal-stripped (touch-inert), so seeding never fires a recipe.edit event and a
+ * later publish that re-feeds the palette records no spurious edits.
+ */
+export async function seedStandardKit(
+  ctx: MutationCtx,
+  accountId: Id<"accounts">,
+): Promise<number> {
+  const now = Date.now();
+  let inserted = 0;
+  for (const r of STANDARD_KIT) {
+    const existing = await ctx.db
+      .query("recipeVersions")
+      .withIndex("by_account_family", (q) =>
+        q.eq("accountId", accountId).eq("family", r.family),
+      )
+      .first();
+    if (existing) continue;
+    await ctx.db.insert("recipeVersions", {
+      accountId,
+      family: r.family,
+      version: r.version,
+      body: r.body,
+      bodySha: r.bodySha,
+      createdAt: now,
+    });
+    inserted += 1;
+  }
+  return inserted;
+}
+
 export const ensureAccount = mutation({
   args: {},
   returns: v.union(v.id("accounts"), v.null()),
@@ -507,12 +543,16 @@ export const ensureAccount = mutation({
       return existing._id;
     }
 
-    return await ctx.db.insert("accounts", {
+    const accountId = await ctx.db.insert("accounts", {
       authUserId,
       name,
       email,
       createdAt: now,
       updatedAt: now,
     });
+    // Seed the standard recipe palette so `@recipe` classes expand out of the
+    // box on every publish pathway (P1), with zero setup.
+    await seedStandardKit(ctx, accountId);
+    return accountId;
   },
 });
