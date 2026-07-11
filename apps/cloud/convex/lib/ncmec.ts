@@ -24,6 +24,7 @@
  */
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server.js";
+import { alertOps } from "./ops_alert.js";
 
 /** Minimal `process.env` accessor (workspace types against workers-types). */
 declare const process: { env: Record<string, string | undefined> };
@@ -104,6 +105,14 @@ export const submitCyberTipReportAction = internalAction({
       await ctx.runMutation(internal.moderation.stampNcmecReportId, {
         pageId: args.pageId,
         ncmecReportId: reportId,
+      });
+    } else {
+      // #202 alerting: a CSAM report that was NOT filed (unconfigured or a
+      // submission failure) is a legal obligation gap (18 U.S.C. §2258A) — page
+      // an operator to file manually within the 60-day window.
+      await alertOps("ncmec.report_not_filed", {
+        pageId: args.pageId,
+        listId: args.listId,
       });
     }
     return null;

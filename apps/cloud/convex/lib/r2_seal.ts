@@ -22,6 +22,7 @@
  */
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server.js";
+import { alertOps } from "./ops_alert.js";
 
 /**
  * Minimal `process.env` accessor (this workspace types against
@@ -47,19 +48,23 @@ function r2Creds(): R2Creds | null {
   return { endpoint, accessKeyId, secretAccessKey, bucket };
 }
 
+/** The outcome of a seal attempt (distinguishes unconfigured from a failure). */
+export type SealStatus = "skipped" | "sealed" | "failed";
+
 /**
  * COPY `liveKey` → `sealedKey`, then DELETE `liveKey`, via R2's S3-compatible
- * API (SigV4-signed with aws4fetch). Returns whether the seal completed. Never
- * throws — a failure logs + returns false. Idempotent enough for a retry: a
- * re-run whose live object is already gone (404 on copy-source) is treated as an
- * already-sealed success.
+ * API (SigV4-signed with aws4fetch). Returns the {@link SealStatus}: `skipped`
+ * when R2 is unprovisioned (dev/test — not an error), `sealed` on success,
+ * `failed` on a real error (which the caller alerts on). Never throws.
+ * Idempotent enough for a retry: a re-run whose live object is already gone (404
+ * on copy-source) is treated as an already-sealed success.
  */
 export async function sealArtifact(
   liveKey: string,
   sealedKey: string,
-): Promise<boolean> {
+): Promise<SealStatus> {
   const creds = r2Creds();
-  if (!creds) return false; // Un-provisioned (dev/test): nothing to seal against.
+  if (!creds) return "skipped"; // Un-provisioned (dev/test): nothing to seal.
 
   const { AwsClient } = await import("aws4fetch");
   const client = new AwsClient({
@@ -81,13 +86,13 @@ export async function sealArtifact(
       headers: { "x-amz-copy-source": `/${creds.bucket}/${enc(liveKey)}` },
     });
     // Already gone (a retry after a prior seal) ⇒ treat as sealed, skip delete.
-    if (copy.status === 404) return true;
+    if (copy.status === 404) return "sealed";
     if (!copy.ok) {
       const detail = await copy.text().catch(() => "");
       console.error(
         `[r2_seal] copy failed (${copy.status}) ${liveKey} → ${sealedKey}: ${detail.slice(0, 200)}`,
       );
-      return false;
+      return "failed";
     }
     // 2. DELETE the original live object so it can no longer be served/fetched.
     const del = await client.fetch(liveUrl, { method: "DELETE" });
@@ -97,14 +102,14 @@ export async function sealArtifact(
         `[r2_seal] delete-original failed (${del.status}) ${liveKey}: ${detail.slice(0, 200)}`,
       );
       // The COPY succeeded, so the material IS preserved at the sealed key — the
-      // legal hold holds. Report false so the caller/alerting knows the original
+      // legal hold holds. Report failed so the caller/alerting knows the original
       // wasn't removed (it is already unreachable via KV/find).
-      return false;
+      return "failed";
     }
-    return true;
+    return "sealed";
   } catch (err) {
     console.error(`[r2_seal] seal threw for ${liveKey} → ${sealedKey}:`, err);
-    return false;
+    return "failed";
   }
 }
 
@@ -118,7 +123,16 @@ export const sealArtifactAction = internalAction({
   args: { liveKey: v.string(), sealedKey: v.string() },
   returns: v.null(),
   handler: async (_ctx, args) => {
-    await sealArtifact(args.liveKey, args.sealedKey);
+    const status = await sealArtifact(args.liveKey, args.sealedKey);
+    // #202 alerting: a FAILED seal (not merely unconfigured) is a legal-
+    // preservation gap — the material may linger at its live key — so page an
+    // operator rather than swallow silently.
+    if (status === "failed") {
+      await alertOps("r2_seal.failed", {
+        liveKey: args.liveKey,
+        sealedKey: args.sealedKey,
+      });
+    }
     return null;
   },
 });

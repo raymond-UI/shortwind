@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as account_lifecycle from "../account_lifecycle.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as billingStripe_actions from "../billingStripe/actions.js";
@@ -36,6 +37,7 @@ import type * as lib_device_grant from "../lib/device_grant.js";
 import type * as lib_edge_kv from "../lib/edge_kv.js";
 import type * as lib_ncmec from "../lib/ncmec.js";
 import type * as lib_operator_auth from "../lib/operator_auth.js";
+import type * as lib_ops_alert from "../lib/ops_alert.js";
 import type * as lib_plan_resolver from "../lib/plan_resolver.js";
 import type * as lib_publish_core from "../lib/publish_core.js";
 import type * as lib_r2_seal from "../lib/r2_seal.js";
@@ -57,6 +59,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  account_lifecycle: typeof account_lifecycle;
   auth: typeof auth;
   billing: typeof billing;
   "billingStripe/actions": typeof billingStripe_actions;
@@ -85,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   "lib/edge_kv": typeof lib_edge_kv;
   "lib/ncmec": typeof lib_ncmec;
   "lib/operator_auth": typeof lib_operator_auth;
+  "lib/ops_alert": typeof lib_ops_alert;
   "lib/plan_resolver": typeof lib_plan_resolver;
   "lib/publish_core": typeof lib_publish_core;
   "lib/r2_seal": typeof lib_r2_seal;

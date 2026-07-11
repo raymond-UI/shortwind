@@ -59,7 +59,10 @@ describe("#201 transparent refresh on 401", () => {
 
   it("refreshes once and retries the request with the new token", async () => {
     const calls: Recorded[] = [];
-    let persisted: { accessToken: string; refreshToken?: string } | null = null;
+    let persisted: {
+      accessToken: string;
+      refreshToken?: string | undefined;
+    } | null = null;
     const client = createApiClient({
       baseUrl: "https://api.test",
       token: "old-access",

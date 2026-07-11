@@ -339,9 +339,9 @@ export interface ApiClientConfig {
 export interface RefreshedToken {
   accessToken: string;
   tokenType: string;
-  refreshToken?: string;
-  expiresIn?: number;
-  scope?: string;
+  refreshToken?: string | undefined;
+  expiresIn?: number | undefined;
+  scope?: string | undefined;
 }
 
 /**
