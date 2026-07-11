@@ -279,6 +279,34 @@ export default defineSchema({
     // CLOUD-01: list/revoke an account's tokens.
     .index("by_account", ["accountId"]),
 
+  // #201: OAuth refresh tokens. The device-code exchange (and every subsequent
+  // refresh) issues a SHORT-lived access token in `tokens` PLUS a longer-lived
+  // refresh token here, so a client can trade a refresh for a new access token
+  // without re-running the device flow — and revocation stays a real kill switch
+  // (short access TTL + revocable refresh). Rotating: a refresh is single-use —
+  // exchanging it mints a new access+refresh pair and REVOKES the presented
+  // refresh (`revokedAt`), so a stolen-and-replayed refresh fails. Same
+  // hash-only storage + revocation semantics as `tokens` (the pure
+  // `evaluateToken` verdict logic is reused).
+  refreshTokens: defineTable({
+    accountId: v.id("accounts"),
+    // SHA-256 hex of the raw refresh secret (plaintext shown once, never stored).
+    tokenHash: v.string(),
+    // The scopes the access tokens minted from this refresh carry (a subset of
+    // shared `Scope` strings — same rationale as `tokens.scopes`).
+    scopes: v.array(v.string()),
+    label: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    // Null while valid; set on revocation OR when rotated out (single-use).
+    revokedAt: v.union(v.number(), v.null()),
+    // Hard expiry (epoch ms) — refresh tokens always have one (unlike a token).
+    expiresAt: v.union(v.number(), v.null()),
+  })
+    // Refresh-grant exchange looks the presented secret up by hash in O(1).
+    .index("by_tokenHash", ["tokenHash"])
+    // Revoke/rotate all of an account's refresh tokens (kill switch).
+    .index("by_account", ["accountId"]),
+
   // RFC 8628 device-authorization grant (the CLI `login` flow). The default
   // @convex-dev/better-auth component has no `deviceCode` model, so the grant is
   // implemented natively (see convex/lib/device_grant.ts + convex/device.ts):

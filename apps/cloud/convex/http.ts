@@ -736,31 +736,63 @@ const deviceCodeHandler = httpAction(async (ctx, request) => {
   );
 });
 
-/** POST /oauth/token → poll for the token (RFC 8628 §3.4/§3.5). Form-encoded. */
+/**
+ * POST /oauth/token — form-encoded. Two grants (both advertised in wellknown.ts):
+ *   - `urn:ietf:params:oauth:grant-type:device_code` (RFC 8628 §3.4/§3.5): the
+ *     CLI polls with its device_code; on approval we return the access token,
+ *     its `expires_in`, and a rotating `refresh_token`.
+ *   - `refresh_token` (RFC 6749 §6): the CLI trades a refresh token for a fresh
+ *     access+refresh pair (single-use rotation) once the access token expires.
+ */
 const oauthTokenHandler = httpAction(async (ctx, request) => {
   const form = new URLSearchParams(await request.text());
-  if (
-    form.get("grant_type") !== "urn:ietf:params:oauth:grant-type:device_code"
-  ) {
-    return json({ error: "unsupported_grant_type" }, 400);
+  const grantType = form.get("grant_type");
+
+  if (grantType === "urn:ietf:params:oauth:grant-type:device_code") {
+    const deviceCode = form.get("device_code")?.trim() ?? "";
+    if (!deviceCode) return json({ error: "invalid_request" }, 400);
+    const result = await ctx.runMutation(internal.device.pollDeviceToken, {
+      deviceCode,
+    });
+    if (result.ok) {
+      return json(
+        {
+          access_token: result.accessToken,
+          token_type: "bearer",
+          scope: result.scope,
+          expires_in: result.expiresInSeconds,
+          refresh_token: result.refreshToken,
+        },
+        200,
+      );
+    }
+    // RFC 8628 §3.5: pending/slow_down/denied/expired all ride a 400 + error code.
+    return json({ error: result.error }, 400);
   }
-  const deviceCode = form.get("device_code")?.trim() ?? "";
-  if (!deviceCode) return json({ error: "invalid_request" }, 400);
-  const result = await ctx.runMutation(internal.device.pollDeviceToken, {
-    deviceCode,
-  });
-  if (result.ok) {
-    return json(
-      {
-        access_token: result.accessToken,
-        token_type: "bearer",
-        scope: result.scope,
-      },
-      200,
-    );
+
+  if (grantType === "refresh_token") {
+    const refreshToken = form.get("refresh_token")?.trim() ?? "";
+    if (!refreshToken) return json({ error: "invalid_request" }, 400);
+    const result = await ctx.runMutation(internal.tokens.rotateRefreshToken, {
+      refreshToken,
+    });
+    if (result.ok) {
+      return json(
+        {
+          access_token: result.accessToken,
+          token_type: "bearer",
+          scope: result.scope,
+          expires_in: result.expiresInSeconds,
+          refresh_token: result.refreshToken,
+        },
+        200,
+      );
+    }
+    // RFC 6749 §5.2: an unknown/revoked/expired refresh is `invalid_grant`.
+    return json({ error: result.error }, 400);
   }
-  // RFC 8628 §3.5: pending/slow_down/denied/expired all ride a 400 + error code.
-  return json({ error: result.error }, 400);
+
+  return json({ error: "unsupported_grant_type" }, 400);
 });
 
 http.route({

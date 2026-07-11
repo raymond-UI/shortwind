@@ -313,6 +313,30 @@ export function addAccount(homeRoot: string, input: AddAccountInput): Credential
 }
 
 /**
+ * #201 — persist a rotated token pair after a transparent refresh. Called from
+ * the api-client's `onTokenRefreshed` callback when a 401 was recovered by
+ * exchanging the refresh token. Writes to the GLOBAL home (where login stores
+ * credentials — same rationale as {@link readActiveCloudAccount}). A no-op if the
+ * account is gone (logged out mid-flight). Scopes are re-derived from the echoed
+ * `scope` so a narrowed grant is reflected for the step-up pre-flight.
+ */
+export function updateAccountToken(
+  accountId: string,
+  token: DeviceToken,
+  env: HomeEnv = process.env as HomeEnv,
+): void {
+  const homeRoot = globalHomeRoot(env);
+  const creds = loadCredentials(homeRoot);
+  const acct = creds.accounts[accountId];
+  if (!acct) return;
+  acct.token = token;
+  if (token.scope) {
+    acct.scopes = token.scope.split(/\s+/).filter(Boolean);
+  }
+  saveCredentials(homeRoot, creds);
+}
+
+/**
  * Switch the active account to an already-stored one (gh auth switch). Throws
  * if the id is unknown — switching to an account that was never logged in is a
  * caller bug, not a recoverable state.

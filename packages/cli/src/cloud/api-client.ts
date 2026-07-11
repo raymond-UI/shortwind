@@ -27,6 +27,7 @@
  */
 
 import type { Lockfile } from "./contract/lockfile-diff.js";
+import { parseTokenResponse, type PollResponse } from "./device-flow.js";
 
 // ---------------------------------------------------------------------------
 // Wire shapes — mirror the CLOUD-23/24 contracts as plain serializable data.
@@ -320,6 +321,54 @@ export interface ApiClientConfig {
   token: string;
   /** Injected fetch (defaults to the global). */
   fetch?: FetchLike;
+  /**
+   * #201 — optional refresh materials. When present, a 401 triggers ONE
+   * transparent `refresh_token` exchange at {@link tokenUrl}; on success the
+   * request is retried with the new access token and {@link onTokenRefreshed} is
+   * invoked so the caller can persist the rotated pair. Absent (or a failed
+   * refresh) ⇒ the 401 surfaces as an `unauthorized` ApiError as before.
+   */
+  refreshToken?: string;
+  /** The OAuth token endpoint, e.g. `${baseUrl}/oauth/token`. */
+  tokenUrl?: string;
+  /** Persist the rotated pair after a successful refresh. */
+  onTokenRefreshed?: (token: RefreshedToken) => void;
+}
+
+/** The token pair returned by a successful `refresh_token` exchange (#201). */
+export interface RefreshedToken {
+  accessToken: string;
+  tokenType: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  scope?: string;
+}
+
+/**
+ * #201 — build the refresh-capable auth fields for a stored account token, so
+ * every `createApiClient` call site opts into transparent 401→refresh→retry the
+ * same way. The `onTokenRefreshed` persistence callback is injected by the
+ * caller (the CLI's `home.updateAccountToken`) to keep this module free of any
+ * filesystem dependency.
+ */
+export function refreshAuthConfig(args: {
+  baseUrl: string;
+  accessToken: string;
+  refreshToken?: string | undefined;
+  onTokenRefreshed?: (token: RefreshedToken) => void;
+}): Pick<
+  ApiClientConfig,
+  "token" | "refreshToken" | "tokenUrl" | "onTokenRefreshed"
+> {
+  const base = args.baseUrl.replace(/\/+$/, "");
+  return {
+    token: args.accessToken,
+    ...(args.refreshToken ? { refreshToken: args.refreshToken } : {}),
+    tokenUrl: `${base}/oauth/token`,
+    ...(args.onTokenRefreshed
+      ? { onTokenRefreshed: args.onTokenRefreshed }
+      : {}),
+  };
 }
 
 /**
@@ -411,19 +460,24 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
   const baseUrl = config.baseUrl.replace(/\/+$/, "");
   const doFetch = config.fetch ?? (globalThis.fetch as unknown as FetchLike);
 
+  // #201 — mutable auth state: the access token (and refresh token) are swapped
+  // in place after a successful transparent refresh, so a later request in the
+  // same client reuses the rotated pair rather than refreshing again.
+  let accessToken = config.token;
+  let refreshToken = config.refreshToken;
+
   const headers = (): Record<string, string> => ({
-    Authorization: `Bearer ${config.token}`,
+    Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
   });
 
-  async function request<T>(
+  async function send(
     method: string,
     path: string,
     body?: unknown,
-  ): Promise<T> {
-    let res: { ok: boolean; status: number; text(): Promise<string> };
+  ): Promise<{ ok: boolean; status: number; text(): Promise<string> }> {
     try {
-      res = await doFetch(`${baseUrl}${path}`, {
+      return await doFetch(`${baseUrl}${path}`, {
         method,
         headers: headers(),
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -434,6 +488,54 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
         status: 0,
         message: err instanceof Error ? err.message : "network error",
       });
+    }
+  }
+
+  /**
+   * Attempt the `refresh_token` exchange (#201). Returns true if a new access
+   * token was obtained (and swapped in). Best-effort: any failure (no materials,
+   * network error, non-2xx, unparseable body) returns false so the caller lets
+   * the original 401 surface.
+   */
+  async function tryRefresh(): Promise<boolean> {
+    if (!refreshToken || !config.tokenUrl) return false;
+    let res: { ok: boolean; status: number; text(): Promise<string> };
+    try {
+      res = await doFetch(config.tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+        }).toString(),
+      });
+    } catch {
+      return false;
+    }
+    if (!res.ok) return false;
+    let parsed: PollResponse;
+    try {
+      parsed = parseTokenResponse(JSON.parse(await res.text()));
+    } catch {
+      return false;
+    }
+    if (parsed.kind !== "token") return false;
+    accessToken = parsed.token.accessToken;
+    if (parsed.token.refreshToken) refreshToken = parsed.token.refreshToken;
+    config.onTokenRefreshed?.(parsed.token);
+    return true;
+  }
+
+  async function request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    let res = await send(method, path, body);
+    // #201: on a 401, transparently refresh ONCE and retry. A missing/failed
+    // refresh leaves `res` as the original 401, which `toApiError` maps below.
+    if (res.status === 401 && (await tryRefresh())) {
+      res = await send(method, path, body);
     }
     const text = await res.text();
     if (!res.ok) throw toApiError(res.status, text);
