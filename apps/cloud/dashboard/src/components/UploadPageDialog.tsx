@@ -14,21 +14,37 @@ import type { Visibility } from "../lib/types";
 
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB — a single HTML page.
 const VISIBILITIES: Visibility[] = ["public", "unlisted", "private"];
+// Mirror the shared `validateSlug` grammar (apps/cloud/shared/src/slug.ts): a
+// client-side check so a bad address fails fast with a friendly message instead
+// of a raw server error.
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type Picked = { name: string; html: string };
 
-/** Map a publish failure to a friendly line (ConvexError codes ride on .data). */
+/**
+ * Map a publish failure to a friendly line. ConvexError codes ride on `.data`;
+ * a plain server `Error` has none, and we must NEVER surface its raw message
+ * (e.g. the "[CONVEX A(pages:publishFromWeb)] … Server Error" wrapper) to the
+ * user — that's noise. Known cases get specific copy; everything else gets a
+ * clean generic line.
+ */
 function friendlyError(err: unknown): string {
-  const data = (err as { data?: { code?: string; message?: string } })?.data;
+  const data = (err as { data?: { code?: string; reason?: string; message?: string } })
+    ?.data;
   const code = data?.code;
   if (code === "RATE_LIMITED")
     return "You're publishing too fast. Wait a moment and try again.";
   if (code === "CONTENT_BLOCKED")
     return "This page was blocked by the content scanner.";
-  if (code === "CSAM_BLOCKED") return "This page was blocked and cannot be published.";
-  if (code === "UNAUTHORIZED" || data?.["reason"] === "no_account")
+  if (code === "CSAM_BLOCKED")
+    return "This page was blocked and cannot be published.";
+  if (code === "UNAUTHORIZED" || data?.reason === "no_account")
     return "Your account isn't ready yet. Reload and try again.";
-  return data?.message ?? (err as Error)?.message ?? "Publish failed. Try again.";
+  const raw = data?.message ?? (err as Error)?.message ?? "";
+  // Backstop: a slug-format failure can arrive as a plain Error (no code).
+  if (/slug must be lowercase|reserved slug/i.test(raw))
+    return "That address is invalid. Use lowercase letters, numbers, and single dashes.";
+  return "Couldn't publish that page. Please try again.";
 }
 
 export function UploadPageDialog({
@@ -90,12 +106,19 @@ export function UploadPageDialog({
 
   async function publish() {
     if (!picked || busy) return;
+    const trimmed = slug.trim();
+    if (trimmed && !SLUG_RE.test(trimmed)) {
+      setError(
+        "Address must be lowercase letters, numbers, and single dashes (no spaces or capitals).",
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const result = await publishPage({
         html: picked.html,
-        slug: slug.trim() || undefined,
+        slug: trimmed || undefined,
         visibility,
       });
       if (result.ok) {
@@ -200,7 +223,10 @@ export function UploadPageDialog({
                 <input
                   type="text"
                   value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    if (error) setError(null);
+                  }}
                   placeholder="my-page"
                   aria-label="Page address slug"
                   className="@input"
@@ -226,7 +252,7 @@ export function UploadPageDialog({
             {error && (
               <p
                 role="alert"
-                className="text-sm text-destructive"
+                className="text-sm break-words text-destructive"
                 data-testid="upload-error"
               >
                 {error}

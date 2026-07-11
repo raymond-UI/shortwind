@@ -54,6 +54,23 @@ describe("UploadPageDialog", () => {
     });
   });
 
+  it("keeps focus in the address field while typing (no cursor jump)", async () => {
+    renderWithData(<UploadPageDialog open onClose={() => {}} />, {
+      publishPage: vi.fn(),
+    });
+    pick(htmlFile("index.html", "<h1>Hi</h1>"));
+    await screen.findByText("index.html");
+    const input = screen.getByLabelText("Page address slug") as HTMLInputElement;
+    input.focus();
+    expect(document.activeElement).toBe(input);
+    // A keystroke re-renders the dialog; the Dialog must NOT re-focus its panel
+    // and steal the cursor (the reported bug).
+    fireEvent.change(input, { target: { value: "l" } });
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "lc" } });
+    expect(document.activeElement).toBe(input);
+  });
+
   it("surfaces a taken-slug 409 without crashing", async () => {
     const publishPage = vi.fn(async () => ({
       ok: false as const,
@@ -68,6 +85,21 @@ describe("UploadPageDialog", () => {
     await screen.findByText("index.html");
     fireEvent.click(screen.getByTestId("upload-publish"));
     expect(await screen.findByTestId("upload-error")).toHaveTextContent(/taken/i);
+  });
+
+  it("rejects an invalid address client-side (friendly, no server call)", async () => {
+    const publishPage = vi.fn();
+    renderWithData(<UploadPageDialog open onClose={() => {}} />, { publishPage });
+    pick(htmlFile("index.html", "<h1>Hi</h1>"));
+    await screen.findByText("index.html");
+    fireEvent.change(screen.getByLabelText("Page address slug"), {
+      target: { value: "LC" }, // uppercase → invalid slug
+    });
+    fireEvent.click(screen.getByTestId("upload-publish"));
+    expect(await screen.findByTestId("upload-error")).toHaveTextContent(
+      /lowercase/i,
+    );
+    expect(publishPage).not.toHaveBeenCalled();
   });
 
   it("rejects a non-HTML file before any publish", async () => {

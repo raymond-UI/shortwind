@@ -42,14 +42,22 @@ export function Dialog({
     return;
   }, [open, mounted]);
 
-  // Escape to close + move focus into the panel while open.
+  // Move focus into the panel ONCE, when it opens. Keyed on `open` alone — if
+  // this also depended on `onClose` (which callers often pass as a fresh arrow
+  // each render) it would re-focus on every parent re-render and yank the cursor
+  // out of any input the user is typing in.
+  useEffect(() => {
+    if (open) panelRef.current?.focus();
+  }, [open]);
+
+  // Escape to close while open. Separate from the focus effect so re-subscribing
+  // (when `onClose` identity changes) never steals focus.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
-    panelRef.current?.focus();
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
