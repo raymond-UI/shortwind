@@ -3,7 +3,7 @@ import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireRead } from "./lib/auth_guard.js";
 import { isReservedSubdomain } from "../shared/src/slug.js";
-import { normalizeServePath } from "./lib/bundle_path.js";
+import { normalizeBundlePath, normalizeServePath } from "./lib/bundle_path.js";
 
 /**
  * CLOUD-30b — the Worker serve-path COLD SOURCE (PRD §6.1, §6.3).
@@ -34,23 +34,34 @@ import { normalizeServePath } from "./lib/bundle_path.js";
 // `CachedRoute` field-for-field (the Worker JSON-parses this straight into one).
 // ---------------------------------------------------------------------------
 
-const serveRouteValidator = v.union(
-  v.object({
-    pageId: v.string(),
-    accountId: v.string(),
-    version: v.number(),
-    artifactKey: v.string(),
-    lifecycle: v.union(
-      v.literal("active"),
-      v.literal("quarantined"),
-      v.literal("tombstoned"),
-    ),
-    visibility: v.union(
-      v.literal("public"),
-      v.literal("unlisted"),
-      v.literal("private"),
-    ),
-  }),
+const serveRouteObject = v.object({
+  pageId: v.string(),
+  accountId: v.string(),
+  version: v.number(),
+  artifactKey: v.string(),
+  lifecycle: v.union(
+    v.literal("active"),
+    v.literal("quarantined"),
+    v.literal("tombstoned"),
+  ),
+  visibility: v.union(
+    v.literal("public"),
+    v.literal("unlisted"),
+    v.literal("private"),
+  ),
+});
+
+const serveRouteValidator = v.union(serveRouteObject, v.null());
+
+/**
+ * The account-domain resolver can also ask the Worker to REDIRECT: a bundle
+ * entry hit at `<hostname>/<slug>` (no trailing slash) must 301 to
+ * `<hostname>/<slug>/` so the entry's relative links resolve under `/<slug>/`
+ * (they'd otherwise drop the slug and 404). A single-file page never redirects.
+ */
+const accountResolveValidator = v.union(
+  serveRouteObject,
+  v.object({ redirectTo: v.string() }),
   v.null(),
 );
 
@@ -196,12 +207,24 @@ export function slugFromPath(path: string): string | null {
  */
 export const resolveAccountDomainRoute = query({
   args: { host: v.string(), path: v.string() },
-  returns: serveRouteValidator,
+  returns: accountResolveValidator,
   handler: async (ctx, args) => {
     const host = args.host.toLowerCase().replace(/\.$/, "");
     if (host === "") return null;
-    const slug = slugFromPath(args.path);
-    if (slug === null) return null;
+
+    // Parse `<slug>[/<subpath>]`. Unlike single pages, a bundle serves its
+    // sub-pages at `<hostname>/<slug>/<path>`, so we split the FIRST segment as
+    // the slug and keep the rest as the bundle-relative sub-path.
+    const trimmedLead = args.path.replace(/^\/+/, "");
+    const firstSlash = trimmedLead.indexOf("/");
+    const slug =
+      firstSlash === -1
+        ? trimmedLead.replace(/\/+$/, "")
+        : trimmedLead.slice(0, firstSlash);
+    const subPath =
+      firstSlash === -1 ? "" : normalizeBundlePath(trimmedLead.slice(firstSlash + 1));
+    const hadTrailingSlash = args.path.endsWith("/") && slug !== "";
+    if (slug === "") return null;
 
     // Host → the owning account's ACTIVE domain (inactive/pending never serves).
     const domain = await ctx.db
@@ -220,6 +243,45 @@ export const resolveAccountDomainRoute = query({
       .unique();
     if (page === null) return null;
 
+    // Is this page a bundle entry? (Highest-version bundleVersions row.)
+    const bundleRows = await ctx.db
+      .query("bundleVersions")
+      .withIndex("by_entryPage", (q) => q.eq("entryPageId", page._id))
+      .collect();
+    const bundle =
+      bundleRows.length === 0
+        ? null
+        : bundleRows.reduce((max, r) => (r.version > max.version ? r : max));
+
+    if (subPath === "") {
+      // Entry hit. For a bundle at `/<slug>` (no trailing slash), 301 to
+      // `/<slug>/` so the entry's relative links resolve under `/<slug>/`.
+      if (bundle && !hadTrailingSlash) {
+        return { redirectTo: `/${slug}/` };
+      }
+      const version =
+        page.currentVersionId === null
+          ? null
+          : await ctx.db.get(page.currentVersionId);
+      return toServeRoute(page, version);
+    }
+
+    // Sub-path present. Only a bundle serves nested paths; a single-file page
+    // does not (a nested path under it is a 404, as before).
+    if (!bundle) return null;
+    const file = bundle.files.find((f) => f.path === subPath);
+    if (file) {
+      return {
+        pageId: page._id as string,
+        accountId: page.accountId as string,
+        version: bundle.version,
+        artifactKey: file.artifactKey,
+        lifecycle: page.lifecycle,
+        visibility: page.visibility,
+      };
+    }
+    // Unknown sub-path within a bundle → fall back to the entry (matches the
+    // subdomain resolver's soft behavior rather than a hard 404).
     const version =
       page.currentVersionId === null
         ? null

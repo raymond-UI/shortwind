@@ -447,6 +447,36 @@ describe("resolveAccountDomainRoute — host + path → page", () => {
     return { t, bearer, pageId };
   }
 
+  /** Bind a domain + publish a 2-page BUNDLE (index + about) at `handbook`. */
+  async function boundAccountWithBundle() {
+    const t = convexTest(schema, modules);
+    __setCloudflareSaaSClient(activeClient());
+    const accountId = await seedAccount(t, "serve-bundle");
+    const bearer = await issueBearer(t, accountId, [
+      "pages:write",
+      "domains:bind",
+      "pages:read",
+    ]);
+    await setPolicy(t, bearer, false);
+    await t.action(api.domains.bindAccountDomain, {
+      bearer,
+      hostname: "pages.abc.com",
+    });
+    const res = await t.action(api.bundles.publishBundle, {
+      bearer,
+      slug: "handbook",
+      entryPath: "index.html",
+      files: [
+        { path: "index.html", html: '<a href="about.html">home</a>' },
+        { path: "about.html", html: "<p>about</p>" },
+      ],
+      recipes: [],
+      lockfile: lockfile(),
+    });
+    if (!res.ok) throw new Error("bundle publish failed");
+    return { t };
+  }
+
   it("resolves <hostname>/<slug> to the page", async () => {
     const { t, pageId } = await boundAccountWithPage();
     const route = await t.query(api.serve.resolveAccountDomainRoute, {
@@ -454,7 +484,56 @@ describe("resolveAccountDomainRoute — host + path → page", () => {
       path: "/price-calculator",
     });
     expect(route).not.toBeNull();
-    expect(route?.pageId).toBe(pageId);
+    if (!route || "redirectTo" in route) throw new Error("expected a page route");
+    expect(route.pageId).toBe(pageId);
+  });
+
+  it("301s a bundle entry with no trailing slash → /<slug>/", async () => {
+    const { t } = await boundAccountWithBundle();
+    const route = await t.query(api.serve.resolveAccountDomainRoute, {
+      host: "pages.abc.com",
+      path: "/handbook",
+    });
+    expect(route).toEqual({ redirectTo: "/handbook/" });
+  });
+
+  it("serves the bundle entry at /<slug>/ (trailing slash)", async () => {
+    const { t } = await boundAccountWithBundle();
+    const route = await t.query(api.serve.resolveAccountDomainRoute, {
+      host: "pages.abc.com",
+      path: "/handbook/",
+    });
+    if (!route || "redirectTo" in route) throw new Error("expected a page route");
+    expect(route.artifactKey).toContain("artifacts/"); // the entry page artifact
+  });
+
+  it("serves a bundle sub-page at /<slug>/<path>", async () => {
+    const { t } = await boundAccountWithBundle();
+    const route = await t.query(api.serve.resolveAccountDomainRoute, {
+      host: "pages.abc.com",
+      path: "/handbook/about.html",
+    });
+    if (!route || "redirectTo" in route) throw new Error("expected a sibling route");
+    expect(route.artifactKey).toContain("bundles/"); // the sibling artifact
+  });
+
+  it("does not 301 a single-file page (no trailing-slash redirect)", async () => {
+    const { t } = await boundAccountWithPage();
+    const route = await t.query(api.serve.resolveAccountDomainRoute, {
+      host: "pages.abc.com",
+      path: "/price-calculator",
+    });
+    if (!route) throw new Error("expected a route");
+    expect("redirectTo" in route).toBe(false);
+  });
+
+  it("404s a nested path under a single-file page", async () => {
+    const { t } = await boundAccountWithPage();
+    const route = await t.query(api.serve.resolveAccountDomainRoute, {
+      host: "pages.abc.com",
+      path: "/price-calculator/nope.html",
+    });
+    expect(route).toBeNull();
   });
 
   it("returns null for the domain root (no index page)", async () => {

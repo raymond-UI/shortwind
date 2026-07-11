@@ -67,10 +67,19 @@ export type TokenValidator = (
  * `accountDomains` + `by_slug` from the cold source (Convex), wired at deploy.
  * Returns `null` when the host is not a bound domain or the slug is not a page.
  */
+/**
+ * A 301 the account-domain resolver can ask for instead of a route: a bundle
+ * entry hit at `<hostname>/<slug>` (no trailing slash) redirects to
+ * `<hostname>/<slug>/` so its relative links resolve under `/<slug>/`.
+ */
+export interface AccountRedirect {
+  redirectTo: string;
+}
+
 export type ColdAccountDomainSource = (
   host: string,
   path: string,
-) => Promise<CachedRoute | null>;
+) => Promise<CachedRoute | AccountRedirect | null>;
 
 /** The cold-source functions the router injects (see module header). */
 export interface RouterDeps {
@@ -216,6 +225,14 @@ export async function handleRequest(
   if (route === null && deps.coldAccountDomain !== undefined) {
     const custom = await deps.coldAccountDomain(host, path);
     if (custom !== null) {
+      // A bundle entry without a trailing slash → 301 to add it, so the entry's
+      // relative links resolve under `/<slug>/`. Not cached (cheap, one-time).
+      if ("redirectTo" in custom) {
+        return Response.redirect(
+          new URL(custom.redirectTo, request.url).toString(),
+          301,
+        );
+      }
       await putRoute(env, host, path, custom);
       route = custom;
     }
@@ -387,7 +404,15 @@ function defaultDeps(env: Env): RouterDeps {
       )}&path=${encodeURIComponent(path)}`;
       const res = await fetch(url, internalInit);
       if (!res.ok) return null;
-      const body = (await res.json()) as ResolvedRoute;
+      const body = (await res.json()) as unknown;
+      // A redirect signal (bundle entry → trailing slash) rides its own shape.
+      if (
+        body !== null &&
+        typeof body === "object" &&
+        typeof (body as { redirectTo?: unknown }).redirectTo === "string"
+      ) {
+        return { redirectTo: (body as { redirectTo: string }).redirectTo };
+      }
       return asCachedRoute(body);
     } catch {
       return null;
