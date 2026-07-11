@@ -510,3 +510,139 @@ export const publishBundle = action({
     };
   },
 });
+
+/**
+ * publishBundleFromWeb — publish a linked multi-page bundle from the dashboard
+ * (folder drop). Session-authed (no bearer), the web analogue of
+ * {@link publishBundle}. `@recipe` shorthand across the bundle is expanded
+ * server-side against the account's STORED palette (the browser has no local
+ * palette), so it has the same recipe parity as the single-file web publish.
+ */
+export const publishBundleFromWeb = action({
+  args: {
+    files: v.array(bundleFileInputArg),
+    entryPath: v.string(),
+    slug: v.optional(v.string()),
+    title: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    visibility: v.optional(
+      v.union(v.literal("public"), v.literal("unlisted"), v.literal("private")),
+    ),
+    css: v.optional(v.string()),
+  },
+  returns: bundleOutcomeValidator,
+  handler: async (ctx, args) => {
+    const auth = await ctx.runQuery(internal.pages.authForWebWrite, {});
+
+    if (args.files.length === 0) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: "bundle has no files" });
+    }
+    if (args.files.length > MAX_BUNDLE_FILES) {
+      throw new ConvexError({
+        code: "BAD_REQUEST",
+        message: `bundle exceeds ${MAX_BUNDLE_FILES} files`,
+      });
+    }
+    const totalBytes = args.files.reduce(
+      (n, f) => n + new TextEncoder().encode(f.html).byteLength,
+      0,
+    );
+    if (totalBytes > MAX_BUNDLE_BYTES) {
+      throw new ConvexError({
+        code: "BAD_REQUEST",
+        message: `bundle exceeds ${MAX_BUNDLE_BYTES} bytes`,
+      });
+    }
+
+    const combined = args.files.map((f) => f.html).join("\n");
+    const gate = await runPublishScan(ctx, {
+      accountId: auth.accountId,
+      html: combined,
+      css: args.css,
+    });
+    if (!gate.proceed) {
+      if (gate.rejection.code === "RATE_LIMITED") {
+        throw new ConvexError({
+          code: "RATE_LIMITED",
+          message: "Publish rate limit exceeded for this account",
+          retryAfter: gate.rejection.retryAfter,
+        });
+      }
+      if (gate.rejection.code === "BLOCKED_CSAM") {
+        throw new ConvexError({
+          code: "CSAM_BLOCKED",
+          message: "Publish blocked: content matched a known-CSAM hash list",
+        });
+      }
+      throw new ConvexError({
+        code: "CONTENT_BLOCKED",
+        message: "Publish blocked by the content classifier",
+      });
+    }
+
+    // Expand @recipe across the bundle against the account's stored palette
+    // (body-only sources → full parity, no spurious recipe-edit events).
+    const palette: { family: string; body: string }[] = await ctx.runQuery(
+      internal.recipes.listRecipePalette,
+      { accountId: auth.accountId },
+    );
+    const recipes = palette.map((p) => ({ family: p.family, source: p.body }));
+
+    const deps: BundleDeps = {
+      publish: makeDeps(ctx, auth.tokenId),
+      insertBundleVersion: (version) =>
+        ctx.runMutation(internal.bundles.commitBundleVersion, {
+          accountId: version.accountId as AccountId,
+          slug: version.slug,
+          entryPageId: version.entryPageId as Id<"pages">,
+          version: version.version,
+          entryPath: version.entryPath,
+          files: version.files,
+          lockfile: version.lockfile,
+          actorTokenId: auth.tokenId,
+        }),
+    };
+
+    const outcome = await runPublishBundle(
+      {
+        actor: { accountId: auth.accountId, tokenId: auth.tokenId },
+        files: args.files,
+        entryPath: args.entryPath,
+        slug: args.slug,
+        title: args.title,
+        recipes,
+        lockfile: { version: 1, registry: "default", families: {} },
+        tags: args.tags,
+        visibility: args.visibility,
+        css: args.css,
+      },
+      deps,
+    );
+
+    if (!outcome.ok) {
+      return {
+        ok: false as const,
+        status: 409 as const,
+        existingId: outcome.collision.existingId,
+      };
+    }
+
+    if (gate.flag) {
+      await ctx.runMutation(internal.pages.commitScanFlag, {
+        pageId: outcome.result.entryPageId as Id<"pages">,
+        accountId: auth.accountId as AccountId,
+        actorTokenId: auth.tokenId as Id<"tokens"> | null,
+        reason: gate.flag.reason,
+        score: gate.flag.score,
+      });
+    }
+
+    return {
+      ok: true as const,
+      bundleId: outcome.result.bundleId,
+      url: outcome.result.url,
+      version: outcome.result.version,
+      files: outcome.result.files,
+    };
+  },
+});

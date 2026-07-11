@@ -182,6 +182,20 @@ export interface DashboardData {
     | { ok: true; id: string; url: string; version: number }
     | { ok: false; status: 409; existingId: string }
   >;
+  /**
+   * Publish a linked multi-page bundle from the dashboard (operator session).
+   * `files` are the bundle's HTML files (bundle-relative paths); `entryPath` is
+   * the file the slug routes to. Siblings serve at `<slug>.shortwind.app/<path>`.
+   */
+  publishBundle: (input: {
+    files: { path: string; html: string }[];
+    entryPath: string;
+    slug?: string;
+    visibility?: Visibility;
+  }) => Promise<
+    | { ok: true; bundleId: string; url: string; version: number }
+    | { ok: false; status: 409; existingId: string }
+  >;
   /** Persist a policy toggle. Resolves to the new policy. */
   setPolicy: (next: { customDomainNeedsApproval?: boolean }) => Promise<void>;
   /** Change a page's visibility (operator session). */

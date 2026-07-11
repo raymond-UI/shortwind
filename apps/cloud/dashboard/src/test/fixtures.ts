@@ -202,6 +202,12 @@ export function makeData(
       url: `https://${input.slug ?? "new-page"}.shortwind.app`,
       version: 1,
     }),
+    publishBundle: async (input) => ({
+      ok: true,
+      bundleId: input.slug ?? "site",
+      url: `https://${input.slug ?? "site"}.shortwind.app`,
+      version: 1,
+    }),
     setPolicy: async () => {},
     setVisibility: async () => {},
     deletePage: async () => {},

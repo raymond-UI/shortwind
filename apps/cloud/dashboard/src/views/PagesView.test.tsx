@@ -117,7 +117,7 @@ describe("PagesView (Overview cards)", () => {
     renderWithData(<PagesView />);
     fireEvent.click(screen.getByRole("button", { name: /new page/i }));
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent(/Publish a page/i);
+    expect(dialog).toHaveTextContent(/Drop an HTML file/i);
     expect(screen.getByTestId("upload-dropzone")).toBeInTheDocument();
     // Publish is disabled until a file is chosen.
     expect(screen.getByTestId("upload-publish")).toBeDisabled();

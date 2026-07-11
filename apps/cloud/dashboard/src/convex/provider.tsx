@@ -78,6 +78,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
   );
   const tokens = useQuery(api.dashboard.listTokens, skip ? "skip" : args);
   const publishFromWebAction = useAction(api.pages.publishFromWeb);
+  const publishBundleFromWebAction = useAction(api.bundles.publishBundleFromWeb);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
   const setVisibilityMutation = useMutation(api.pages.setVisibility);
   const deletePageMutation = useMutation(api.pages.deletePage);
@@ -110,6 +111,14 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
           slug: input.slug,
           visibility: input.visibility,
           tags: input.tags,
+        });
+      },
+      publishBundle: async (input) => {
+        return await publishBundleFromWebAction({
+          files: input.files,
+          entryPath: input.entryPath,
+          slug: input.slug,
+          visibility: input.visibility,
         });
       },
       setPolicy: async (next) => {
@@ -159,6 +168,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       domainSetup,
       tokens,
       publishFromWebAction,
+      publishBundleFromWebAction,
       setPolicyMutation,
       setVisibilityMutation,
       deletePageMutation,

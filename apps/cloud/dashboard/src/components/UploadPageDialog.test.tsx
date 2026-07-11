@@ -24,6 +24,14 @@ function pick(file: File) {
   fireEvent.change(input, { target: { files: [file] } });
 }
 
+/** Pick multiple files at once (the multi-file / folder-browse path). */
+function pickMany(files: File[]) {
+  const input = document.querySelector(
+    'input[type="file"]',
+  ) as HTMLInputElement;
+  fireEvent.change(input, { target: { files } });
+}
+
 describe("UploadPageDialog", () => {
   it("uploads a file and publishes to a live URL", async () => {
     const publishPage = vi.fn(async () => ({
@@ -137,5 +145,69 @@ describe("UploadPageDialog", () => {
     expect(await screen.findByTestId("upload-error")).toHaveTextContent(/\.html/i);
     expect(screen.getByTestId("upload-publish")).toBeDisabled();
     expect(publishPage).not.toHaveBeenCalled();
+  });
+
+  it("publishes multiple files with index.html as one linked bundle", async () => {
+    const publishBundle = vi.fn(async () => ({
+      ok: true as const,
+      bundleId: "site",
+      url: "https://site.shortwind.app",
+      version: 1,
+    }));
+    renderWithData(<UploadPageDialog open onClose={() => {}} />, { publishBundle });
+    pickMany([
+      htmlFile("index.html", "<h1>Home</h1>"),
+      htmlFile("about.html", "<h1>About</h1>"),
+    ]);
+    // Multi-file → the bundle toggle appears, on by default.
+    expect(await screen.findByTestId("upload-bundle-toggle")).toBeChecked();
+    fireEvent.click(screen.getByTestId("upload-publish"));
+    await screen.findByTestId("upload-done");
+    expect(publishBundle).toHaveBeenCalledTimes(1);
+    const arg = publishBundle.mock.calls[0]![0] as {
+      files: { path: string }[];
+      entryPath: string;
+    };
+    expect(arg.entryPath).toBe("index.html");
+    expect(arg.files.map((f) => f.path).sort()).toEqual(["about.html", "index.html"]);
+  });
+
+  it("blocks a bundle with no index.html (warns + disables publish)", async () => {
+    const publishBundle = vi.fn();
+    renderWithData(<UploadPageDialog open onClose={() => {}} />, { publishBundle });
+    pickMany([
+      htmlFile("one.html", "<h1>1</h1>"),
+      htmlFile("two.html", "<h1>2</h1>"),
+    ]);
+    expect(await screen.findByTestId("upload-no-index")).toBeInTheDocument();
+    expect(screen.getByTestId("upload-publish")).toBeDisabled();
+    expect(publishBundle).not.toHaveBeenCalled();
+  });
+
+  it("publishes each file as a separate page when the bundle toggle is off", async () => {
+    const publishPage = vi.fn(async (input: { slug?: string }) => ({
+      ok: true as const,
+      id: "pg",
+      url: `https://${input.slug}.shortwind.app`,
+      version: 1,
+    }));
+    const publishBundle = vi.fn();
+    renderWithData(<UploadPageDialog open onClose={() => {}} />, {
+      publishPage,
+      publishBundle,
+    });
+    pickMany([
+      htmlFile("alpha.html", "<h1>A</h1>"),
+      htmlFile("beta.html", "<h1>B</h1>"),
+    ]);
+    // Turn OFF "publish as one linked site" → separate-pages mode.
+    fireEvent.click(await screen.findByTestId("upload-bundle-toggle"));
+    fireEvent.click(screen.getByTestId("upload-publish"));
+    await screen.findByTestId("upload-done");
+    expect(publishBundle).not.toHaveBeenCalled();
+    expect(publishPage).toHaveBeenCalledTimes(2);
+    expect(publishPage.mock.calls.map((c) => (c[0] as { slug?: string }).slug).sort()).toEqual(
+      ["alpha", "beta"],
+    );
   });
 });
