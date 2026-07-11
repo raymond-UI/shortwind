@@ -201,17 +201,31 @@ describe("UploadPageDialog", () => {
     );
   });
 
-  it("opting into a bundle without an index.html warns + disables publish", async () => {
-    const publishBundle = vi.fn();
+  it("lets you choose the entry page when there's no index.html", async () => {
+    const publishBundle = vi.fn(
+      async (input: { entryPath: string }) => {
+        void input;
+        return {
+          ok: true as const,
+          bundleId: "site",
+          url: "https://site.shortwind.app",
+          version: 1,
+        };
+      },
+    );
     renderWithData(<UploadPageDialog open onClose={() => {}} />, { publishBundle });
     pickMany([
-      htmlFile("one.html", "<h1>1</h1>"),
+      htmlFile("home.html", "<h1>Home</h1>"),
       htmlFile("two.html", "<h1>2</h1>"),
     ]);
-    // Default is separate (no index); manually opt into a bundle.
+    // Default is separate (no index); opt into a bundle → an entry selector
+    // appears (no warning, publish enabled). Choose "home.html" as the root.
     fireEvent.click(await screen.findByTestId("upload-bundle-toggle"));
-    expect(await screen.findByTestId("upload-no-index")).toBeInTheDocument();
-    expect(screen.getByTestId("upload-publish")).toBeDisabled();
-    expect(publishBundle).not.toHaveBeenCalled();
+    const entry = (await screen.findByTestId("upload-entry")) as HTMLSelectElement;
+    fireEvent.change(entry, { target: { value: "home.html" } });
+    expect(screen.getByTestId("upload-publish")).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId("upload-publish"));
+    await screen.findByTestId("upload-done");
+    expect(publishBundle.mock.calls[0]![0].entryPath).toBe("home.html");
   });
 });

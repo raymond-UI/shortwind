@@ -151,6 +151,9 @@ export function UploadPageDialog({
   // present (its natural entry) — NOT on folder-vs-multiselect. Five unrelated
   // files shouldn't default to a bundle; a set that includes index.html should.
   const [asBundle, setAsBundle] = useState(false);
+  // The bundle's entry (root) page — the file the address opens. Defaults to
+  // index.html when present, else the first file; the user can change it.
+  const [entryPath, setEntryPath] = useState("");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,13 +163,13 @@ export function UploadPageDialog({
   const multi = items.length > 1;
   const mode: "single" | "bundle" | "separate" =
     items.length <= 1 ? "single" : asBundle ? "bundle" : "separate";
-  const hasIndex = items.some((f) => f.path === "index.html");
 
   function reset() {
     setItems([]);
     setSlug("");
     setVisibility("public");
     setAsBundle(false);
+    setEntryPath("");
     setError(null);
     setDone(null);
     setBusy(false);
@@ -210,13 +213,14 @@ export function UploadPageDialog({
     }
     setItems(collected);
     // Default to a bundle only when an index.html is present (its entry). Multi
-    // without an index → default to separate pages; the user can still opt in.
+    // without an index → default to separate pages; the user can still opt in
+    // and pick any file as the entry.
     const indexFile = collected.find((f) => f.path === "index.html");
+    const entry = indexFile ?? collected[0]!;
     setAsBundle(indexFile !== undefined && collected.length > 1);
-    // Default the address from the entry (index.html) or the single file.
-    setSlug((cur) =>
-      cur.trim() ? cur : slugFromFilename((indexFile ?? collected[0]!).path),
-    );
+    setEntryPath(entry.path);
+    // Default the address from the entry file's name.
+    setSlug((cur) => (cur.trim() ? cur : slugFromFilename(entry.path)));
     if (skipped > 0) {
       setError(
         `${skipped} non-HTML file${skipped > 1 ? "s" : ""} skipped (CSS/JS/images aren't bundled yet).`,
@@ -239,10 +243,6 @@ export function UploadPageDialog({
       );
       return;
     }
-    if (mode === "bundle" && !hasIndex) {
-      setError("A bundle needs an index.html at its root (the entry page).");
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
@@ -258,7 +258,7 @@ export function UploadPageDialog({
       } else if (mode === "bundle") {
         const res = await publishBundle({
           files: items,
-          entryPath: "index.html",
+          entryPath: entryPath || items[0]!.path,
           slug: typed || undefined,
           visibility,
         });
@@ -432,15 +432,28 @@ export function UploadPageDialog({
                     <span className="font-medium">Publish as one linked site</span>
                     <span className="block text-xs text-muted-foreground">
                       {asBundle
-                        ? "Multi-page bundle under one address; index.html is the entry."
+                        ? "Multi-page bundle under one address; pick the entry page below."
                         : "Off: each file publishes as its own separate page."}
                     </span>
                   </span>
                 </label>
-                {asBundle && !hasIndex && (
-                  <p className="text-xs text-warning" data-testid="upload-no-index">
-                    No index.html found — a bundle needs one at its root.
-                  </p>
+                {asBundle && (
+                  <label className="@stack-xs text-xs text-muted-foreground">
+                    Entry page (opens at the address)
+                    <select
+                      value={entryPath}
+                      onChange={(e) => setEntryPath(e.target.value)}
+                      aria-label="Bundle entry page"
+                      data-testid="upload-entry"
+                      className="@input"
+                    >
+                      {items.map((f) => (
+                        <option key={f.path} value={f.path}>
+                          {f.path}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 )}
               </div>
             )}
@@ -506,7 +519,7 @@ export function UploadPageDialog({
                 <button
                   type="button"
                   onClick={publish}
-                  disabled={items.length === 0 || busy || (mode === "bundle" && !hasIndex)}
+                  disabled={items.length === 0 || busy}
                   data-testid="upload-publish"
                   className="@button-primary-sm disabled:opacity-50"
                 >
