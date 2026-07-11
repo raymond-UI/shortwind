@@ -131,8 +131,10 @@ A few constraints for this first release:
   yet; style with inline CSS or a CDN (for example the Tailwind CDN) for now.
 - **Relative links only.** A root-absolute link (`/about.html`) is treated as a
   site-root link, not a bundle link.
-- **Re-publishing a slug is a 409**, same as a single page. Pick a new slug, or
-  updating an existing bundle in place will land in a later release.
+- **Re-publishing updates in place.** Publishing a bundle to a slug your account
+  already owns updates it: the entry keeps its URL, a new immutable version is
+  appended (prior versions retained), and added/removed sub-pages are reflected.
+  A slug held by a non-bundle page, or by a deleted/quarantined one, still 409s.
 - Caps: up to 2000 files and 50 MB per bundle.
 
 ## Finding and removing pages

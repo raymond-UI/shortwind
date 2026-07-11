@@ -145,7 +145,7 @@ async function collectDropped(dt: DataTransfer): Promise<{ path: string; file: F
 }
 
 type Done =
-  | { kind: "single"; url: string }
+  | { kind: "single"; url: string; version: number }
   | { kind: "multi"; results: { name: string; url?: string; error?: string }[] };
 
 export function UploadPageDialog({
@@ -262,7 +262,7 @@ export function UploadPageDialog({
           slug: typed || slugFromFilename(only.path) || undefined,
           visibility,
         });
-        if (res.ok) setDone({ kind: "single", url: res.url });
+        if (res.ok) setDone({ kind: "single", url: res.url, version: res.version });
         else setError("That address is taken. Pick a different name.");
       } else if (mode === "bundle") {
         const res = await publishBundle({
@@ -271,7 +271,7 @@ export function UploadPageDialog({
           slug: typed || undefined,
           visibility,
         });
-        if (res.ok) setDone({ kind: "single", url: res.url });
+        if (res.ok) setDone({ kind: "single", url: res.url, version: res.version });
         else setError("That address is taken. Pick a different name.");
       } else {
         // Separate pages: publish each file, collecting per-file results.
@@ -330,7 +330,7 @@ export function UploadPageDialog({
                   className="inline-block h-2 w-2 rounded-full bg-term"
                   aria-hidden="true"
                 />
-                Published
+                {done.version > 1 ? `Updated · v${done.version}` : "Published"}
               </div>
               <div className="rounded-lg border border-border bg-secondary/40 px-3 py-2">
                 <CopyValue value={done.url} />

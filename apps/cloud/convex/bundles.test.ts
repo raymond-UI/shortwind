@@ -144,6 +144,12 @@ function makeDeps(): {
       bundleRows.push(v);
       return `bv_${bundleRows.length}`;
     },
+    async currentBundle(entryPageId) {
+      const rows = bundleRows.filter((r) => r.entryPageId === entryPageId);
+      if (rows.length === 0) return null;
+      const version = rows.reduce((m, r) => Math.max(m, r.version), 0);
+      return { version, active: true }; // in-memory pages are always active
+    },
   };
   return { deps, data, artifacts, bundleRows };
 }
@@ -179,6 +185,32 @@ describe("bundleArtifactKey", () => {
 });
 
 describe("runPublishBundle (entry-as-page)", () => {
+  it("re-publishing the same slug UPDATES the bundle in place (v2, same entry/URL)", async () => {
+    const { deps, data, bundleRows } = makeDeps();
+    const v1 = await runPublishBundle(baseInput({ slug: "site" }), deps);
+    if (!v1.ok) throw new Error("v1 collision");
+    expect(v1.result.version).toBe(1);
+
+    const v2 = await runPublishBundle(
+      baseInput({
+        slug: "site",
+        files: [
+          { path: "index.html", html: '<a href="about.html">home v2</a>' },
+          { path: "about.html", html: "<p>about v2</p>" },
+        ],
+      }),
+      deps,
+    );
+    if (!v2.ok) throw new Error("v2 collision (expected an update)");
+    // Same entry page + URL, next version — an update, not a 409 or a new page.
+    expect(v2.result.entryPageId).toBe(v1.result.entryPageId);
+    expect(v2.result.url).toBe(v1.result.url);
+    expect(v2.result.version).toBe(2);
+    // One page (updated), two retained bundle-version rows (rollback).
+    expect(data.pages.size).toBe(1);
+    expect(bundleRows.map((r) => r.version).sort()).toEqual([1, 2]);
+  });
+
   it("publishes the entry as a page and writes each sibling to R2", async () => {
     const { deps, data, artifacts, bundleRows } = makeDeps();
     const out = await runPublishBundle(baseInput({ slug: "site" }), deps);

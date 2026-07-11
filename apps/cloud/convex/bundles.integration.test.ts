@@ -121,34 +121,54 @@ describe("CLOUD-50 bundle integration — entry-as-page publish + serving", () =
     expect(siblingRoute!.artifactKey).toContain("bundles/");
   });
 
-  it("409s when re-publishing an occupied entry slug (entry-as-page)", async () => {
+  it("re-publishing an owned bundle slug UPDATES it in place (v2, retained)", async () => {
     const t = convexTest(schema, modules);
-    const { bearer } = await seedAuth(t);
-    const files = [
-      { path: "index.html", html: '<a href="about.html">about</a>' },
-      { path: "about.html", html: "<p>about</p>" },
-    ];
+    const { accountId, bearer } = await seedAuth(t);
     const v1 = await t.action(api.bundles.publishBundle, {
       bearer,
       slug: "site",
       entryPath: "index.html",
-      files,
+      files: [
+        { path: "index.html", html: '<a href="about.html">home</a>' },
+        { path: "about.html", html: "<p>about v1</p>" },
+      ],
       recipes: [],
       lockfile: LOCKFILE,
     });
     expect(v1.ok).toBe(true);
+    if (!v1.ok) throw new Error("v1 failed");
 
     const v2 = await t.action(api.bundles.publishBundle, {
       bearer,
       slug: "site",
       entryPath: "index.html",
-      files,
+      files: [
+        { path: "index.html", html: '<a href="about.html">home v2</a>' },
+        { path: "about.html", html: "<p>about v2</p>" },
+      ],
       recipes: [],
       lockfile: LOCKFILE,
     });
-    expect(v2.ok).toBe(false);
-    if (v2.ok) throw new Error("expected a 409 collision");
-    expect(v2.status).toBe(409);
+    expect(v2.ok).toBe(true);
+    if (!v2.ok) throw new Error("expected an update, got a 409");
+    expect(v2.version).toBe(2);
+    expect(v2.url).toBe(v1.url); // same URL — updated in place
+
+    await t.run(async (ctx) => {
+      const page = await ctx.db
+        .query("pages")
+        .withIndex("by_slug", (q) =>
+          q.eq("accountId", accountId as never).eq("slug", "site"),
+        )
+        .unique();
+      // Still ONE page (updated), and BOTH bundle versions retained (rollback).
+      expect(page).not.toBeNull();
+      const rows = await ctx.db
+        .query("bundleVersions")
+        .withIndex("by_entryPage", (q) => q.eq("entryPageId", page!._id))
+        .collect();
+      expect(rows.map((r) => r.version).sort()).toEqual([1, 2]);
+    });
   });
 
   it("rejects an unscoped/missing bearer at the handler boundary", async () => {

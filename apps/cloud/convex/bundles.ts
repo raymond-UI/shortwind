@@ -9,6 +9,7 @@ import {
   assembleArtifact,
   lockfileVersions,
   runPublish,
+  runUpdate,
   type Actor,
   type CollisionResult,
   type PublishDeps,
@@ -136,6 +137,15 @@ export interface BundleDeps {
   publish: PublishDeps;
   /** Append an immutable bundle version linked to the entry page. */
   insertBundleVersion(version: NewBundleVersion): Promise<string>;
+  /**
+   * The current (highest) bundle version whose entry is `entryPageId`, plus
+   * whether that entry page is still active — or null if `entryPageId` is not a
+   * bundle entry. Drives publish-vs-update: an account re-publishing its own
+   * live bundle at the same slug UPDATES it (forward-only) instead of colliding.
+   */
+  currentBundle(
+    entryPageId: string,
+  ): Promise<{ version: number; active: boolean } | null>;
 }
 
 // ===========================================================================
@@ -202,28 +212,61 @@ export async function runPublishBundle(
   }
 
   // 2. Resolve the entry slug up front so the stored bundle row and the entry
-  //    page agree on it (we pass it explicitly to runPublish).
+  //    page agree on it (we pass it explicitly to runPublish/runUpdate).
   const slug = resolveBundleSlug(input);
 
-  // 3. Publish the ENTRY as a normal page — reserves the subdomain, versions,
-  //    writes the entry artifact, registers the route, and 409s on a taken slug.
-  const entryOutcome = await runPublish(
-    {
-      actor: input.actor,
-      html: entryFile.html,
-      slug,
-      recipes: input.recipes,
-      lockfile: input.lockfile,
-      tags: input.tags,
-      visibility: input.visibility,
-      css: input.css,
-    },
-    deps.publish,
-  );
-  if (!entryOutcome.ok) {
-    return { ok: false, collision: entryOutcome.collision };
+  // 3. Publish-or-update the ENTRY as a page. If the account already owns a LIVE
+  //    bundle at this slug, UPDATE it (new version, same URL) — forward-only,
+  //    prior versions retained. A slug held by a non-bundle page, or by a
+  //    tombstoned/quarantined bundle, is a 409 (never resurrect a pulled page).
+  const existing = await deps.publish.data.findPageBySlug(acct, slug);
+  let pageId: string;
+  let url: string;
+  let version: number;
+  if (existing) {
+    const cur = await deps.currentBundle(existing.id);
+    if (cur === null || !cur.active) {
+      return {
+        ok: false,
+        collision: { status: 409, existingId: existing.id },
+      };
+    }
+    const updated = await runUpdate(
+      {
+        actor: input.actor,
+        pageId: existing.id,
+        html: entryFile.html,
+        recipes: input.recipes,
+        lockfile: input.lockfile,
+        tags: input.tags,
+        visibility: input.visibility,
+        css: input.css,
+      },
+      deps.publish,
+    );
+    if (!updated.ok) {
+      return { ok: false, collision: updated.collision };
+    }
+    ({ id: pageId, url, version } = updated.result);
+  } else {
+    const created = await runPublish(
+      {
+        actor: input.actor,
+        html: entryFile.html,
+        slug,
+        recipes: input.recipes,
+        lockfile: input.lockfile,
+        tags: input.tags,
+        visibility: input.visibility,
+        css: input.css,
+      },
+      deps.publish,
+    );
+    if (!created.ok) {
+      return { ok: false, collision: created.collision };
+    }
+    ({ id: pageId, url, version } = created.result);
   }
-  const { id: pageId, url, version } = entryOutcome.result;
 
   // 4. Write each SIBLING file to R2 (expand + assemble, same machinery), served
   //    at its authored path on the entry's subdomain — no link rewriting.
@@ -333,6 +376,29 @@ export const commitBundleVersion = internalMutation({
       createdAt: now,
     });
     return versionId;
+  },
+});
+
+/**
+ * The current bundle head for an entry page: its highest `version` + whether the
+ * entry page is still active. Null when `entryPageId` is not a bundle entry.
+ * Drives the publish-vs-update decision in {@link runPublishBundle}.
+ */
+export const bundleForEntry = internalQuery({
+  args: { entryPageId: v.id("pages") },
+  returns: v.union(
+    v.object({ version: v.number(), active: v.boolean() }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("bundleVersions")
+      .withIndex("by_entryPage", (q) => q.eq("entryPageId", args.entryPageId))
+      .collect();
+    if (rows.length === 0) return null;
+    const version = rows.reduce((max, r) => Math.max(max, r.version), 0);
+    const page = await ctx.db.get(args.entryPageId);
+    return { version, active: page?.lifecycle === "active" };
   },
 });
 
@@ -463,6 +529,10 @@ export const publishBundle = action({
           files: version.files,
           lockfile: version.lockfile,
           actorTokenId: auth.tokenId,
+        }),
+      currentBundle: (entryPageId) =>
+        ctx.runQuery(internal.bundles.bundleForEntry, {
+          entryPageId: entryPageId as Id<"pages">,
         }),
     };
 
@@ -600,6 +670,10 @@ export const publishBundleFromWeb = action({
           files: version.files,
           lockfile: version.lockfile,
           actorTokenId: auth.tokenId,
+        }),
+      currentBundle: (entryPageId) =>
+        ctx.runQuery(internal.bundles.bundleForEntry, {
+          entryPageId: entryPageId as Id<"pages">,
         }),
     };
 
