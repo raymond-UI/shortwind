@@ -4,6 +4,7 @@ import type { AccountId, TokenId, TokenVerdict } from "../tokens.js";
 import { evaluateToken, hasScopes, hashToken } from "../tokens.js";
 import {
   SCOPE_DOMAINS_BIND,
+  SCOPE_MODERATION_ADMIN,
   SCOPE_PAGES_READ,
   SCOPE_PAGES_WRITE,
   type Scope,
@@ -240,4 +241,43 @@ export function requireDomainsBind(
   bearerToken: string | undefined | null,
 ): Promise<AuthContext> {
   return requireAuth(ctx, bearerToken, [SCOPE_DOMAINS_BIND]);
+}
+
+/** The resolved identity for a moderation verb, tagging operator authority. */
+export interface ModerationAuthContext extends AuthContext {
+  /**
+   * True when the token carries `moderation:admin` — it may act CROSS-account
+   * (the operator kill path). False for an ordinary `pages:write` token, which
+   * remains self-account-only (it may quarantine its OWN pages).
+   */
+  isModerator: boolean;
+}
+
+/**
+ * Auth for the moderation verbs (audit #151 CRITICAL #2). Accepts EITHER an
+ * operator token (`moderation:admin` → cross-account authority) OR an ordinary
+ * `pages:write` token (self-account only). The caller enforces the account
+ * scoping using {@link ModerationAuthContext.isModerator}: a moderator may act on
+ * any page; a writer only on pages in its own account.
+ *
+ * A token with neither scope is rejected 403 (insufficient_scope) listing
+ * `pages:write` — the minimum an account needs to moderate its own content.
+ */
+export async function requireModeration(
+  ctx: GuardCtx,
+  bearerToken: string | undefined | null,
+): Promise<ModerationAuthContext> {
+  // Authenticate first (valid/unrevoked/unexpired), then apply the OR-of-scopes.
+  const auth = await requireAuth(ctx, bearerToken, []);
+  const isModerator = auth.scopes.includes(SCOPE_MODERATION_ADMIN);
+  const canWrite = auth.scopes.includes(SCOPE_PAGES_WRITE);
+  if (!isModerator && !canWrite) {
+    throw authError({
+      code: AUTH_FORBIDDEN,
+      reason: "insufficient_scope",
+      missing: [SCOPE_PAGES_WRITE as Scope],
+      message: `Token lacks required scope(s): ${SCOPE_PAGES_WRITE}`,
+    });
+  }
+  return { ...auth, isModerator };
 }

@@ -9,12 +9,22 @@
 export const SCOPE_PAGES_READ = "pages:read";
 export const SCOPE_PAGES_WRITE = "pages:write";
 export const SCOPE_DOMAINS_BIND = "domains:bind";
+/**
+ * Operator moderation scope (audit #151 CRITICAL #2). A bearer carrying this can
+ * take down (kill/quarantine/preserve/clear) content in ANY account — the
+ * cross-account "fast global kill" the CSAM/abuse legal obligation needs. It is
+ * NEVER granted by the device flow (not in {@link DEFAULT_SCOPES}); an operator
+ * token is minted server-side (`npx convex run tokens:issueToken` with this
+ * scope). Ordinary write tokens remain self-account-only.
+ */
+export const SCOPE_MODERATION_ADMIN = "moderation:admin";
 
 /** Every scope, in canonical order. */
 export const SCOPES = [
   SCOPE_PAGES_READ,
   SCOPE_PAGES_WRITE,
   SCOPE_DOMAINS_BIND,
+  SCOPE_MODERATION_ADMIN,
 ] as const;
 
 /** Union of all valid scope strings. */

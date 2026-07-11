@@ -1,7 +1,10 @@
 import { v, ConvexError } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireWrite } from "./lib/auth_guard.js";
+import {
+  requireModeration,
+  type ModerationAuthContext,
+} from "./lib/auth_guard.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
 import {
   scheduleArtifactSeal,
@@ -324,10 +327,37 @@ type AccountId = Id<"accounts">;
 type TokenId = Id<"tokens">;
 
 /**
- * quarantinePage — delete-for-abuse. requireWrite → active → quarantined; the
- * R2 object is sealed (key recorded), the moderation case opened, audited. The
- * object is preserved, never hard-deleted. (CLOUD-32's kill path is this plus
- * the edge purge + the real object move.)
+ * Resolve the account a moderation verb operates UNDER, enforcing the audit
+ * #151 CRITICAL #2 authorization rule:
+ *   - an operator (`moderation:admin`) may act on ANY page → the case is opened
+ *     under the PAGE's account (the content owner), actioned by the operator;
+ *   - an ordinary `pages:write` token may act only on its OWN pages → a page in
+ *     another account returns account-scoped NOT_FOUND (no existence leak).
+ * Returns the target account id to pass to {@link applyLifecycle}.
+ */
+async function moderationTargetAccount(
+  ctx: { db: any },
+  pageId: Id<"pages">,
+  auth: ModerationAuthContext,
+): Promise<AccountId> {
+  const page = await ctx.db.get(pageId);
+  if (!page) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+  }
+  if (!auth.isModerator && page.accountId !== auth.accountId) {
+    // Non-operator write token: self-account only. Mirror pages.deletePage's
+    // account-scoped not-found so a writer can't probe other accounts' page ids.
+    throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
+  }
+  return page.accountId as AccountId;
+}
+
+/**
+ * quarantinePage — delete-for-abuse. requireModeration (operator cross-account
+ * OR self-account write) → active → quarantined; the R2 object is sealed (key
+ * recorded + a scheduled move), the moderation case opened, audited. The object
+ * is preserved, never hard-deleted. (CLOUD-32's kill path is this plus the edge
+ * purge.)
  */
 export const quarantinePage = mutation({
   args: {
@@ -340,10 +370,11 @@ export const quarantinePage = mutation({
     sealedKey: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    const auth = await requireWrite(ctx, args.bearer);
+    const auth = await requireModeration(ctx, args.bearer);
+    const accountId = await moderationTargetAccount(ctx, args.id, auth);
     return applyLifecycle(ctx, {
       pageId: args.id,
-      accountId: auth.accountId,
+      accountId,
       tokenId: auth.tokenId,
       transition: "quarantine",
       reason: args.reason ?? null,
@@ -353,7 +384,7 @@ export const quarantinePage = mutation({
 
 /**
  * preservePage — advance a quarantined case to preserved (held in the sealed
- * store for the legal window). requireWrite, audited, object still sealed.
+ * store for the legal window). requireModeration, audited, object still sealed.
  */
 export const preservePage = mutation({
   args: {
@@ -366,10 +397,11 @@ export const preservePage = mutation({
     sealedKey: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    const auth = await requireWrite(ctx, args.bearer);
+    const auth = await requireModeration(ctx, args.bearer);
+    const accountId = await moderationTargetAccount(ctx, args.id, auth);
     return applyLifecycle(ctx, {
       pageId: args.id,
-      accountId: auth.accountId,
+      accountId,
       tokenId: auth.tokenId,
       transition: "preserve",
       reason: args.reason ?? null,
@@ -393,10 +425,11 @@ export const clearReport = mutation({
     sealedKey: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    const auth = await requireWrite(ctx, args.bearer);
+    const auth = await requireModeration(ctx, args.bearer);
+    const accountId = await moderationTargetAccount(ctx, args.id, auth);
     return applyLifecycle(ctx, {
       pageId: args.id,
-      accountId: auth.accountId,
+      accountId,
       tokenId: auth.tokenId,
       transition: "clear",
       reason: args.reason ?? null,
@@ -676,8 +709,10 @@ export const reportAbuse = mutation({
 });
 
 /**
- * killPage — the FAST GLOBAL KILL (PRD §8.2/§8.4). requireWrite (operator/admin
- * token). In ONE transaction:
+ * killPage — the FAST GLOBAL KILL (PRD §8.2/§8.4). requireModeration: an
+ * operator token (`moderation:admin`) kills content in ANY account (the
+ * legally-critical cross-account takedown, audit #151 #2); an ordinary write
+ * token only its own. In ONE transaction:
  *   - applyLifecycle('quarantine'): active → quarantined, R2 object SEALED
  *     (sealed-store key recorded), NEVER hard-deleted;
  *   - persist preservedR2Key on the case (preserve-not-delete);
@@ -700,10 +735,14 @@ export const killPage = mutation({
     preservedR2Key: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    const auth = await requireWrite(ctx, args.bearer);
+    const auth = await requireModeration(ctx, args.bearer);
+    // audit #151 CRITICAL #2: an operator (`moderation:admin`) may kill content
+    // in ANY account (the legally-critical cross-account takedown); an ordinary
+    // write token only its own. `moderationTargetAccount` enforces that + returns
+    // the page's account so the case is opened under the content owner.
+    const targetAccountId = await moderationTargetAccount(ctx, args.pageId, auth);
     const page = await ctx.db.get(args.pageId);
-    if (!page || page.accountId !== auth.accountId) {
-      // Account-scoped not-found (no existence leak): mirror pages.deletePage.
+    if (!page) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Page not found" });
     }
 
@@ -724,7 +763,7 @@ export const killPage = mutation({
     // legal fields, all in this transaction (preserve-not-delete enforced inside).
     const outcome = await applyLifecycle(ctx, {
       pageId: args.pageId,
-      accountId: auth.accountId,
+      accountId: targetAccountId,
       tokenId: auth.tokenId,
       transition: "quarantine",
       reason: `[${args.category}] ${args.reason}`,
