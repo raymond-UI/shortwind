@@ -1,3 +1,4 @@
+import { Pencil } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import {
   describeRecipeEdit,
@@ -22,7 +23,12 @@ export function RecipeEditsView() {
     return <SkeletonRows count={3} label="Loading recipe edits" />;
   }
   if (recipeEdits.length === 0) {
-    return <EmptyState icon="✎" title="No recipe edits yet" />;
+    return (
+      <EmptyState
+        icon={<Pencil className="h-6 w-6" aria-hidden="true" />}
+        title="No recipe edits yet"
+      />
+    );
   }
 
   return (

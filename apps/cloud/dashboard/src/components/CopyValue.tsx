@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { Check, Copy } from "lucide-react";
 
 /**
  * A mono value with a one-click copy affordance — the copy pattern proven on
  * the Domains screen (#213), extracted so every view can offer the same
  * "click to copy" for URLs, token ids, DNS targets, etc. On copy it flashes a
- * term-green "Copied ✓" for ~1.4s; the affordance label is hidden until hover.
+ * term-green check for ~1.4s; the affordance icon is hidden until hover.
  */
 export function CopyValue({
   value,
@@ -38,13 +39,17 @@ export function CopyValue({
     >
       <span className="truncate">{value}</span>
       <span
-        className={`shrink-0 text-[11px] ${
+        className={`shrink-0 ${
           copied
             ? "text-term"
             : "text-muted-foreground opacity-0 group-hover:opacity-100"
         }`}
       >
-        {copied ? "Copied ✓" : "Copy"}
+        {copied ? (
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
       </span>
     </button>
   );

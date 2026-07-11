@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Key } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime } from "../lib/format";
 import { PolicyView } from "./PolicyView";
@@ -344,7 +345,7 @@ function TokenRowItem({ token }: { token: TokenRow }) {
             : "border-term/30 bg-term/10 text-term")
         }
       >
-        🔑
+        <Key className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">

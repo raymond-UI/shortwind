@@ -13,6 +13,7 @@ import {
 } from "@/views/SettingsView";
 import type { SettingsTab } from "@/views/SettingsView";
 import { EmptyState } from "@/components/EmptyState";
+import { SearchX } from "lucide-react";
 
 /**
  * Dashboard section route (#212) — the active section is the URL segment
@@ -47,7 +48,7 @@ export const Route = createFileRoute("/_authed/dashboard/$section")({
   },
   notFoundComponent: () => (
     <EmptyState
-      icon="∅"
+      icon={<SearchX className="h-6 w-6" aria-hidden="true" />}
       title="Section not found"
       description="That dashboard section doesn’t exist."
     />

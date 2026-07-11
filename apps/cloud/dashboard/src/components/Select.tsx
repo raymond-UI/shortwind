@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
 
 /**
  * A custom select — a field-styled trigger (matches `@input`) that opens a
@@ -56,7 +57,7 @@ export function Select({
           }
           aria-hidden="true"
         >
-          ▾
+          <ChevronDown className="h-4 w-4" />
         </span>
       </button>
       {open && (
@@ -74,8 +75,8 @@ export function Select({
               className="@menu-item w-full text-left"
               {...(o === value ? { "data-active": "" } : {})}
             >
-              <span className="w-3.5 shrink-0 text-term" aria-hidden="true">
-                {o === value ? "›" : ""}
+              <span className="flex w-3.5 shrink-0 text-term" aria-hidden="true">
+                {o === value ? <Check className="h-3.5 w-3.5" /> : null}
               </span>
               <span className="truncate">{o}</span>
             </button>

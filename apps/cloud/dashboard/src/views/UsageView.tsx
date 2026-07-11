@@ -1,3 +1,4 @@
+import { Globe, HardDrive, Rocket } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { formatBytes, formatTime } from "../lib/format";
 import { SectionHeader } from "../components/SectionHeader";
@@ -24,21 +25,21 @@ export function UsageView() {
   const meters = [
     {
       key: "publishes",
-      glyph: "▲",
+      glyph: <Rocket className="h-4 w-4" aria-hidden="true" />,
       label: "Publishes",
       value: usage === undefined ? null : String(usage.publishes),
       hint: "one per published version",
     },
     {
       key: "customDomains",
-      glyph: "⊞",
+      glyph: <Globe className="h-4 w-4" aria-hidden="true" />,
       label: "Custom domains",
       value: usage === undefined ? null : String(usage.customDomains),
       hint: "Cloudflare-for-SaaS hostname + cert",
     },
     {
       key: "storage",
-      glyph: "⛁",
+      glyph: <HardDrive className="h-4 w-4" aria-hidden="true" />,
       label: "Storage",
       value: usage === undefined ? null : formatBytes(usage.storageBytes),
       hint: "frozen artifact footprint",

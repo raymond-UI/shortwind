@@ -1,3 +1,4 @@
+import { History } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime } from "../lib/format";
 import { CopyValue } from "../components/CopyValue";
@@ -23,7 +24,12 @@ export function AuditView() {
     return <SkeletonRows count={5} label="Loading audit log" />;
   }
   if (auditLog.length === 0) {
-    return <EmptyState icon="◷" title="No audit events yet" />;
+    return (
+      <EmptyState
+        icon={<History className="h-6 w-6" aria-hidden="true" />}
+        title="No audit events yet"
+      />
+    );
   }
 
   return (

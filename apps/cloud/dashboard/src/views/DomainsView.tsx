@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Globe } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime } from "../lib/format";
 import { CopyValue } from "../components/CopyValue";
@@ -239,7 +240,7 @@ export function DomainsView() {
                 aria-hidden="true"
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary text-xs font-semibold text-term"
               >
-                ⊞
+                <Globe className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[15px] font-semibold leading-6 tracking-tight">

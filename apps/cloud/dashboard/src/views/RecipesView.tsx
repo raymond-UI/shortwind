@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { Badge } from "../components/Badge";
 import { Skeleton, SkeletonRows } from "../components/Skeleton";
@@ -342,9 +343,14 @@ function RecipeDetail({
           onClick={() => setShowSource((v) => !v)}
           aria-expanded={showSource}
           data-testid="recipe-source-toggle"
-          className="text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
         >
-          {showSource ? "▾ Source" : "▸ Source"}
+          {showSource ? (
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          Source
         </button>
         {showSource ? (
           <pre

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SearchX } from "lucide-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
@@ -112,7 +113,7 @@ export function RouteNotFound() {
           className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-border bg-secondary text-muted-foreground"
           aria-hidden="true"
         >
-          ∅
+          <SearchX className="h-5 w-5" />
         </div>
         <h1 className="mt-4 text-base font-semibold tracking-tight">
           Page not found

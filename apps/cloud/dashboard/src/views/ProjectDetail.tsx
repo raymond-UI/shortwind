@@ -1,4 +1,12 @@
 import { useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ChevronDown,
+  ExternalLink,
+  History,
+  SearchX,
+} from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime, shortHash } from "../lib/format";
 import {
@@ -101,7 +109,7 @@ export function ProjectDetail({
   if (!entry) {
     return (
       <EmptyState
-        icon="∅"
+        icon={<SearchX className="h-6 w-6" aria-hidden="true" />}
         title="Page not found"
         description="It may have been deleted."
       >
@@ -141,10 +149,11 @@ export function ProjectDetail({
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="@link @caption min-w-0 truncate"
+              className="@link @caption inline-flex min-w-0 items-center gap-1"
               title={url}
             >
-              {pageHost(page.slug)} ↗
+              <span className="truncate">{pageHost(page.slug)}</span>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             </a>
             <CopyButton value={url} />
           </span>
@@ -177,8 +186,13 @@ export function ProjectDetail({
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <button type="button" onClick={onBack} className="@btn-ghost-sm">
-      ← All pages
+    <button
+      type="button"
+      onClick={onBack}
+      className="@btn-ghost-sm inline-flex items-center gap-1"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      All pages
     </button>
   );
 }
@@ -272,9 +286,10 @@ function OverviewTab({
             type="button"
             data-testid="view-deployments"
             onClick={onViewDeployments}
-            className="@link text-muted-foreground hover:text-term"
+            className="@link inline-flex items-center gap-1 text-muted-foreground hover:text-term"
           >
-            Deployment history ({versions.length}) →
+            Deployment history ({versions.length})
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       </section>
@@ -325,10 +340,11 @@ function AddressRow({
         href={url}
         target="_blank"
         rel="noreferrer"
-        className="@link min-w-0 truncate text-muted-foreground hover:text-term"
+        className="@link inline-flex min-w-0 items-center gap-1 text-muted-foreground hover:text-term"
         title={url}
       >
-        {display} ↗
+        <span className="truncate">{display}</span>
+        <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       </a>
       <CopyButton value={url} label="copy" />
     </div>
@@ -355,7 +371,11 @@ function DeploymentsTab({ entry }: { entry: PageWithVersions }) {
   const { versions } = entry;
   if (versions.length === 0) {
     return (
-      <EmptyState icon="⏳" title="No deployments yet" testId="deployments-empty" />
+      <EmptyState
+        icon={<History className="h-6 w-6" aria-hidden="true" />}
+        title="No deployments yet"
+        testId="deployments-empty"
+      />
     );
   }
   return (
@@ -431,7 +451,10 @@ function SettingsTab({
         <Menu
           label="Change visibility"
           trigger={
-            <span className="@btn-outline capitalize">{page.visibility} ▾</span>
+            <span className="@btn-outline inline-flex items-center gap-1 capitalize">
+              {page.visibility}
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </span>
           }
         >
           {(close) =>

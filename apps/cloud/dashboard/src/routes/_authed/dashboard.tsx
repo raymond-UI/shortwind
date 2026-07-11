@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
 import { ConvexDataProvider } from "@/convex/provider";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { AccountMenu } from "@/components/AccountMenu";
 
 /**
  * Dashboard LAYOUT (#212 — URL-based navigation; console redesign).
@@ -62,7 +62,7 @@ function DashboardLayout() {
   return (
     <ConvexDataProvider>
       <div className="flex min-h-screen flex-col bg-background text-foreground">
-        <header className="shrink-0 border-b border-border">
+        <header className="shrink-0 max-w-7xl mx-auto w-full">
           <div className="flex h-14 items-center gap-2 px-4 md:px-6">
             <span
               aria-hidden="true"
@@ -75,20 +75,13 @@ function DashboardLayout() {
             </span>
             <span className="text-xs text-muted-foreground">Cloud</span>
             <div className="ml-auto flex items-center gap-2">
-              <ThemeToggle />
-              <button
-                type="button"
-                onClick={onSignOut}
-                className="rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              >
-                Sign out
-              </button>
+              <AccountMenu onSignOut={onSignOut} />
             </div>
           </div>
           <nav
             ref={tabsRef}
             aria-label="Dashboard sections"
-            className="flex overflow-x-auto px-2 [-ms-overflow-style:none] [scrollbar-width:none] md:px-4 [&::-webkit-scrollbar]:hidden"
+            className="flex overflow-x-auto mt-4 border border-border lg:rounded-t-2xl px-2 [-ms-overflow-style:none] scrollbar-none md:px-4 [&::-webkit-scrollbar]:hidden"
           >
             {NAV.map((n) => (
               <Link
@@ -106,7 +99,7 @@ function DashboardLayout() {
             ))}
           </nav>
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+        <main className="flex-1 overflow-auto p-4 md:p-6 bg-card/50 max-w-7xl mx-auto border border-border mt-2  w-full">
           <div className="mx-auto w-full max-w-6xl">
             <Outlet />
           </div>

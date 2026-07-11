@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ExternalLink, FileCode, Upload } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { CopyValue } from "../components/CopyValue";
 import { Dialog } from "../components/Dialog";
@@ -340,9 +341,10 @@ export function UploadPageDialog({
                   href={done.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="@button-secondary"
+                  className="@button-secondary inline-flex items-center gap-1.5"
                 >
-                  Visit →
+                  Visit
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
                 <button type="button" onClick={close} className="@button-primary">
                   Done
@@ -371,9 +373,10 @@ export function UploadPageDialog({
                         href={r.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="shrink-0 text-term underline"
+                        className="inline-flex shrink-0 items-center gap-1 text-term hover:underline"
                       >
-                        open →
+                        open
+                        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                       </a>
                     ) : (
                       <span className="shrink-0 text-destructive">{r.error}</span>
@@ -419,7 +422,11 @@ export function UploadPageDialog({
                 }
                 aria-hidden="true"
               >
-                {items.length > 0 ? "◳" : "▚"}
+                {items.length > 0 ? (
+                  <FileCode className="h-7 w-7" />
+                ) : (
+                  <Upload className="h-7 w-7" />
+                )}
               </span>
               <span className="text-sm font-medium">{label}</span>
               <span className="text-xs text-muted-foreground">

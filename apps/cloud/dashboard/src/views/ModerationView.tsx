@@ -1,3 +1,4 @@
+import { Shield } from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime } from "../lib/format";
 import { Badge } from "../components/Badge";
@@ -29,7 +30,7 @@ export function ModerationView() {
   if (moderation.length === 0) {
     return (
       <EmptyState
-        icon="🛡"
+        icon={<Shield className="h-6 w-6" aria-hidden="true" />}
         title="No moderation cases"
         description="None of your pages have been reported or quarantined."
       />
@@ -58,7 +59,7 @@ export function ModerationView() {
                   : "border-border bg-secondary text-muted-foreground")
               }
             >
-              🛡
+              <Shield className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-2">

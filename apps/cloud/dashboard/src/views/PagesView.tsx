@@ -1,4 +1,12 @@
 import { useState } from "react";
+import {
+  ArrowRight,
+  ChevronDown,
+  ExternalLink,
+  FileCode,
+  Plus,
+  X,
+} from "lucide-react";
 import { useDashboardData } from "../lib/data";
 import { relativeTime } from "../lib/format";
 import { pageHost, pageUrl } from "../lib/urls";
@@ -60,8 +68,9 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           align="end"
           label="Sort pages"
           trigger={
-            <span className="@button-secondary-sm whitespace-nowrap">
-              Sort: {SORT_LABEL[sort]} ▾
+            <span className="@button-secondary-sm inline-flex items-center gap-1 whitespace-nowrap">
+              Sort: {SORT_LABEL[sort]}
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
             </span>
           }
         >
@@ -86,9 +95,10 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
         <button
           type="button"
           onClick={() => setNewPageOpen(true)}
-          className="@button-primary-sm ml-auto whitespace-nowrap"
+          className="@button-primary-sm ml-auto inline-flex items-center gap-1 whitespace-nowrap"
         >
-          ＋ New Page
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          New Page
         </button>
       </div>
     </div>
@@ -112,7 +122,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
       <div className="space-y-5">
         {header}
         <EmptyState
-          icon="◳"
+          icon={<FileCode className="h-6 w-6" aria-hidden="true" />}
           title="No pages published yet"
           description={
             <>
@@ -129,18 +139,20 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
             <button
               type="button"
               onClick={() => setNewPageOpen(true)}
-              className="@button-primary-sm"
+              className="@button-primary-sm inline-flex items-center gap-1"
               data-testid="pages-empty-upload"
             >
-              ＋ Upload a page
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Upload a page
             </button>
             <a
               href="https://shortwind.dev/docs/cloud-quickstart"
               target="_blank"
               rel="noreferrer"
-              className="@button-secondary-sm"
+              className="@button-secondary-sm inline-flex items-center gap-1"
             >
-              Read the quickstart →
+              Read the quickstart
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </a>
           </div>
         </EmptyState>
@@ -184,8 +196,9 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           <Menu
             label="Filter pages by status"
             trigger={
-              <span className="px-2.5 py-1 transition-colors hover:text-foreground">
-                Status: {STATUS_LABEL[status]} ▾
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 transition-colors hover:text-foreground">
+                Status: {STATUS_LABEL[status]}
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
               </span>
             }
           >
@@ -212,9 +225,9 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
               type="button"
               aria-label="Clear status filter"
               onClick={() => setStatus("all")}
-              className="rounded-r-full border-l border-border px-2 py-1 transition-colors hover:bg-secondary hover:text-foreground"
+              className="inline-flex items-center rounded-r-full border-l border-border px-2 py-1 transition-colors hover:bg-secondary hover:text-foreground"
             >
-              ✕
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           ) : null}
         </span>
@@ -247,10 +260,11 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
                 type="button"
                 data-testid="pages-archive-ghost"
                 onClick={() => setStatus("archived")}
-                className="flex h-full min-h-28 w-full items-center justify-center rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+                className="flex h-full min-h-28 w-full items-center justify-center gap-1 rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
               >
                 View {archivedCount} archived{" "}
-                {archivedCount === 1 ? "page" : "pages"} →
+                {archivedCount === 1 ? "page" : "pages"}
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </li>
           ) : null}
@@ -318,10 +332,11 @@ function PageCard({
             href={pageUrl(page.slug)}
             target="_blank"
             rel="noreferrer"
-            className="@link relative z-10 block truncate text-xs text-muted-foreground/80 hover:text-term"
+            className="@link relative z-10 flex min-w-0 items-center gap-1 text-xs text-muted-foreground/80 hover:text-term"
             title={host}
           >
-            {host} ↗
+            <span className="truncate">{host}</span>
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
           </a>
         </div>
         {live ? (
