@@ -22,22 +22,28 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB per HTML file.
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB per upload (server cap).
 const MAX_FILES = 2000;
 const VISIBILITIES: Visibility[] = ["public", "unlisted", "private"];
-// Mirror the shared `validateSlug` grammar (apps/cloud/shared/src/slug.ts).
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** One collected file: a bundle-relative POSIX path + its HTML text. */
 type Item = { path: string; html: string };
 
-/** Normalize a file NAME to the slug grammar (default address for a page). */
-function slugFromFilename(name: string): string {
-  return name
-    .replace(/^.*\//, "") // basename
-    .replace(/\.[^.]+$/, "")
+/**
+ * Coerce any user text into a valid slug (the shared `validateSlug` grammar):
+ * lowercase, non-alphanumerics → single dashes, no leading/trailing dashes.
+ * "Aceme Dashboard" → "aceme-dashboard". We normalize rather than reject so the
+ * address field never blocks the user on a fixable typo.
+ */
+function normalizeSlug(s: string): string {
+  return s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)
     .replace(/-+$/g, "");
+}
+
+/** Default address for a file: its NAME (sans dir + extension), normalized. */
+function slugFromFilename(name: string): string {
+  return normalizeSlug(name.replace(/^.*\//, "").replace(/\.[^.]+$/, ""));
 }
 
 /**
@@ -236,13 +242,9 @@ export function UploadPageDialog({
 
   async function publish() {
     if (items.length === 0 || busy) return;
-    const typed = slug.trim();
-    if ((mode === "single" || mode === "bundle") && typed && !SLUG_RE.test(typed)) {
-      setError(
-        "Address must be lowercase letters, numbers, and single dashes (no spaces or capitals).",
-      );
-      return;
-    }
+    // Normalize whatever the user typed into a valid slug rather than rejecting
+    // it ("Aceme Dashboard" → "aceme-dashboard").
+    const typed = normalizeSlug(slug);
     setBusy(true);
     setError(null);
     try {
@@ -469,6 +471,11 @@ export function UploadPageDialog({
                     onChange={(e) => {
                       setSlug(e.target.value);
                       if (error) setError(null);
+                    }}
+                    onBlur={(e) => {
+                      // Show the normalized address once they leave the field.
+                      const n = normalizeSlug(e.target.value);
+                      if (n !== e.target.value) setSlug(n);
                     }}
                     placeholder="my-page"
                     aria-label="Page address slug"

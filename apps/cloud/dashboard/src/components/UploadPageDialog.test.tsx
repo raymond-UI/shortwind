@@ -117,19 +117,28 @@ describe("UploadPageDialog", () => {
     expect(await screen.findByTestId("upload-error")).toHaveTextContent(/taken/i);
   });
 
-  it("rejects an invalid address client-side (friendly, no server call)", async () => {
-    const publishPage = vi.fn();
+  it("normalizes a messy address instead of erroring", async () => {
+    const publishPage = vi.fn(async (input: { slug?: string }) => ({
+      ok: true as const,
+      id: "pg",
+      url: `https://${input.slug}.shortwind.app`,
+      version: 1,
+    }));
     renderWithData(<UploadPageDialog open onClose={() => {}} />, { publishPage });
     pick(htmlFile("index.html", "<h1>Hi</h1>"));
     await screen.findByText("index.html");
-    fireEvent.change(screen.getByLabelText("Page address slug"), {
-      target: { value: "LC" }, // uppercase → invalid slug
-    });
+    const input = screen.getByLabelText("Page address slug") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Aceme Dashboard" } });
+    // On blur the field shows the normalized form.
+    fireEvent.blur(input);
+    expect(input.value).toBe("aceme-dashboard");
     fireEvent.click(screen.getByTestId("upload-publish"));
-    expect(await screen.findByTestId("upload-error")).toHaveTextContent(
-      /lowercase/i,
-    );
-    expect(publishPage).not.toHaveBeenCalled();
+    await screen.findByTestId("upload-done");
+    expect(publishPage).toHaveBeenCalledWith({
+      html: "<h1>Hi</h1>",
+      slug: "aceme-dashboard",
+      visibility: "public",
+    });
   });
 
   it("rejects a non-HTML file before any publish", async () => {
