@@ -72,6 +72,8 @@ export interface RecipeFamilyRow {
   family: string;
   version: string;
   bodySha: string;
+  /** The recipe source body (seal-stripped) — shown in the preview. */
+  body: string;
   createdAt: number;
   isStandard: boolean;
 }

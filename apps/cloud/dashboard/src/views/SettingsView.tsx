@@ -2,42 +2,112 @@ import { useState } from "react";
 import { useDashboardData } from "../lib/data";
 import { formatTime, relativeTime } from "../lib/format";
 import { PolicyView } from "./PolicyView";
+import { RecipesView } from "./RecipesView";
+import { DomainsView } from "./DomainsView";
 import { Badge } from "../components/Badge";
 import { CopyValue } from "../components/CopyValue";
-import { SectionHeader } from "../components/SectionHeader";
-import { SkeletonRows } from "../components/Skeleton";
+import { Skeleton, SkeletonRows } from "../components/Skeleton";
+import { Segmented } from "../components/Segmented";
 import type { TokenRow } from "../lib/types";
 
+const TABS = [
+  { value: "domains", label: "Domains" },
+  { value: "recipes", label: "Recipes" },
+  { value: "theme", label: "Theme" },
+  { value: "access", label: "Access" },
+] as const;
+export type SettingsTab = (typeof TABS)[number]["value"];
+/** The tab values, for the route's `?tab=` search-param validation. */
+export const SETTINGS_TABS: readonly SettingsTab[] = TABS.map((t) => t.value);
+export const DEFAULT_SETTINGS_TAB: SettingsTab = "domains";
+
 /**
- * Settings (epic #184, issue #6) — account configuration: policy toggles (folded
- * in from the old standalone Policy view) and API tokens (list + revoke). The
- * token list/revoke go through the operator-gated, account-scoped
- * `dashboard.listTokens` / `dashboard.revokeToken` (the raw token functions are
- * internal-only now — the un-gated public ones were a cross-account hole).
+ * Settings — account configuration as sub-pages: Domains (+ the custom-domain
+ * approval policy), Recipes, Theme, and Access (API tokens). The active sub-page
+ * is controlled by the route via `tab`/`onTabChange` (bound to the `?tab=`
+ * search param, so it is shareable and reload-safe). Rendered without those
+ * props (e.g. in tests) it falls back to local state.
  */
-export function SettingsView() {
+export function SettingsView({
+  tab: controlledTab,
+  onTabChange,
+}: {
+  tab?: SettingsTab;
+  onTabChange?: (next: SettingsTab) => void;
+} = {}) {
+  const [localTab, setLocalTab] = useState<SettingsTab>(DEFAULT_SETTINGS_TAB);
+  const tab = controlledTab ?? localTab;
+  const setTab = onTabChange ?? setLocalTab;
+
   return (
-    <div className="max-w-2xl space-y-10" data-testid="settings-view">
-      <section className="space-y-4">
-        <SectionHeader eyebrow="Policy" title="Account policy" />
-        <PolicyView />
-      </section>
-
-      <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Theme"
-          title="Web theme"
-          description="The accent color and corner radius applied to pages you upload from the web. Full HTML documents that carry their own <head> are served exactly as uploaded and are not themed."
+    <div className="space-y-6" data-testid="settings-view">
+      <div className="max-w-xl">
+        <Segmented
+          options={TABS}
+          value={tab}
+          onChange={setTab}
+          label="Settings sub-pages"
+          testId="settings-tabs"
         />
-        <ThemeEditor />
-      </section>
-
-      <section className="space-y-4">
-        <SectionHeader eyebrow="Access" title="API tokens" />
-        <TokenList />
-      </section>
+      </div>
+      {/* Recipes is a master/detail that wants the full width + height; the other
+          sub-pages are forms that read better in a narrow column. */}
+      {tab === "domains" ? (
+        <div className="max-w-2xl space-y-6">
+          <DomainsView />
+          <PolicyView />
+        </div>
+      ) : null}
+      {tab === "recipes" ? <RecipesView /> : null}
+      {tab === "theme" ? (
+        <div className="max-w-2xl">
+          <ThemeEditor />
+        </div>
+      ) : null}
+      {tab === "access" ? (
+        <div className="max-w-2xl">
+          <TokenList />
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/** A #rrggbb hex for the native color input, or null if the value isn't hex. */
+function toHex(color: string): string | null {
+  const s = color.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+    const r = s[1]!, g = s[2]!, b = s[3]!;
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return null;
+}
+
+/** Quick-pick accent swatches (hex, so the native picker + presets agree). */
+const ACCENT_PRESETS = [
+  "#0f172a",
+  "#2563eb",
+  "#0d9488",
+  "#16a34a",
+  "#ea580c",
+  "#dc2626",
+  "#db2777",
+  "#7c3aed",
+];
+
+/** Parse a radius CSS length to a slider px value (rem×16, px as-is), 0–32. */
+function radiusToPx(value: string): number {
+  const m = value.trim().match(/^(\d*\.?\d+)(rem|px|em)?$/);
+  if (!m) return 10;
+  const n = parseFloat(m[1]!);
+  const px = (m[2] ?? "px") === "px" ? n : n * 16;
+  return Math.max(0, Math.min(32, Math.round(px)));
+}
+
+/** Emit a slider px value as rem (the theme's canonical radius unit). */
+function pxToRadius(px: number): string {
+  return `${+(px / 16).toFixed(4)}rem`;
 }
 
 function ThemeEditor() {
@@ -60,9 +130,9 @@ function ThemeEditor() {
     setError(null);
   }
 
-  if (theme === undefined) {
-    return <SkeletonRows count={2} label="Loading theme" />;
-  }
+  // /ui: render the static chrome (labels, presets, Save) immediately; mask ONLY
+  // the dynamic value controls (accent/radius) until the theme loads.
+  const loading = theme === undefined;
 
   async function onSave() {
     setBusy(true);
@@ -89,16 +159,34 @@ function ThemeEditor() {
 
   return (
     <div data-testid="theme-editor" className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="space-y-1.5 text-sm">
-          <span className="text-muted-foreground">Accent color</span>
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              data-testid="accent-swatch"
-              className="h-8 w-8 shrink-0 rounded-md border border-border"
+      <p className="text-xs text-muted-foreground">
+        Applied to fragment uploads. Full HTML documents are served unthemed.
+      </p>
+      {/* Accent color — a real picker (native swatch), quick presets, and a
+          freeform field for exact values (oklch/hex/named). */}
+      <div className="space-y-2">
+        <span className="text-sm text-muted-foreground">Accent color</span>
+        {loading ? (
+          <Skeleton className="h-9 w-full" />
+        ) : (
+          <div className="flex items-center gap-3">
+            <label
+              className="relative h-9 w-9 shrink-0 cursor-pointer overflow-hidden rounded-md border border-border"
               style={{ background: accent || "transparent" }}
-            />
+              title="Pick a color"
+            >
+              <input
+                type="color"
+                value={toHex(accent) ?? "#000000"}
+                onChange={(e) => {
+                  setAccent(e.target.value);
+                  setSaved(false);
+                }}
+                data-testid="accent-color"
+                aria-label="Accent color picker"
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </label>
             <input
               type="text"
               value={accent}
@@ -112,43 +200,73 @@ function ThemeEditor() {
               className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none focus:border-term/60"
             />
           </div>
-        </label>
+        )}
+        {/* Presets are static — render immediately. */}
+        <div className="flex flex-wrap gap-1.5" data-testid="accent-presets">
+          {ACCENT_PRESETS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                setAccent(c);
+                setSaved(false);
+              }}
+              aria-label={`Use ${c}`}
+              className="h-6 w-6 rounded-full border border-border ring-offset-2 ring-offset-background transition-[box-shadow] hover:ring-2 hover:ring-term/50"
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+      </div>
 
-        <label className="space-y-1.5 text-sm">
-          <span className="text-muted-foreground">Corner radius</span>
-          <div className="flex items-center gap-2">
+      {/* Corner radius — a slider (distinct from the color control), a live
+          rounded preview, and the exact rem readout. */}
+      <div className="space-y-2">
+        <span className="text-sm text-muted-foreground">Corner radius</span>
+        {loading ? (
+          <Skeleton className="h-9 w-full" />
+        ) : (
+          <div className="flex items-center gap-3">
             <span
               aria-hidden="true"
-              className="h-8 w-8 shrink-0 border border-border bg-secondary"
+              className="h-9 w-9 shrink-0 border border-border bg-secondary"
               style={{ borderRadius: radius || "0" }}
             />
             <input
-              type="text"
-              value={radius}
+              type="range"
+              min={0}
+              max={32}
+              step={1}
+              value={radiusToPx(radius)}
               onChange={(e) => {
-                setRadius(e.target.value);
+                setRadius(pxToRadius(Number(e.target.value)));
                 setSaved(false);
               }}
-              spellCheck={false}
-              data-testid="radius-input"
-              placeholder="0.625rem"
-              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none focus:border-term/60"
+              data-testid="radius-range"
+              aria-label="Corner radius"
+              className="w-full accent-term"
             />
+            <span
+              data-testid="radius-value"
+              className="w-20 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground"
+            >
+              {radius}
+            </span>
           </div>
-        </label>
+        )}
       </div>
 
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onSave}
-          disabled={!canSave}
+          disabled={!canSave || loading}
           data-testid="save-theme"
           className="rounded-md border border-term/40 bg-term/10 px-3 py-1.5 text-xs text-term transition-colors hover:bg-term/20 disabled:opacity-50"
         >
           {busy ? "Saving…" : "Save theme"}
         </button>
-        {theme.isDefault ? (
+        {!loading && theme.isDefault ? (
           <span className="text-xs text-muted-foreground">
             Using the neutral default.
           </span>

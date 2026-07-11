@@ -24,8 +24,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 export const NAV = [
   { id: "overview", label: "Overview" },
   { id: "analytics", label: "Analytics" },
-  { id: "domains", label: "Domains" },
-  { id: "recipes", label: "Recipes" },
   { id: "usage", label: "Usage" },
   { id: "billing", label: "Billing" },
   { id: "activity", label: "Activity" },

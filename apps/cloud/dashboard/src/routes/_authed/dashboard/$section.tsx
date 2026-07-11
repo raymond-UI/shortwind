@@ -5,10 +5,13 @@ import { RecipeEditsView } from "@/views/RecipeEditsView";
 import { ModerationView } from "@/views/ModerationView";
 import { UsageView } from "@/views/UsageView";
 import { BillingView } from "@/views/BillingView";
-import { DomainsView } from "@/views/DomainsView";
-import { RecipesView } from "@/views/RecipesView";
 import { AnalyticsView } from "@/views/AnalyticsView";
-import { SettingsView } from "@/views/SettingsView";
+import {
+  SettingsView,
+  SETTINGS_TABS,
+  DEFAULT_SETTINGS_TAB,
+} from "@/views/SettingsView";
+import type { SettingsTab } from "@/views/SettingsView";
 import { EmptyState } from "@/components/EmptyState";
 
 /**
@@ -16,13 +19,12 @@ import { EmptyState } from "@/components/EmptyState";
  * `/cloud/dashboard/<section>`, rendered into the layout's `<Outlet/>`. Each
  * section maps to a single view; Overview drills into a page's detail by
  * navigating to `/cloud/dashboard/pages/<id>` (a real, shareable URL) and
- * Activity is the audit + recipe-edit feed pairing (PRD §5.4).
+ * Activity is the audit + recipe-edit feed pairing (PRD §5.4). Settings carries
+ * its active sub-page in the `?tab=` search param so it is shareable/reloadable.
  */
 const KNOWN_SECTIONS = [
   "overview",
   "analytics",
-  "domains",
-  "recipes",
   "usage",
   "billing",
   "activity",
@@ -31,6 +33,13 @@ const KNOWN_SECTIONS = [
 ] as const;
 
 export const Route = createFileRoute("/_authed/dashboard/$section")({
+  validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => {
+    const tab = search.tab;
+    return typeof tab === "string" &&
+      (SETTINGS_TABS as readonly string[]).includes(tab)
+      ? { tab: tab as SettingsTab }
+      : {};
+  },
   loader: ({ params }) => {
     if (!KNOWN_SECTIONS.includes(params.section as (typeof KNOWN_SECTIONS)[number])) {
       throw notFound();
@@ -48,6 +57,7 @@ export const Route = createFileRoute("/_authed/dashboard/$section")({
 
 function SectionRoute() {
   const { section } = Route.useParams();
+  const { tab } = Route.useSearch();
   const navigate = useNavigate();
 
   switch (section) {
@@ -67,10 +77,6 @@ function SectionRoute() {
           }
         />
       );
-    case "domains":
-      return <DomainsView />;
-    case "recipes":
-      return <RecipesView />;
     case "usage":
       return <UsageView />;
     case "billing":
@@ -80,7 +86,19 @@ function SectionRoute() {
     case "moderation":
       return <ModerationView />;
     case "settings":
-      return <SettingsView />;
+      return (
+        <SettingsView
+          tab={tab ?? DEFAULT_SETTINGS_TAB}
+          onTabChange={(next: SettingsTab) =>
+            navigate({
+              to: "/dashboard/$section",
+              params: { section: "settings" },
+              search: { tab: next === DEFAULT_SETTINGS_TAB ? undefined : next },
+              replace: true,
+            })
+          }
+        />
+      );
     default:
       return null;
   }

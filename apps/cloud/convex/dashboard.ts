@@ -294,6 +294,8 @@ const recipeFamilyRowValidator = v.object({
   family: v.string(),
   version: v.string(),
   bodySha: v.string(),
+  // The recipe source body (seal-stripped) — powers the dashboard preview.
+  body: v.string(),
   createdAt: v.number(),
   isStandard: v.boolean(),
 });
@@ -330,6 +332,7 @@ export const listRecipeVersions = query({
         family: r.family,
         version: r.version,
         bodySha: r.bodySha,
+        body: r.body,
         createdAt: r.createdAt,
         isStandard: standard.has(r.family),
       }));
