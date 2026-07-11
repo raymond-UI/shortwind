@@ -113,12 +113,14 @@ describe("PagesView (Overview cards)", () => {
     expect(onOpen).toHaveBeenCalledWith("page_1");
   });
 
-  it("opens the New Page dialog with the publish command", () => {
+  it("opens the New Page dialog with the upload dropzone", () => {
     renderWithData(<PagesView />);
     fireEvent.click(screen.getByRole("button", { name: /new page/i }));
-    expect(screen.getByRole("dialog")).toHaveTextContent(
-      /shortwind cloud publish/,
-    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(/Publish a page/i);
+    expect(screen.getByTestId("upload-dropzone")).toBeInTheDocument();
+    // Publish is disabled until a file is chosen.
+    expect(screen.getByTestId("upload-publish")).toBeDisabled();
   });
 
   it("keeps header and controls visible while pages load", () => {

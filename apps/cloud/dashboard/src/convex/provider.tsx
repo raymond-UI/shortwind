@@ -77,6 +77,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
     skip ? "skip" : args,
   );
   const tokens = useQuery(api.dashboard.listTokens, skip ? "skip" : args);
+  const publishFromWebAction = useAction(api.pages.publishFromWeb);
   const setPolicyMutation = useMutation(api.dashboard.setAccountPolicy);
   const setVisibilityMutation = useMutation(api.pages.setVisibility);
   const deletePageMutation = useMutation(api.pages.deletePage);
@@ -102,6 +103,15 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       accountDomains,
       cnameTarget: domainSetup?.cnameTarget,
       tokens,
+      publishPage: async (input) => {
+        // Bearer omitted → operator-session path (requireWriteOperator).
+        return await publishFromWebAction({
+          html: input.html,
+          slug: input.slug,
+          visibility: input.visibility,
+          tags: input.tags,
+        });
+      },
       setPolicy: async (next) => {
         await setPolicyMutation(next);
       },
@@ -148,6 +158,7 @@ export function ConvexDataProvider({ children }: { children: ReactNode }) {
       accountDomains,
       domainSetup,
       tokens,
+      publishFromWebAction,
       setPolicyMutation,
       setVisibilityMutation,
       deletePageMutation,

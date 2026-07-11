@@ -3,9 +3,8 @@ import { useDashboardData } from "../lib/data";
 import { relativeTime } from "../lib/format";
 import { pageHost, pageUrl } from "../lib/urls";
 import { Badge, LifecycleStatus, VisibilityBadge } from "../components/Badge";
-import { CopyValue } from "../components/CopyValue";
-import { Dialog } from "../components/Dialog";
 import { EmptyState } from "../components/EmptyState";
+import { UploadPageDialog } from "../components/UploadPageDialog";
 import { Menu, MenuItem } from "../components/Menu";
 import { SectionHeader } from "../components/SectionHeader";
 import { SkeletonCards } from "../components/Skeleton";
@@ -95,42 +94,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
     </div>
   );
   const newPageDialog = (
-    <Dialog
-      open={newPageOpen}
-      onClose={() => setNewPageOpen(false)}
-      labelledBy="new-page-title"
-    >
-      <div className="space-y-3">
-        <h3 id="new-page-title" className="text-sm font-semibold">
-          Publish a new page
-        </h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Run next to your HTML file. The page appears here when the publish
-          lands. New to the CLI?{" "}
-          <a
-            href="https://shortwind.dev/docs/cloud-quickstart"
-            target="_blank"
-            rel="noreferrer"
-            className="text-foreground underline"
-          >
-            Read the quickstart
-          </a>
-          .
-        </p>
-        <div className="rounded-md border border-border bg-secondary/50 px-2 py-1.5">
-          <CopyValue value="shortwind cloud publish ./index.html" />
-        </div>
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setNewPageOpen(false)}
-            className="@button-secondary-sm"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </Dialog>
+    <UploadPageDialog open={newPageOpen} onClose={() => setNewPageOpen(false)} />
   );
 
   if (pages === undefined) {
@@ -152,9 +116,7 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           title="No pages published yet"
           description={
             <>
-              Install the CLI, run{" "}
-              <code className="@code-inline">shortwind cloud login</code>, then
-              publish your first page with{" "}
+              Drop an HTML file to host it, or publish from the CLI with{" "}
               <code className="@code-inline">
                 shortwind cloud publish &lt;file&gt;
               </code>
@@ -163,15 +125,26 @@ export function PagesView({ onOpen }: { onOpen?: (id: string) => void }) {
           }
           testId="pages-empty"
         >
-          <a
-            href="https://shortwind.dev/docs/cloud-quickstart"
-            target="_blank"
-            rel="noreferrer"
-            className="@btn-secondary mt-4 inline-flex"
-          >
-            Read the quickstart →
-          </a>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setNewPageOpen(true)}
+              className="@button-primary-sm"
+              data-testid="pages-empty-upload"
+            >
+              ＋ Upload a page
+            </button>
+            <a
+              href="https://shortwind.dev/docs/cloud-quickstart"
+              target="_blank"
+              rel="noreferrer"
+              className="@button-secondary-sm"
+            >
+              Read the quickstart →
+            </a>
+          </div>
         </EmptyState>
+        {newPageDialog}
       </div>
     );
   }

@@ -72,7 +72,10 @@ import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
  */
 
 type AccountId = Id<"accounts">;
-type TokenId = Id<"tokens">;
+// A token id, or null for a SESSION actor (the web publish path has no bearer
+// token). Runtime is null-safe — every mutation the data port feeds accepts
+// `v.union(v.id("tokens"), v.null())` for `actorTokenId`.
+type TokenId = Id<"tokens"> | null;
 
 // ---------------------------------------------------------------------------
 // Internal read queries (data-port reads). Exported as CLOUD-24 reuse points.
@@ -1243,6 +1246,114 @@ export const authForWrite = internalQuery({
   handler: async (ctx, args) => {
     const auth = await requireWrite(ctx, args.bearer);
     return { accountId: auth.accountId, tokenId: auth.tokenId };
+  },
+});
+
+/**
+ * Session-scoped write auth for the WEB publish path (`publishFromWeb`). The
+ * dashboard has a Better Auth SESSION, not a `swc_` bearer, so this resolves the
+ * signed-in operator to their account (tokenId is null — no token actor). Mirrors
+ * how the session-authed domain actions authenticate (`requireWriteOperator`
+ * with no bearer). An action can't read `ctx.db`, so this runs as a query the
+ * action calls; the caller's session identity propagates to it.
+ */
+export const authForWebWrite = internalQuery({
+  args: {},
+  returns: v.object({
+    accountId: v.id("accounts"),
+    tokenId: v.union(v.id("tokens"), v.null()),
+  }),
+  handler: async (ctx) => {
+    const auth = await requireWriteOperator(ctx, undefined);
+    return { accountId: auth.accountId, tokenId: auth.tokenId };
+  },
+});
+
+/**
+ * publishFromWeb — publish a page from the dashboard (drag-and-drop upload).
+ * Session-authed (no bearer). Full CLI parity: the same content-scan + rate
+ * limit gate, and `@recipe` shorthand is expanded server-side against the
+ * account's STORED palette (`recipeVersions`) — the browser has no local
+ * palette. The palette is fed as body-only recipe sources (no seal), which the
+ * expander uses verbatim and which marks nothing "touched" (so re-feeding the
+ * palette fires no spurious recipe-edit events). A hard content block rejects
+ * before anything is materialized (CSAM preserve-materialize parity with the
+ * bearer path is a follow-up, same as bundles).
+ */
+export const publishFromWeb = action({
+  args: {
+    html: v.string(),
+    slug: v.optional(v.string()),
+    title: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    visibility: v.optional(
+      v.union(v.literal("public"), v.literal("unlisted"), v.literal("private")),
+    ),
+    css: v.optional(v.string()),
+  },
+  returns: outcomeValidator,
+  handler: async (ctx, args) => {
+    const auth = await ctx.runQuery(internal.pages.authForWebWrite, {});
+
+    const gate = await runPublishScan(ctx, {
+      accountId: auth.accountId,
+      html: args.html,
+      css: args.css,
+    });
+    if (!gate.proceed) {
+      if (gate.rejection.code === "RATE_LIMITED") {
+        throw new ConvexError({
+          code: "RATE_LIMITED",
+          message: "Publish rate limit exceeded for this account",
+          retryAfter: gate.rejection.retryAfter,
+        });
+      }
+      if (gate.rejection.code === "BLOCKED_CSAM") {
+        throw new ConvexError({
+          code: "CSAM_BLOCKED",
+          message: "Publish blocked: content matched a known-CSAM hash list",
+        });
+      }
+      throw new ConvexError({
+        code: "CONTENT_BLOCKED",
+        message: "Publish blocked by the content classifier",
+      });
+    }
+
+    // Expand against the account's stored palette (body-only → no touched edits).
+    const palette: { family: string; body: string }[] = await ctx.runQuery(
+      internal.recipes.listRecipePalette,
+      { accountId: auth.accountId },
+    );
+    const recipes = palette.map((p) => ({ family: p.family, source: p.body }));
+
+    const deps = makeDeps(ctx, auth.tokenId);
+    const outcome = await runPublish(
+      {
+        actor: { accountId: auth.accountId, tokenId: auth.tokenId },
+        html: args.html,
+        slug: args.slug,
+        title: args.title,
+        recipes,
+        lockfile: { version: 1, registry: "default", families: {} },
+        tags: args.tags,
+        visibility: args.visibility,
+        css: args.css,
+      },
+      deps,
+    );
+
+    if (outcome.ok && gate.flag) {
+      await ctx.runMutation(internal.pages.commitScanFlag, {
+        pageId: outcome.result.id as Id<"pages">,
+        accountId: auth.accountId as Id<"accounts">,
+        actorTokenId: auth.tokenId,
+        reason: gate.flag.reason,
+        score: gate.flag.score,
+      });
+    }
+
+    return flattenOutcome(outcome);
   },
 });
 

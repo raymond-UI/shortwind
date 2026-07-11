@@ -51,6 +51,35 @@ export const latestRecipeVersion = internalQuery({
 });
 
 /**
+ * The account's full recipe palette — the latest body per family. Powers the
+ * WEB publish path (`pages.publishFromWeb`): a browser upload has no local
+ * palette, so the server expands `@recipe` tokens against these stored bodies.
+ * The `body` alone is a complete, parseable recipe source (the seal header is
+ * optional metadata the expander ignores — see `expand.ts`/`parser.ts`), so it
+ * is returned WITHOUT a reconstructed seal. That also means re-feeding the
+ * palette into a publish marks nothing "touched" (no seal → no fingerprint), so
+ * no spurious recipe-edit events fire.
+ */
+export const listRecipePalette = internalQuery({
+  args: { accountId: v.id("accounts") },
+  returns: v.array(v.object({ family: v.string(), body: v.string() })),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("recipeVersions")
+      .withIndex("by_account_family", (q) => q.eq("accountId", args.accountId))
+      .collect();
+    // Keep the newest row per family (rows are creation-ordered; a later row is
+    // a newer version).
+    const latest = new Map<string, Doc<"recipeVersions">>();
+    for (const r of rows) {
+      const cur = latest.get(r.family);
+      if (!cur || r.createdAt > cur.createdAt) latest.set(r.family, r);
+    }
+    return [...latest.values()].map((r) => ({ family: r.family, body: r.body }));
+  },
+});
+
+/**
  * Persist one touched recipe forward-only: a new `recipeVersions` row, a
  * distinct `recipeEditEvents` row, and a `recipe.edit` `auditLog` entry. One
  * mutation so the three writes commit atomically.

@@ -277,6 +277,31 @@ describe("runPublish — create", () => {
     expect(data.audits.some((a) => a.action === "page.publish")).toBe(true);
   });
 
+  it("expands body-only recipe sources (web palette) and marks NOTHING touched", async () => {
+    // The WEB publish path (pages.publishFromWeb) feeds the account's stored
+    // palette as body-only sources (no seal). This proves: (1) full-parity
+    // expansion works from the body alone, and (2) re-feeding the palette fires
+    // no spurious recipe-edit versions (no seal → nothing fingerprinted).
+    const { data, storage, deps } = makeDeps();
+    const out = await runPublish(
+      await basePublishInput({
+        recipes: [{ family: "card", source: CARD_BODY }], // body only, no seal
+        lockfile: { version: 1, registry: "default", families: {} },
+      }),
+      deps,
+    );
+    if (!out.ok) throw new Error("unexpected collision");
+    const html = storage.artifacts[0]!.html;
+    // @card expanded to its Tailwind classes; the raw token is gone.
+    expect(html).toContain("rounded-lg");
+    expect(html).toContain("border");
+    expect(html).not.toContain("@card");
+    // No recipe was "touched" → no forward-only version / edit event written.
+    expect(data.recipeVersions).toHaveLength(0);
+    expect(data.recipeEditEvents).toHaveLength(0);
+    expect(data.audits.some((a) => a.action === "recipe.edit")).toBe(false);
+  });
+
   it("the served artifact is a complete self-contained Tailwind document", async () => {
     const { storage, deps } = makeDeps();
     await runPublish(await basePublishInput(), deps);

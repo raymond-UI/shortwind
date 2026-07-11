@@ -168,6 +168,20 @@ export interface DashboardData {
   cnameTarget: string | undefined;
   /** The operator's own API tokens (epic #184). `undefined` = loading. */
   tokens: TokenRow[] | undefined;
+  /**
+   * Publish a page from an uploaded HTML file (operator session). `@recipe`
+   * shorthand is expanded server-side against the account's stored palette.
+   * Resolves to the live URL, or a 409 when the slug is already taken.
+   */
+  publishPage: (input: {
+    html: string;
+    slug?: string;
+    visibility?: Visibility;
+    tags?: string[];
+  }) => Promise<
+    | { ok: true; id: string; url: string; version: number }
+    | { ok: false; status: 409; existingId: string }
+  >;
   /** Persist a policy toggle. Resolves to the new policy. */
   setPolicy: (next: { customDomainNeedsApproval?: boolean }) => Promise<void>;
   /** Change a page's visibility (operator session). */

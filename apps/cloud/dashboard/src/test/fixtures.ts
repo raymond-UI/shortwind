@@ -196,6 +196,12 @@ export function makeData(
     accountDomains: mockAccountDomains,
     cnameTarget: "cname.shortwind.app",
     tokens: mockTokens,
+    publishPage: async (input) => ({
+      ok: true,
+      id: "pg_test",
+      url: `https://${input.slug ?? "new-page"}.shortwind.app`,
+      version: 1,
+    }),
     setPolicy: async () => {},
     setVisibility: async () => {},
     deletePage: async () => {},
