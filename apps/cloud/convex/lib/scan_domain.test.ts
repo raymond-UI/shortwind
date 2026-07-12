@@ -5,6 +5,7 @@ import {
   screenOutboundHosts,
 } from "./content_scan.js";
 import { loadScanSources, splitList } from "./scan_config.js";
+import { BASELINE_DOMAIN_BLOCKLIST } from "./domain_blocklist.js";
 
 /**
  * #198 item 5 — outbound-domain reputation screening + config-driven activation
@@ -66,23 +67,39 @@ describe("loadScanSources (config-driven activation)", () => {
     expect(splitList("")).toEqual([]);
   });
 
-  it("defaults to match-nothing sources when env is empty", async () => {
+  it("empty env ⇒ empty hash list, but the checked-in domain baseline is active", async () => {
     const s = loadScanSources({});
     expect(await s.hashList.has("deadbeef")).toBe(false);
-    expect(await s.domainSource.isBlocked("evil.com")).toBe(false);
     expect(s.hashList.id).toBe("ncmec");
+    // A non-baseline host is not blocked...
+    expect(await s.domainSource.isBlocked("evil.com")).toBe(false);
+    // ...but the curated baseline entries ARE, with no env set.
+    expect(await s.domainSource.isBlocked("phishing.example")).toBe(true);
+    expect(await s.domainSource.isBlocked("malware.example.com")).toBe(true);
   });
 
-  it("activates a hash list + domain blocklist from env", async () => {
+  it("env DOMAIN_BLOCKLIST is ADDITIVE — it augments, never replaces, the baseline", async () => {
+    const s = loadScanSources({ DOMAIN_BLOCKLIST: "evil.com, bad.net" });
+    // env entries are blocked...
+    expect(await s.domainSource.isBlocked("evil.com")).toBe(true);
+    expect(await s.domainSource.isBlocked("bad.net")).toBe(true);
+    // ...AND the baseline is still in force (not replaced).
+    expect(await s.domainSource.isBlocked("phishing.example")).toBe(true);
+  });
+
+  it("activates a hash list from env", async () => {
     const s = loadScanSources({
       CSAM_HASHLIST: "AAA111\nbbb222",
       CSAM_HASHLIST_ID: "ncmec-2026",
-      DOMAIN_BLOCKLIST: "evil.com, bad.net",
     });
     expect(s.hashList.id).toBe("ncmec-2026");
     expect(await s.hashList.has("aaa111")).toBe(true); // lowercased by makeHashList
     expect(await s.hashList.has("nope")).toBe(false);
-    expect(await s.domainSource.isBlocked("evil.com")).toBe(true);
-    expect(await s.domainSource.isBlocked("ok.com")).toBe(false);
+  });
+
+  it("pins the curated baseline entries", () => {
+    // A change to the shipped blocklist is a deliberate, reviewable edit.
+    expect(BASELINE_DOMAIN_BLOCKLIST).toContain("phishing.example");
+    expect(BASELINE_DOMAIN_BLOCKLIST).toContain("malware.example.com");
   });
 });

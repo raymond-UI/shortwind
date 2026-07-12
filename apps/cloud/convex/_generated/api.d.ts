@@ -34,6 +34,7 @@ import type * as lib_cloudflare_cache from "../lib/cloudflare_cache.js";
 import type * as lib_cloudflare_saas from "../lib/cloudflare_saas.js";
 import type * as lib_content_scan from "../lib/content_scan.js";
 import type * as lib_device_grant from "../lib/device_grant.js";
+import type * as lib_domain_blocklist from "../lib/domain_blocklist.js";
 import type * as lib_edge_kv from "../lib/edge_kv.js";
 import type * as lib_ncmec from "../lib/ncmec.js";
 import type * as lib_operator_auth from "../lib/operator_auth.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   "lib/cloudflare_saas": typeof lib_cloudflare_saas;
   "lib/content_scan": typeof lib_content_scan;
   "lib/device_grant": typeof lib_device_grant;
+  "lib/domain_blocklist": typeof lib_domain_blocklist;
   "lib/edge_kv": typeof lib_edge_kv;
   "lib/ncmec": typeof lib_ncmec;
   "lib/operator_auth": typeof lib_operator_auth;

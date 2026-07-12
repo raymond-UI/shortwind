@@ -14,10 +14,15 @@
  *                            `"configured"`.
  *   - `DOMAIN_BLOCKLIST`   — whitespace/comma/newline-separated known-bad hosts
  *                            (phishing/malware) an outbound link must not target.
+ *                            ADDITIVE to the checked-in baseline
+ *                            (lib/domain_blocklist.ts) — env augments, never
+ *                            replaces; a break-glass way to block a host without
+ *                            a PR.
  *
- * Absent env ⇒ the safe offline posture (empty sources that match nothing), so
- * dev/test behaves exactly as before. Loaded ONCE at module init (see
- * convex/pages.ts) — not per publish — so it never races concurrent actions.
+ * The hash list is empty until `CSAM_HASHLIST` is set; the domain source is the
+ * curated baseline UNIONed with any `DOMAIN_BLOCKLIST` env entries. Loaded ONCE
+ * at module init (see convex/pages.ts) — not per publish — so it never races
+ * concurrent actions.
  *
  * Scale note: an inline env list is the launch mechanism (fine for a curated
  * blocklist + an operator-loaded hash set). A large, frequently-refreshed feed
@@ -32,6 +37,7 @@ import {
   type DomainReputationSource,
   type KnownHashList,
 } from "./content_scan.js";
+import { BASELINE_DOMAIN_BLOCKLIST } from "./domain_blocklist.js";
 
 /**
  * Minimal `process.env` accessor (this workspace types against
@@ -63,7 +69,13 @@ export function loadScanSources(
   env: Record<string, string | undefined> = process.env,
 ): LoadedScanSources {
   const hashes = splitList(env.CSAM_HASHLIST);
-  const blocked = splitList(env.DOMAIN_BLOCKLIST);
+  // The checked-in baseline (curated in git) UNIONed with the additive env
+  // override — env augments the baseline, never replaces it. `makeDomainBlocklist`
+  // de-dupes on normalization, so an overlap is harmless.
+  const blocked = [
+    ...BASELINE_DOMAIN_BLOCKLIST,
+    ...splitList(env.DOMAIN_BLOCKLIST),
+  ];
   return {
     hashList:
       hashes.length > 0
