@@ -9,12 +9,14 @@ import {
   resolveHome,
   readActiveCloudAccount,
   readHomeLockfile,
+  updateAccountToken,
   type ResolvedHome,
 } from "../../home.js";
 import type { CandidateRecipe } from "../contract/fingerprint.js";
 import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
   createApiClient,
+  refreshAuthConfig,
   resolveBaseUrl,
   type ApiClient,
   type PublishResult,
@@ -115,11 +117,17 @@ export async function updateFromFile(
     candidates,
     ...(opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
   });
+  const updateBaseUrl = resolveBaseUrl(deps.baseUrl);
   const client =
     deps.client ??
     createApiClient({
-      baseUrl: resolveBaseUrl(deps.baseUrl),
-      token: account.token.accessToken,
+      baseUrl: updateBaseUrl,
+      ...refreshAuthConfig({
+        baseUrl: updateBaseUrl,
+        accessToken: account.token.accessToken,
+        refreshToken: account.token.refreshToken,
+        onTokenRefreshed: (t) => updateAccountToken(account.id, t),
+      }),
     });
   return runUpdate(client, id, payload, Boolean(opts.json));
 }

@@ -79,6 +79,9 @@ describe("every shared record type maps 1:1 to a table", () => {
     // RFC 8628 device-authorization grant (the CLI `login` flow). Transient,
     // swept hourly; deliberately not a shared `types.ts` record.
     "deviceCodes",
+    // #201 OAuth refresh tokens (rotating). Server-only auth state paired with
+    // `tokens`; not a shared `types.ts` record.
+    "refreshTokens",
     // Account-level custom domains (bind state + Cloudflare cert). Server-only
     // control-plane state; not a shared `types.ts` record.
     "accountDomains",

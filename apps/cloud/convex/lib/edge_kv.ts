@@ -23,6 +23,7 @@
 import { v } from "convex/values";
 import { internalAction } from "../_generated/server.js";
 import { internal } from "../_generated/api.js";
+import { purgeEdgeByUrl } from "./cloudflare_cache.js";
 
 /**
  * Minimal `process.env` accessor. This workspace types against
@@ -122,11 +123,13 @@ export async function evictKvRouteByKey(key: string): Promise<boolean> {
 }
 
 /**
- * CLOUD-SUBDOMAIN: evict the page's per-page subdomain KV route key
- * (`route:{subdomain}.{root}/`) — the ONLY key a page is served under now that
- * serving is subdomain-only (the legacy path-based key was retired). A killed/
- * deleted/expired page must stop serving on its subdomain. Fail-safe — never
- * throws (see {@link evictKvRouteByKey}).
+ * CLOUD-SUBDOMAIN + #165: take a page down at the edge on its per-page subdomain.
+ * Evicts the KV route key (`route:{subdomain}.{root}/`) — the ONLY key a page is
+ * served under now that serving is subdomain-only (the legacy path-based key was
+ * retired) — AND issues a Cloudflare zone cache-purge-by-URL for that same host,
+ * since the edge cache sits in front of the KV lookup. A killed/deleted/expired
+ * page must stop serving on its subdomain. Both steps are fail-safe — neither
+ * throws (see {@link evictKvRouteByKey} and {@link purgeEdgeByUrl}).
  *
  * `slug` is retained in the signature for the lifecycle/kill call sites + audit
  * symmetry, but only the `subdomain` drives an eviction (no subdomain on a legacy
@@ -145,7 +148,17 @@ export async function evictRouteForPage(
 ): Promise<void> {
   void slug;
   if (subdomain) {
+    // Two evictions for the ONE served host (`<subdomain>.<root>`), both
+    // fail-safe (neither throws — a miss degrades to stale-until-TTL):
+    //   1. KV route  — so the next request re-resolves against Convex and sees
+    //      the tombstone/quarantine (bounds staleness to the 1h route TTL).
+    //   2. Edge cache — a zone purge-by-URL for the SAME host, so an artifact
+    //      already cached at the edge (which sits in FRONT of KV) 404s within
+    //      seconds instead of after the 60s edge TTL (#165 — the moderation
+    //      kill-path needs instant takedown). The purge URL is the page's
+    //      subdomain root, normalized to the Worker's `edgeCacheKey` form.
     await evictKvRouteByKey(routeKeyForSubdomain(subdomain));
+    await purgeEdgeByUrl(`https://${subdomain}.${rootDomain()}/`);
   }
 }
 

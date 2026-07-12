@@ -26,12 +26,13 @@ import { runSkill } from "./commands/skill.js";
 import {
   ApiError,
   createApiClient,
+  refreshAuthConfig,
   resolveBaseUrl,
   type DeleteCapableClient,
   type VisibilityCapableClient,
   type DomainCapableClient,
 } from "./api-client.js";
-import { readActiveCloudAccount } from "../home.js";
+import { readActiveCloudAccount, updateAccountToken } from "../home.js";
 import { cliVersion } from "../init.js";
 import { reportStub, VERBS, type StubResult } from "./commands/stub.js";
 
@@ -485,9 +486,17 @@ function makeClient(endpoint?: string) {
       "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
     );
   }
+  const baseUrl = resolveBaseUrl(endpoint);
   return createApiClient({
-    baseUrl: resolveBaseUrl(endpoint),
-    token: account.token.accessToken,
+    baseUrl,
+    // #201: transparently refresh the access token on a 401 and persist the
+    // rotated pair, so a short-lived token never surfaces as a spurious logout.
+    ...refreshAuthConfig({
+      baseUrl,
+      accessToken: account.token.accessToken,
+      refreshToken: account.token.refreshToken,
+      onTokenRefreshed: (t) => updateAccountToken(account.id, t),
+    }),
   });
 }
 

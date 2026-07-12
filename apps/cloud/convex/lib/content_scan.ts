@@ -255,6 +255,49 @@ export function makeDomainBlocklist(blocked: Iterable<string>): DomainReputation
 }
 
 /**
+ * Extract the distinct outbound link/resource hosts referenced by an HTML
+ * artifact (the `href`/`src`/`action` targets with an absolute `http(s)` URL).
+ * These are the domains a published page sends visitors or loads resources from,
+ * so they are what a domain-reputation check must screen (#198 item 5 — the
+ * publish scan never looked at outbound domains, so a page linking to a
+ * known-bad phishing/malware host published clean). Pure + deterministic:
+ * normalized, de-duped, order-stable. Relative/anchor/`mailto:`/`data:` URLs
+ * carry no host and are skipped.
+ */
+export function extractOutboundHosts(html: string): string[] {
+  const hosts: string[] = [];
+  const seen = new Set<string>();
+  // Match the URL inside href/src/action attributes (single, double, or unquoted).
+  const attrRe = /(?:href|src|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  for (const m of html.matchAll(attrRe)) {
+    const raw = (m[1] ?? m[2] ?? m[3] ?? "").trim();
+    if (!/^https?:\/\//i.test(raw)) continue; // only absolute http(s) URLs have a host
+    const host = normalizeDomain(raw);
+    if (host.length === 0 || seen.has(host)) continue;
+    seen.add(host);
+    hosts.push(host);
+  }
+  return hosts;
+}
+
+/**
+ * Screen every outbound host in an artifact against the reputation source. The
+ * FIRST blocklisted host wins (the publish is blocked on it). `ok:true` when no
+ * outbound host is blocklisted (the common case, incl. an empty source). Pure
+ * over the injected source — the publish hook decides what to do with a hit.
+ */
+export async function screenOutboundHosts(
+  html: string,
+  source: DomainReputationSource = { isBlocked: () => false },
+): Promise<{ ok: boolean; blockedHost?: string }> {
+  for (const host of extractOutboundHosts(html)) {
+    const verdict = await domainReputation(host, source);
+    if (!verdict.ok) return { ok: false, blockedHost: host };
+  }
+  return { ok: true };
+}
+
+/**
  * Check a domain against the reputation source. Used for custom-domain binds and
  * outbound-link checks. A blocked domain → `{ ok:false, reason }`. The default
  * source (no blocklist) passes everything — the real feed is injected at deploy.

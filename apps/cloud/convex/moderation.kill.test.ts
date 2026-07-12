@@ -457,3 +457,100 @@ describe("sweepPreservation — honors the legal hold window (audit #158)", () =
     expect(again.elapsed).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Operator moderation identity (audit #151 CRITICAL #2).
+// ---------------------------------------------------------------------------
+
+/** Seed a standalone account and return its id (a second tenant / an operator). */
+async function seedAccount(
+  t: ReturnType<typeof convexTest>,
+  authUserId: string,
+): Promise<string> {
+  return t.run(async (ctx) =>
+    ctx.db.insert("accounts", {
+      authUserId,
+      name: authUserId,
+      email: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }),
+  );
+}
+
+describe("operator moderation identity (audit #151 CRITICAL #2)", () => {
+  it("a moderation:admin token kills content in ANOTHER account", async () => {
+    const t = convexTest(schema, modules);
+    __setKillEdgePort(recordingPort().port);
+    const owner = await seedAuth(t); // account A (auth_user_kill) + write token
+    const pageId = await publishPage(t, owner.bearer, "abuser-page");
+
+    // A DIFFERENT account holding ONLY the operator scope.
+    const opAccountId = await seedAccount(t, "operator");
+    const op = await t.mutation(internal.tokens.issueToken, {
+      accountId: opAccountId as never,
+      scopes: ["moderation:admin"],
+    });
+
+    const res = await t.mutation(api.moderation.killPage, {
+      bearer: op.secret,
+      pageId: pageId as never,
+      reason: "abuse",
+      category: "phishing",
+    });
+    expect(res.lifecycle).toBe("quarantined");
+
+    // The case is opened under the OWNER's account (content owner), not the operator's.
+    await t.run(async (ctx) => {
+      const cases = await ctx.db.query("moderation").collect();
+      expect(cases).toHaveLength(1);
+      expect(cases[0]!.accountId).toBe(owner.accountId);
+    });
+    // The abuser's page is no longer public.
+    expect(await t.query(api.pages.find, { bearer: owner.bearer })).toHaveLength(0);
+  });
+
+  it("an ordinary write token CANNOT kill another account's page (NOT_FOUND)", async () => {
+    const t = convexTest(schema, modules);
+    __setKillEdgePort(recordingPort().port);
+    const owner = await seedAuth(t);
+    const pageId = await publishPage(t, owner.bearer, "not-yours");
+
+    // Second account with only pages:write — no operator scope.
+    const otherAccountId = await seedAccount(t, "other-tenant");
+    const other = await t.mutation(internal.tokens.issueToken, {
+      accountId: otherAccountId as never,
+      scopes: ["pages:read", "pages:write"],
+    });
+
+    await expect(
+      t.mutation(api.moderation.killPage, {
+        bearer: other.secret,
+        pageId: pageId as never,
+        reason: "abuse",
+        category: "phishing",
+      }),
+    ).rejects.toThrow(/not found/i);
+
+    // Still public — the cross-account write was rejected.
+    expect(await t.query(api.pages.find, { bearer: owner.bearer })).toHaveLength(1);
+  });
+
+  it("a token with neither pages:write nor moderation:admin is rejected", async () => {
+    const t = convexTest(schema, modules);
+    const owner = await seedAuth(t);
+    const pageId = await publishPage(t, owner.bearer, "read-only-cant-kill");
+    const readOnly = await t.mutation(internal.tokens.issueToken, {
+      accountId: owner.accountId as never,
+      scopes: ["pages:read"],
+    });
+    await expect(
+      t.mutation(api.moderation.killPage, {
+        bearer: readOnly.secret,
+        pageId: pageId as never,
+        reason: "x",
+        category: "phishing",
+      }),
+    ).rejects.toThrow();
+  });
+});

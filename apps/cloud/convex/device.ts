@@ -6,9 +6,8 @@ import {
   query,
   type MutationCtx,
 } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
-import { hashToken } from "./tokens";
+import { hashToken, mintTokenPair } from "./tokens";
 import {
   generateDeviceCode,
   generateUserCode,
@@ -86,12 +85,19 @@ export const requestDeviceCode = internalMutation({
 });
 
 /**
- * The poll result — annotated explicitly to break the cross-module type cycle
- * (`internal.tokens.issueToken` → `internal` → this module), which otherwise
- * degrades the whole generated `internal`/`api` type to `any`.
+ * The poll result — annotated explicitly so the handler's inferred return type
+ * is a concrete union (not the generated `any` a cross-module reference would
+ * otherwise widen it to). On approval it carries the minted access+refresh pair
+ * and the access TTL (#201).
  */
 type PollResult =
-  | { ok: true; accessToken: string; scope: string }
+  | {
+      ok: true;
+      accessToken: string;
+      refreshToken: string;
+      scope: string;
+      expiresInSeconds: number;
+    }
   | {
       ok: false;
       error:
@@ -113,7 +119,9 @@ export const pollDeviceToken = internalMutation({
     v.object({
       ok: v.literal(true),
       accessToken: v.string(),
+      refreshToken: v.string(),
       scope: v.string(),
+      expiresInSeconds: v.number(),
     }),
     v.object({
       ok: v.literal(false),
@@ -164,18 +172,26 @@ export const pollDeviceToken = internalMutation({
           error: "authorization_pending" as const,
         };
       case "approved": {
-        // Mint the scoped bearer the rest of the system understands, then burn
+        // Mint the scoped access+refresh PAIR the rest of the system understands
+        // (short-lived access token so revocation bites + a rotating refresh so
+        // the CLI can renew without re-running the device flow, #201), then burn
         // the code so a replayed device_code can never re-mint (single-use).
-        const minted = await ctx.runMutation(internal.tokens.issueToken, {
-          accountId: row.accountId!,
-          scopes: row.scope.split(/\s+/).filter(Boolean),
-          label: `cli:${row.clientId}`,
-        });
+        const pair = await mintTokenPair(
+          ctx,
+          {
+            accountId: row.accountId!,
+            scopes: row.scope.split(/\s+/).filter(Boolean),
+            label: `cli:${row.clientId}`,
+          },
+          now,
+        );
         await ctx.db.patch(row._id, { status: "consumed", lastPolledAt: now });
         return {
           ok: true as const,
-          accessToken: minted.secret,
-          scope: minted.scopes.join(" "),
+          accessToken: pair.accessToken,
+          refreshToken: pair.refreshToken,
+          scope: pair.scopes.join(" "),
+          expiresInSeconds: pair.expiresInSeconds,
         };
       }
     }

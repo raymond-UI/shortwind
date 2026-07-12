@@ -15,7 +15,11 @@ import {
   __resetPublishLimiter,
   inMemoryPublishLimiter,
 } from "./lib/rate_limit.js";
-import { digestArtifact, makeHashList } from "./lib/content_scan.js";
+import {
+  digestArtifact,
+  makeDomainBlocklist,
+  makeHashList,
+} from "./lib/content_scan.js";
 import { computeBodySha } from "../shared/src/fingerprint.js";
 import type { Lockfile } from "../shared/src/lockfile-diff.js";
 
@@ -223,6 +227,56 @@ describe("publish-time CSAM hash-match (PRD §8.2 proactive hash-matching)", () 
     });
     const found = await t.query(api.pages.find, { bearer });
     expect(found).toHaveLength(1);
+  });
+});
+
+describe("publish-time outbound-domain reputation (#198 item 5)", () => {
+  it("BLOCKS a page linking to a blocklisted domain → quarantines it (NOT public)", async () => {
+    const t = convexTest(schema, modules);
+    __setPublishLimiter(inMemoryPublishLimiter({ capacity: 100, now: () => 0 }));
+    const { bearer } = await seedAuth(t);
+    // Empty hash list (no CSAM), but the outbound-domain source blocks evil.com.
+    __setScanSources({
+      hashList: makeHashList("ncmec-test", []),
+      domainSource: makeDomainBlocklist(["evil.com"]),
+    });
+
+    const html = '<div class="@card"><a href="https://evil.com/phish">click</a></div>';
+    await expect(
+      t.action(api.pages.publish, {
+        bearer,
+        ...publishArgs(html, "links-to-evil"),
+        recipes: await benignRecipes(),
+      }),
+    ).rejects.toThrow(/blocklisted domain/);
+
+    await t.run(async (ctx) => {
+      const pages = await ctx.db.query("pages").collect();
+      expect(pages).toHaveLength(1);
+      expect(pages[0]!.lifecycle).toBe("quarantined");
+      const cases = await ctx.db.query("moderation").collect();
+      expect(cases[0]!.reason).toContain("domain-blocklist:evil.com");
+    });
+    // Not public.
+    expect(await t.query(api.pages.find, { bearer })).toHaveLength(0);
+  });
+
+  it("ALLOWS a page whose outbound links are all clean", async () => {
+    const t = convexTest(schema, modules);
+    __setPublishLimiter(inMemoryPublishLimiter({ capacity: 100, now: () => 0 }));
+    const { bearer } = await seedAuth(t);
+    __setScanSources({
+      hashList: makeHashList("ncmec-test", []),
+      domainSource: makeDomainBlocklist(["evil.com"]),
+    });
+
+    const html = '<div class="@card"><a href="https://good.org">click</a></div>';
+    await t.action(api.pages.publish, {
+      bearer,
+      ...publishArgs(html, "links-to-good"),
+      recipes: await benignRecipes(),
+    });
+    expect(await t.query(api.pages.find, { bearer })).toHaveLength(1);
   });
 });
 

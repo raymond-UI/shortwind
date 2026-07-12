@@ -5,6 +5,7 @@ import {
   resolveHome,
   readActiveCloudAccount,
   readHomeLockfile,
+  updateAccountToken,
   type ResolvedHome,
 } from "../../home.js";
 import { type CandidateRecipe } from "../contract/fingerprint.js";
@@ -13,6 +14,7 @@ import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
   ApiError,
   createApiClient,
+  refreshAuthConfig,
   resolveBaseUrl,
   type ApiClient,
   type BundleFilePayload,
@@ -463,11 +465,17 @@ export async function publishBundleFromFile(
     candidates,
     domain: opts.domain,
   });
+  const bundleBaseUrl = resolveBaseUrl(deps.baseUrl);
   const client =
     deps.client ??
     (createApiClient({
-      baseUrl: resolveBaseUrl(deps.baseUrl),
-      token: account.token.accessToken,
+      baseUrl: bundleBaseUrl,
+      ...refreshAuthConfig({
+        baseUrl: bundleBaseUrl,
+        accessToken: account.token.accessToken,
+        refreshToken: account.token.refreshToken,
+        onTokenRefreshed: (t) => updateAccountToken(account.id, t),
+      }),
     }) as BundleCapableClient);
   return runBundle(client, payload, Boolean(opts.json));
 }
@@ -513,11 +521,17 @@ export async function publishFromFile(
     visibility: opts.visibility,
     idempotencyKey: opts.idempotencyKey,
   });
+  const publishBaseUrl = resolveBaseUrl(deps.baseUrl);
   const client =
     deps.client ??
     createApiClient({
-      baseUrl: resolveBaseUrl(deps.baseUrl),
-      token: account.token.accessToken,
+      baseUrl: publishBaseUrl,
+      ...refreshAuthConfig({
+        baseUrl: publishBaseUrl,
+        accessToken: account.token.accessToken,
+        refreshToken: account.token.refreshToken,
+        onTokenRefreshed: (t) => updateAccountToken(account.id, t),
+      }),
     });
   return runPublish(client, payload, Boolean(opts.json));
 }

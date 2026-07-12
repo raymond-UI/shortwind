@@ -14,8 +14,10 @@ import { applyLifecycle } from "./moderation.js";
 import {
   classifyContent,
   hashMatch,
+  screenOutboundHosts,
   type ClassifyConfig,
   type ClassifyResult,
+  type DomainReputationSource,
   type HashMatchResult,
   type KnownHashList,
 } from "./lib/content_scan.js";
@@ -37,6 +39,9 @@ import type { Lockfile } from "../shared/src/lockfile-diff.js";
 import { deriveSubdomain } from "../shared/src/slug.js";
 import { themePreamble } from "./lib/theme_preamble.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
+import { purgeEdgeByUrl } from "./lib/cloudflare_cache.js";
+import { loadScanSources } from "./lib/scan_config.js";
+import { scheduleCyberTipReport } from "./lib/ncmec.js";
 
 /**
  * Page publish + update — the thick path (CLOUD-23, PRD §6.2).
@@ -592,8 +597,17 @@ async function writeArtifactToR2(
 }
 
 async function invalidateEdge(url: string): Promise<void> {
-  // CLOUD-30: purge the Cloudflare edge cache for `url` (cache API / purge call).
-  void url;
+  // CLOUD-30 (#207): purge the Cloudflare edge cache for `url` so a republish
+  // serves the new artifact on the next request instead of the stale 60s-TTL
+  // copy. Runs on the PUBLISH path (`makeEdgePort` → runPublish, an ACTION where
+  // `fetch` is allowed). Fail-safe: `purgeEdgeByUrl` swallows every error and
+  // returns false (missing creds / no zone permission / CF 5xx), so a purge
+  // failure degrades to stale-until-60s, never a failed publish.
+  //
+  // NOTE: the LIFECYCLE paths (delete/kill/quarantine/expire) do NOT reach here —
+  // they run in mutations (no `fetch`) and their edge purge rides the scheduled
+  // `evictRouteAction` alongside the KV eviction (see `defaultLifecycleEdgePort`).
+  await purgeEdgeByUrl(url);
 }
 
 async function putEdgeRoute(route: {
@@ -660,7 +674,15 @@ export interface LifecycleEdgePort {
 }
 
 const defaultLifecycleEdgePort: LifecycleEdgePort = {
-  invalidate: (url) => invalidateEdge(url),
+  // Lifecycle cache purge does NOT run here. The delete/kill/quarantine/expiry
+  // call sites are MUTATIONS (Convex forbids `fetch`), and the `url` they pass is
+  // the apex/path summary URL (`https://<root>/<slug>`) — NOT the subdomain host
+  // a page is actually served (and cached) under. So the real edge purge rides
+  // the scheduled `evictRoute` action below, which runs in an ACTION and derives
+  // the correct `https://<subdomain>.<root>/` key (see lib/edge_kv.ts). This
+  // method is retained only for the port shape + the integration-test assertion
+  // that a lifecycle change drove `invalidate`.
+  invalidate: async (_url) => {},
   evictRoute: (route, ctx) => deleteEdgeRoute(route, ctx),
 };
 
@@ -710,17 +732,21 @@ export type PublishScanDecision =
   | { kind: "allow" }
   | { kind: "flag"; reason: string; score: number }
   | { kind: "block-csam"; listId: string; hash: string }
-  | { kind: "block-classifier"; reason: string; score: number };
+  | { kind: "block-classifier"; reason: string; score: number }
+  | { kind: "block-domain"; host: string };
 
 /**
- * The PURE scan decision: given the hash-match + classifier results, decide the
- * publish disposition. CSAM hash match is the hard block (drives the CSAM kill
- * seam); else the classifier gate (`block` rejects, `review` flags, `allow`
- * passes). No IO — the action does the materialize/kill/flag based on this.
+ * The PURE scan decision: given the hash-match, classifier, and outbound-domain
+ * results, decide the publish disposition. Hard blocks first (a known-CSAM hash
+ * match drives the CSAM kill seam; a classifier `block` verdict; a blocklisted
+ * outbound domain — #198 item 5), then the classifier `review` flag, else allow.
+ * No IO — the action does the materialize/kill/flag based on this. `domain`
+ * defaults to a pass so callers that don't screen domains are unaffected.
  */
 export function decidePublishScan(
   hash: HashMatchResult,
   classify: ClassifyResult,
+  domain: { ok: boolean; blockedHost?: string } = { ok: true },
 ): PublishScanDecision {
   if (hash.match) {
     return { kind: "block-csam", listId: hash.listId ?? "unknown", hash: hash.hash };
@@ -731,6 +757,9 @@ export function decidePublishScan(
       reason: `classifier:${classify.signals.map((s) => s.name).join(",") || "score"}`,
       score: classify.score,
     };
+  }
+  if (!domain.ok && domain.blockedHost) {
+    return { kind: "block-domain", host: domain.blockedHost };
   }
   if (classify.verdict === "review") {
     return {
@@ -751,23 +780,36 @@ export function decidePublishScan(
 export interface ScanSources {
   hashList: KnownHashList;
   classifyConfig?: ClassifyConfig;
+  /**
+   * #198 item 5 — the outbound-domain reputation source. Screens the hosts a
+   * published page links to / loads resources from against a blocklist. Defaults
+   * to a pass-everything source; the real feed is loaded from config
+   * (`lib/scan_config.loadScanSources`) at the start of the publish action.
+   */
+  domainSource?: DomainReputationSource;
 }
 
-let scanSources: ScanSources = {
-  // Empty until CLOUD-30b wires the real NCMEC / industry hash list. An empty
-  // list means hashMatch never fires offline — the proactive seam is present and
-  // exercised, the data source is deferred.
-  hashList: { id: "ncmec", has: () => false },
-};
+/**
+ * The active scan sources, loaded ONCE from the deployment env at module init
+ * ({@link loadScanSources} — `CSAM_HASHLIST` / `DOMAIN_BLOCKLIST`, #198 items
+ * 1 & 5). Absent env ⇒ the safe offline posture (match-nothing sources), so
+ * dev/test is unchanged and the proactive seams simply never fire until real
+ * data is configured. Loading at init (not per publish) means no race across
+ * concurrent actions; tests still override via {@link __setScanSources}.
+ */
+let scanSources: ScanSources = loadScanSources();
 
-/** Test-only: inject the scan sources (a hash list with a known hash, etc.). */
+/** Test-only / config: inject the scan sources (hash list, domain feed, etc.). */
 export function __setScanSources(sources: ScanSources): void {
   scanSources = sources;
 }
 
-/** Test-only: restore the production (empty hash list) scan sources. */
+/** Test-only: restore the production (empty) scan sources. */
 export function __resetScanSources(): void {
-  scanSources = { hashList: { id: "ncmec", has: () => false } };
+  scanSources = {
+    hashList: { id: "ncmec", has: () => false },
+    domainSource: { isBlocked: () => false },
+  };
 }
 
 /** The scan/limit outcome handed back to the publish action. */
@@ -778,8 +820,9 @@ export type PublishScanGate =
 /** A non-proceed scan result — the action turns this into a thrown error. */
 export type ScanRejection =
   | { code: "RATE_LIMITED"; retryAfter: number }
-  | { code: "BLOCKED_CSAM"; listId: string }
-  | { code: "BLOCKED_CONTENT"; reason: string; score: number };
+  | { code: "BLOCKED_CSAM"; listId: string; hash: string }
+  | { code: "BLOCKED_CONTENT"; reason: string; score: number }
+  | { code: "BLOCKED_DOMAIN"; host: string };
 
 /**
  * The publish-scan hook. Runs the rate-limit check then the content scan over the
@@ -809,7 +852,11 @@ export async function runPublishScan(
   const artifact = args.css ? `${args.css}\n${args.html}` : args.html;
   const hash = await hashMatch(artifact, scanSources.hashList);
   const classify = classifyContent(args.html, scanSources.classifyConfig);
-  const decision = decidePublishScan(hash, classify);
+  // #198 item 5: screen the page's outbound link/resource hosts against the
+  // domain-reputation blocklist (a known-bad phishing/malware host is a hard
+  // block, like the classifier).
+  const domain = await screenOutboundHosts(args.html, scanSources.domainSource);
+  const decision = decidePublishScan(hash, classify, domain);
 
   switch (decision.kind) {
     case "allow":
@@ -822,7 +869,7 @@ export async function runPublishScan(
     case "block-csam":
       return {
         proceed: false,
-        rejection: { code: "BLOCKED_CSAM", listId: decision.listId },
+        rejection: { code: "BLOCKED_CSAM", listId: decision.listId, hash: decision.hash },
       };
     case "block-classifier":
       return {
@@ -832,6 +879,11 @@ export async function runPublishScan(
           reason: decision.reason,
           score: decision.score,
         },
+      };
+    case "block-domain":
+      return {
+        proceed: false,
+        rejection: { code: "BLOCKED_DOMAIN", host: decision.host },
       };
   }
 }
@@ -871,6 +923,9 @@ export const commitScanBlock = internalMutation({
     kind: v.union(v.literal("csam"), v.literal("classifier")),
     reason: v.string(),
     listId: v.optional(v.string()),
+    // #198 item 2: the matched artifact digest, threaded so the auto-CSAM path can
+    // file a CyberTipline report referencing the file hash.
+    hash: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -898,6 +953,8 @@ export const commitScanBlock = internalMutation({
         caseFields: isCsam
           ? {
               // NCMEC 60-day preservation clock (matches moderation.killPage csam).
+              // ncmecReportId starts null; the scheduled CyberTipline submission
+              // (#198 item 2) stamps the real id on success.
               ncmecReportId: null,
               preservationExpiresAt: now + 60 * 24 * 60 * 60 * 1000,
             }
@@ -911,6 +968,18 @@ export const commitScanBlock = internalMutation({
         metadata: { kind: args.kind, reason: args.reason },
         createdAt: now,
       });
+      // #198 item 2: AUTO-detected CSAM has no operator to paste an NCMEC id, so
+      // schedule the CyberTipline submission (config-gated) which stamps the
+      // returned report id on the case. Only on the first (active→quarantined)
+      // block, not idempotent re-blocks.
+      if (isCsam) {
+        await scheduleCyberTipReport(ctx, {
+          pageId: args.pageId,
+          accountId: args.accountId,
+          listId: args.listId ?? "unknown",
+          hash: args.hash ?? "",
+        });
+      }
     }
 
     // LEGAL-CRITICAL: evict the KV route + purge the edge cache the publish just
@@ -1124,6 +1193,7 @@ export const publish = action({
           kind: "csam",
           reason: "proactive hash-match",
           listId: gate.rejection.listId,
+          hash: gate.rejection.hash,
         });
         throw new ConvexError({
           code: "CSAM_BLOCKED",
@@ -1144,6 +1214,21 @@ export const publish = action({
           code: "CONTENT_BLOCKED",
           message: "Publish blocked by the content classifier",
           score: gate.rejection.score,
+        });
+      }
+      if (gate.rejection.code === "BLOCKED_DOMAIN") {
+        // #198 item 5: a blocklisted outbound domain is a hard reject — quarantine
+        // through the same seam (case reason records the offending host) + evict.
+        await ctx.runMutation(internal.pages.commitScanBlock, {
+          pageId: blockedPageId,
+          accountId: auth.accountId as Id<"accounts">,
+          actorTokenId: auth.tokenId as Id<"tokens">,
+          kind: "classifier",
+          reason: `domain-blocklist:${gate.rejection.host}`,
+        });
+        throw new ConvexError({
+          code: "CONTENT_BLOCKED",
+          message: `Publish blocked: links to a blocklisted domain (${gate.rejection.host})`,
         });
       }
     }

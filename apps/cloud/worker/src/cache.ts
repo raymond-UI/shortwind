@@ -27,11 +27,14 @@ export function cacheArtifactResponse(
   // FRONT of the KV route lookup, so a long TTL means a deleted/updated/killed
   // page keeps serving its stale cached artifact for the whole TTL even after the
   // lifecycle path eagerly evicts the KV route (edge_kv.ts) — the eviction can't
-  // reach an already-cached entry. 60s bounds that staleness (takedowns, updates,
-  // visibility flips) to ~a minute. The instant fix — a Cloudflare zone
-  // purge-by-URL on delete/kill — is a follow-up (it needs a zone-scoped token;
-  // the account-owned CI token can't purge zones). Artifacts are immutable per
-  // version, so re-fetching on miss is cheap (R2 read + fast KV resolve).
+  // reach an already-cached entry. The instant fix — a Cloudflare zone
+  // purge-by-URL on republish/delete/kill — IS now wired on the Convex side
+  // (convex/lib/cloudflare_cache.ts `purgeEdgeByUrl`, driven by pages.ts publish +
+  // the scheduled edge_kv eviction; #207/#165), so takedowns are seconds, not a
+  // minute. The 60s TTL remains the fail-safe floor when a purge can't run (a
+  // deployment whose CF token lacks `Cache Purge` zone permission). Artifacts are
+  // immutable per version, so re-fetching on miss is cheap (R2 read + fast KV
+  // resolve).
   const seconds = init?.cacheSeconds ?? 60; // 60s edge TTL (see above)
   const headers = new Headers();
   headers.set("content-type", "text/html; charset=utf-8");

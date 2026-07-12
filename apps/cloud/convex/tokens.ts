@@ -4,6 +4,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { isScope, type Scope } from "../shared/src/scopes.js";
@@ -112,6 +113,16 @@ export function hasScopes(
 }
 
 // ---------------------------------------------------------------------------
+// #201 — token lifetimes (PRD §7.1: short-lived access token + refresh token so
+// revocation is a real kill switch, not advisory).
+// ---------------------------------------------------------------------------
+
+/** Access-token lifetime: 1 hour. The client refreshes on the 401 after expiry. */
+export const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
+/** Refresh-token lifetime: 90 days. Rotated (single-use) on every exchange. */
+export const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+// ---------------------------------------------------------------------------
 // Convex wrappers — thin shells over the pure logic above.
 // ---------------------------------------------------------------------------
 
@@ -143,20 +154,155 @@ export const issueToken = internalMutation({
     scopes: v.array(v.string()),
   }),
   handler: async (ctx, args) => {
-    const scopes = sanitizeScopes(args.scopes);
-    const secret = generateTokenSecret();
-    const tokenHash = await hashToken(secret);
-    const now = Date.now();
-    const tokenId = await ctx.db.insert("tokens", {
+    const minted = await mintAccessToken(ctx, {
       accountId: args.accountId,
-      tokenHash,
-      scopes,
+      scopes: args.scopes,
       label: args.label ?? null,
-      createdAt: now,
-      revokedAt: null,
       expiresAt: args.expiresAt ?? null,
     });
-    return { tokenId, secret, scopes };
+    return { tokenId: minted.tokenId, secret: minted.secret, scopes: minted.scopes };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// #201 — ctx-level mint helpers. Shared by `issueToken`, the device-code
+// exchange (`device.pollDeviceToken`), and the refresh-grant rotation below, so
+// there is ONE insertion path for each credential kind (no duplicated hashing /
+// insert logic, and no `runMutation`-from-a-mutation cross-call). They take a
+// `MutationCtx` and do the insert directly; the plaintext secret is returned to
+// the immediate caller and never persisted.
+// ---------------------------------------------------------------------------
+
+/** Args common to minting an access or refresh token. */
+interface MintArgs {
+  accountId: Id<"accounts">;
+  scopes: readonly string[];
+  label: string | null;
+  /** Hard expiry (epoch ms), or null for no expiry (access tokens pass a TTL). */
+  expiresAt: number | null;
+}
+
+/** Insert a short-lived access token into `tokens`. Returns the plaintext once. */
+export async function mintAccessToken(
+  ctx: MutationCtx,
+  args: MintArgs,
+): Promise<{ tokenId: Id<"tokens">; secret: string; scopes: Scope[] }> {
+  const scopes = sanitizeScopes(args.scopes);
+  const secret = generateTokenSecret();
+  const tokenHash = await hashToken(secret);
+  const now = Date.now();
+  const tokenId = await ctx.db.insert("tokens", {
+    accountId: args.accountId,
+    tokenHash,
+    scopes,
+    label: args.label,
+    createdAt: now,
+    revokedAt: null,
+    expiresAt: args.expiresAt,
+  });
+  return { tokenId, secret, scopes };
+}
+
+/** Insert a rotating refresh token into `refreshTokens`. Returns plaintext once. */
+export async function mintRefreshToken(
+  ctx: MutationCtx,
+  args: MintArgs,
+): Promise<{ tokenId: Id<"refreshTokens">; secret: string; scopes: Scope[] }> {
+  const scopes = sanitizeScopes(args.scopes);
+  const secret = generateTokenSecret();
+  const tokenHash = await hashToken(secret);
+  const now = Date.now();
+  const tokenId = await ctx.db.insert("refreshTokens", {
+    accountId: args.accountId,
+    tokenHash,
+    scopes,
+    label: args.label,
+    createdAt: now,
+    revokedAt: null,
+    expiresAt: args.expiresAt,
+  });
+  return { tokenId, secret, scopes };
+}
+
+/**
+ * Issue an access+refresh PAIR for an account (the shape the device-code
+ * exchange and the refresh-grant rotation both return). The access token gets a
+ * short {@link ACCESS_TOKEN_TTL_MS} TTL; the refresh token a long
+ * {@link REFRESH_TOKEN_TTL_MS} one. `nowMs` is injected so the two expiries key
+ * off one clock read.
+ */
+export async function mintTokenPair(
+  ctx: MutationCtx,
+  args: { accountId: Id<"accounts">; scopes: readonly string[]; label: string | null },
+  nowMs: number,
+): Promise<{ accessToken: string; refreshToken: string; scopes: Scope[]; expiresInSeconds: number }> {
+  const access = await mintAccessToken(ctx, {
+    accountId: args.accountId,
+    scopes: args.scopes,
+    label: args.label,
+    expiresAt: nowMs + ACCESS_TOKEN_TTL_MS,
+  });
+  const refresh = await mintRefreshToken(ctx, {
+    accountId: args.accountId,
+    scopes: args.scopes,
+    label: args.label,
+    expiresAt: nowMs + REFRESH_TOKEN_TTL_MS,
+  });
+  return {
+    accessToken: access.secret,
+    refreshToken: refresh.secret,
+    scopes: access.scopes,
+    expiresInSeconds: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
+  };
+}
+
+/**
+ * The RFC 6749 §6 `refresh_token` grant. Exchange a presented refresh secret for
+ * a NEW access+refresh pair, ROTATING the refresh (single-use): the presented
+ * refresh is revoked so a replay of a stolen refresh fails. Reuses the pure
+ * {@link evaluateToken} verdict — a revoked/expired/unknown refresh returns
+ * `invalid_grant` (RFC 6749 §5.2), never a new token. Called by the
+ * `/oauth/token` handler for `grant_type=refresh_token`.
+ */
+export const rotateRefreshToken = internalMutation({
+  args: { refreshToken: v.string() },
+  returns: v.union(
+    v.object({
+      ok: v.literal(true),
+      accessToken: v.string(),
+      refreshToken: v.string(),
+      scope: v.string(),
+      expiresInSeconds: v.number(),
+    }),
+    v.object({ ok: v.literal(false), error: v.literal("invalid_grant") }),
+  ),
+  handler: async (ctx, args) => {
+    const tokenHash = await hashToken(args.refreshToken);
+    const row = await ctx.db
+      .query("refreshTokens")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
+      .unique();
+    const now = Date.now();
+    const verdict = evaluateToken(row, now);
+    if (!verdict.valid) {
+      return { ok: false as const, error: "invalid_grant" as const };
+    }
+    const found = row as Doc<"refreshTokens">;
+    // Rotate: burn the presented refresh so it is single-use (a replayed refresh
+    // hits `evaluateToken` → revoked → invalid_grant).
+    await ctx.db.patch(found._id, { revokedAt: now });
+    const pair = await mintTokenPair(
+      ctx,
+      { accountId: found.accountId, scopes: verdict.scopes, label: found.label },
+      now,
+    );
+    return {
+      ok: true as const,
+      accessToken: pair.accessToken,
+      refreshToken: pair.refreshToken,
+      scope: pair.scopes.join(" "),
+      expiresInSeconds: pair.expiresInSeconds,
+    };
   },
 });
 

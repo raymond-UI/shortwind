@@ -42,6 +42,103 @@ function fakeFetch(
 
 const LOCKFILE: Lockfile = { version: 1, registry: "default", families: {} };
 
+describe("#201 transparent refresh on 401", () => {
+  /** A fetch fake that returns queued responses in order, recording each call. */
+  function sequencedFetch(
+    responses: Array<{ ok: boolean; status: number; body: string }>,
+    sink: Recorded[],
+  ): FetchLike {
+    let i = 0;
+    return async (url, init) => {
+      sink.push({ url, method: init?.method, headers: init?.headers, body: init?.body });
+      const r = responses[Math.min(i, responses.length - 1)]!;
+      i++;
+      return { ok: r.ok, status: r.status, text: async () => r.body };
+    };
+  }
+
+  it("refreshes once and retries the request with the new token", async () => {
+    const calls: Recorded[] = [];
+    let persisted: {
+      accessToken: string;
+      refreshToken?: string | undefined;
+    } | null = null;
+    const client = createApiClient({
+      baseUrl: "https://api.test",
+      token: "old-access",
+      refreshToken: "old-refresh",
+      tokenUrl: "https://api.test/oauth/token",
+      onTokenRefreshed: (t) => (persisted = t),
+      fetch: sequencedFetch(
+        [
+          { ok: false, status: 401, body: "{}" }, // first GET → expired access
+          {
+            ok: true,
+            status: 200,
+            body: JSON.stringify({
+              access_token: "new-access",
+              token_type: "bearer",
+              refresh_token: "new-refresh",
+              expires_in: 3600,
+              scope: "pages:read",
+            }),
+          }, // token endpoint
+          { ok: true, status: 200, body: JSON.stringify({ pages: [] }) }, // retried GET
+        ],
+        calls,
+      ),
+    });
+
+    const result = await client.findPages({});
+    expect(result).toEqual({ pages: [] });
+
+    // Three calls: the 401'd GET, the refresh POST, the retried GET.
+    expect(calls).toHaveLength(3);
+    expect(calls[0]!.headers?.Authorization).toBe("Bearer old-access");
+    expect(calls[1]!.url).toBe("https://api.test/oauth/token");
+    expect(calls[1]!.body).toContain("grant_type=refresh_token");
+    expect(calls[1]!.body).toContain("refresh_token=old-refresh");
+    // The retry carries the rotated access token.
+    expect(calls[2]!.headers?.Authorization).toBe("Bearer new-access");
+    // The rotated pair was handed to the persistence callback.
+    expect(persisted).toMatchObject({
+      accessToken: "new-access",
+      refreshToken: "new-refresh",
+    });
+  });
+
+  it("surfaces the 401 when there is no refresh token", async () => {
+    const calls: Recorded[] = [];
+    const client = createApiClient({
+      baseUrl: "https://api.test",
+      token: "dead",
+      fetch: fakeFetch({ ok: false, status: 401, body: "{}" }, calls),
+    });
+    await expect(client.findPages({})).rejects.toMatchObject({ kind: "unauthorized" });
+    expect(calls).toHaveLength(1); // no refresh attempt
+  });
+
+  it("surfaces the 401 when the refresh exchange itself fails", async () => {
+    const calls: Recorded[] = [];
+    const client = createApiClient({
+      baseUrl: "https://api.test",
+      token: "old",
+      refreshToken: "bad-refresh",
+      tokenUrl: "https://api.test/oauth/token",
+      fetch: sequencedFetch(
+        [
+          { ok: false, status: 401, body: "{}" }, // GET → 401
+          { ok: false, status: 400, body: JSON.stringify({ error: "invalid_grant" }) }, // refresh rejected
+        ],
+        calls,
+      ),
+    });
+    await expect(client.findPages({})).rejects.toMatchObject({ kind: "unauthorized" });
+    // GET + refresh attempt, but NO retry (refresh failed).
+    expect(calls).toHaveLength(2);
+  });
+});
+
 describe("resolveBaseUrl", () => {
   it("prefers explicit, then env, then the default, and trims slashes", () => {
     expect(resolveBaseUrl("https://x.test/")).toBe("https://x.test");
