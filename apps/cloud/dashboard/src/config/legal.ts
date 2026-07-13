@@ -3,7 +3,7 @@
  *  LEGAL / OPERATOR CONFIG  —  edit THIS file to make the legal pages yours.
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * The public legal pages (Terms, Acceptable Use, Privacy, DMCA) read every
+ * The public legal pages (Terms, Acceptable Use, Privacy, Copyright) read every
  * operator-specific value from here, so a self-hoster changes ONE file instead of
  * hunting through four documents.
  *
@@ -31,7 +31,7 @@ export const LEGAL_CONFIG = {
   // ── REQUIRED — set these (legal identity; do not guess on someone's behalf) ─
   /** Your legal entity, e.g. "Shortwind, Inc." — the party the Terms bind to. */
   legalEntity: "MZED STUDIO LIMITED",
-  /** Postal address for legal/DMCA correspondence. */
+  /** Postal address for legal/copyright correspondence. */
   mailingAddress:
     "8 Eastfield Close, Townhill, Swansea, SA1 6SG, United Kingdom (Company No. 15854033)",
   /** Governing law, e.g. "the State of Delaware, United States". */
@@ -55,21 +55,15 @@ export const LEGAL_CONFIG = {
     legal: "",
     privacy: "",
     abuse: "",
-    dmca: "",
+    copyright: "",
   } as Record<LegalEmailKind, string>,
 
-  // ── DMCA designated agent (REQUIRED for the U.S. §512 safe harbor) ────────
-  dmcaAgent: {
-    /** Name of your registered DMCA agent. */
-    name: "MZED STUDIO LIMITED (Attn: Copyright Agent)",
-    /** The agent's mailing address (may differ from the entity address). */
+  // ── Copyright / takedown contact (for notice-and-takedown; UK/EU safe harbour) ─
+  copyrightAgent: {
+    /** Who receives copyright complaints. */
+    name: "MZED STUDIO LIMITED (Attn: Copyright)",
+    /** The mailing address for written complaints (may differ from the entity). */
     address: "8 Eastfield Close, Townhill, Swansea, SA1 6SG, United Kingdom",
-    /**
-     * Note/reference for your U.S. Copyright Office agent registration. Registering
-     * is only needed if you want the U.S. DMCA §512 safe harbor; leave the
-     * placeholder until you have completed registration at dmca.copyright.gov.
-     */
-    registration: "[U.S. Copyright Office agent registration reference]",
   },
 
   // ── Subprocessors named in the Privacy Policy (pre-filled for Shortwind) ──
@@ -88,7 +82,7 @@ export const LEGAL_CONFIG = {
   ],
 } as const;
 
-export type LegalEmailKind = "legal" | "privacy" | "abuse" | "dmca";
+export type LegalEmailKind = "legal" | "privacy" | "abuse" | "copyright";
 
 /** The contact email for a purpose: an explicit override, else name@contactDomain. */
 export function legalEmail(kind: LegalEmailKind): string {

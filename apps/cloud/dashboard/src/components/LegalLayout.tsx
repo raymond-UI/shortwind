@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { LEGAL_CONFIG } from "@/config/legal";
 
 /**
- * Shared shell for the public legal pages (Terms, Acceptable Use, Privacy, DMCA).
+ * Shared shell for the public legal pages (Terms, Acceptable Use, Privacy, Copyright).
  *
  * These pages ship REAL, product-accurate copy — Shortwind Cloud is an
  * open-source product, so a self-hoster gets a working baseline they adapt to
@@ -19,7 +19,7 @@ export const LEGAL_DOCS = [
   { to: "/legal/terms", label: "Terms of Service" },
   { to: "/legal/acceptable-use", label: "Acceptable Use" },
   { to: "/legal/privacy", label: "Privacy Policy" },
-  { to: "/legal/dmca", label: "Copyright / DMCA" },
+  { to: "/legal/copyright", label: "Copyright" },
 ] as const;
 
 export function LegalLayout({

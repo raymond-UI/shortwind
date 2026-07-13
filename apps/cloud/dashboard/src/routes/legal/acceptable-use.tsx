@@ -56,7 +56,7 @@ function AupPage() {
         </li>
         <li>
           Infringes intellectual property or other rights (see our{" "}
-          <Link to="/legal/dmca">Copyright / DMCA Policy</Link>).
+          <Link to="/legal/copyright">Copyright &amp; Takedown Policy</Link>).
         </li>
         <li>
           Is harassing, threatening, defamatory, or incites violence, or promotes
@@ -112,7 +112,7 @@ function AupPage() {
         <a href={`mailto:${legalEmail("abuse")}`}>{legalEmail("abuse")}</a>. Reports are
         routed to a monitored channel. Please include the page URL and a short
         description of the problem. Copyright complaints should follow the process
-        in our <Link to="/legal/dmca">Copyright / DMCA Policy</Link>.
+        in our <Link to="/legal/copyright">Copyright &amp; Takedown Policy</Link>.
       </p>
 
       <h2>6. Enforcement</h2>

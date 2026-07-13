@@ -15,7 +15,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
 import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
-import { Route as LegalDmcaRouteImport } from './routes/legal/dmca'
+import { Route as LegalCopyrightRouteImport } from './routes/legal/copyright'
 import { Route as LegalAcceptableUseRouteImport } from './routes/legal/acceptable-use'
 import { Route as AuthedDeviceRouteImport } from './routes/_authed/device'
 import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
@@ -53,9 +53,9 @@ const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
   path: '/legal/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LegalDmcaRoute = LegalDmcaRouteImport.update({
-  id: '/legal/dmca',
-  path: '/legal/dmca',
+const LegalCopyrightRoute = LegalCopyrightRouteImport.update({
+  id: '/legal/copyright',
+  path: '/legal/copyright',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LegalAcceptableUseRoute = LegalAcceptableUseRouteImport.update({
@@ -101,7 +101,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthedDashboardRouteWithChildren
   '/device': typeof AuthedDeviceRoute
   '/legal/acceptable-use': typeof LegalAcceptableUseRoute
-  '/legal/dmca': typeof LegalDmcaRoute
+  '/legal/copyright': typeof LegalCopyrightRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/dashboard/$section': typeof AuthedDashboardSectionRoute
@@ -115,7 +115,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/device': typeof AuthedDeviceRoute
   '/legal/acceptable-use': typeof LegalAcceptableUseRoute
-  '/legal/dmca': typeof LegalDmcaRoute
+  '/legal/copyright': typeof LegalCopyrightRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/dashboard/$section': typeof AuthedDashboardSectionRoute
@@ -132,7 +132,7 @@ export interface FileRoutesById {
   '/_authed/dashboard': typeof AuthedDashboardRouteWithChildren
   '/_authed/device': typeof AuthedDeviceRoute
   '/legal/acceptable-use': typeof LegalAcceptableUseRoute
-  '/legal/dmca': typeof LegalDmcaRoute
+  '/legal/copyright': typeof LegalCopyrightRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/terms': typeof LegalTermsRoute
   '/_authed/dashboard/$section': typeof AuthedDashboardSectionRoute
@@ -149,7 +149,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/device'
     | '/legal/acceptable-use'
-    | '/legal/dmca'
+    | '/legal/copyright'
     | '/legal/privacy'
     | '/legal/terms'
     | '/dashboard/$section'
@@ -163,7 +163,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/device'
     | '/legal/acceptable-use'
-    | '/legal/dmca'
+    | '/legal/copyright'
     | '/legal/privacy'
     | '/legal/terms'
     | '/dashboard/$section'
@@ -179,7 +179,7 @@ export interface FileRouteTypes {
     | '/_authed/dashboard'
     | '/_authed/device'
     | '/legal/acceptable-use'
-    | '/legal/dmca'
+    | '/legal/copyright'
     | '/legal/privacy'
     | '/legal/terms'
     | '/_authed/dashboard/$section'
@@ -194,7 +194,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
   LegalAcceptableUseRoute: typeof LegalAcceptableUseRoute
-  LegalDmcaRoute: typeof LegalDmcaRoute
+  LegalCopyrightRoute: typeof LegalCopyrightRoute
   LegalPrivacyRoute: typeof LegalPrivacyRoute
   LegalTermsRoute: typeof LegalTermsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -244,11 +244,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LegalPrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/legal/dmca': {
-      id: '/legal/dmca'
-      path: '/legal/dmca'
-      fullPath: '/legal/dmca'
-      preLoaderRoute: typeof LegalDmcaRouteImport
+    '/legal/copyright': {
+      id: '/legal/copyright'
+      path: '/legal/copyright'
+      fullPath: '/legal/copyright'
+      preLoaderRoute: typeof LegalCopyrightRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/legal/acceptable-use': {
@@ -338,7 +338,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
   LegalAcceptableUseRoute: LegalAcceptableUseRoute,
-  LegalDmcaRoute: LegalDmcaRoute,
+  LegalCopyrightRoute: LegalCopyrightRoute,
   LegalPrivacyRoute: LegalPrivacyRoute,
   LegalTermsRoute: LegalTermsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
