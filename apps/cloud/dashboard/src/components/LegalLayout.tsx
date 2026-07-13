@@ -6,11 +6,8 @@ import { LEGAL_CONFIG } from "@/config/legal";
 /**
  * Shared shell for the public legal pages (Terms, Acceptable Use, Privacy, Copyright).
  *
- * These pages ship REAL, product-accurate copy — Shortwind Cloud is an
- * open-source product, so a self-hoster gets a working baseline they adapt to
- * their own entity + jurisdiction (the `[bracketed]` fields) and have reviewed by
- * counsel. The banner makes that adaptation duty explicit; the copy itself is not
- * a placeholder. Styled on the shared `index.css` tokens (mono display, `--term`
+ * All operator-specific values come from `src/config/legal.ts` (a fork adapts
+ * that one file). Styled on the shared `index.css` tokens (mono display, `--term`
  * accent, `font-sans` prose) so the legal surface reads as one product.
  */
 
@@ -41,19 +38,7 @@ export function LegalLayout({
 
       {/* The header spans the page; the prose stays a narrow, readable column. */}
       <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-10 sm:px-6">
-        {/* Template-adaptation notice (this is the "get counsel" gate). */}
-        <div className="rounded-lg border border-term/40 bg-card p-4 text-sm leading-relaxed text-muted-foreground">
-          <p>
-            <span className="font-mono font-semibold text-term">TEMPLATE — </span>
-            Shortwind Cloud is open source. This document is a real, product-
-            accurate starting point, not legal advice. If you self-host, replace
-            every <code className="text-foreground">[bracketed]</code> field with
-            your own legal entity, jurisdiction, and contact details, and have it
-            reviewed by qualified counsel before you rely on it.
-          </p>
-        </div>
-
-        <div className="mt-10">
+        <div>
           <p className="font-mono text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
             Legal
           </p>
