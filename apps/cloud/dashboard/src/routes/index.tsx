@@ -1,5 +1,5 @@
 import { Link, createFileRoute, useRouteContext } from "@tanstack/react-router";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { SiteHeader } from "@/components/SiteHeader";
 
 /**
  * Public marketing landing page for Shortwind Cloud (agent-native HTML hosting),
@@ -127,53 +127,8 @@ function LandingPage() {
       {/* Gradient hairline — the one hit of color, matching shortwind.dev. */}
       <div className="sw-hairline" aria-hidden="true" />
 
-      {/* Top bar — sticky, mirrors the site header. */}
-      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <a
-            href="https://shortwind.dev"
-            className="flex items-center gap-1.5 text-sm font-bold tracking-tight"
-          >
-            <span className="text-term">▚</span>
-            <span>shortwind</span>
-            <span className="text-muted-foreground">Cloud</span>
-          </a>
-          <nav className="flex items-center gap-2 text-xs">
-            <a
-              href="https://shortwind.dev/docs/cloud"
-              className="hidden rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground sm:inline-block"
-            >
-              docs
-            </a>
-            {isAuthenticated ? (
-              <Link
-                to="/dashboard/$section"
-                params={{ section: "overview" }}
-                className="rounded-md border border-border px-3 py-1.5 text-foreground transition-colors hover:bg-secondary"
-              >
-                Open dashboard
-              </Link>
-            ) : (
-              <>
-                <Link
-                  to="/login"
-                  className="hidden whitespace-nowrap rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground sm:inline-block"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  to="/signup"
-                  className="sw-btn-primary rounded-md px-3 py-1.5 font-medium"
-                >
-                  Get started
-                </Link>
-              </>
-            )}
-            <span className="mx-1 h-5 w-px bg-border" />
-            <ThemeToggle />
-          </nav>
-        </div>
-      </header>
+      {/* Top bar — the shared site header (also used on the legal pages). */}
+      <SiteHeader />
 
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* ── Hero: editorial left column + publish-replay artifact ─────── */}

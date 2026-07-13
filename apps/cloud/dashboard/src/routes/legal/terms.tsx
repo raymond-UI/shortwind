@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { LegalLayout } from "@/components/LegalLayout";
+import { LEGAL_CONFIG as C, legalEmail } from "@/config/legal";
 
 export const Route = createFileRoute("/legal/terms")({
   head: () => ({
@@ -25,8 +26,8 @@ function TermsPage() {
       <h2>1. Agreement to these terms</h2>
       <p>
         These Terms of Service (the <strong>“Terms”</strong>) are a binding
-        agreement between you and <strong>[Operator Legal Entity]</strong> (the{" "}
-        <strong>“Operator,” “we,” “us”</strong>), who operates Shortwind Cloud
+        agreement between you and <strong>{C.legalEntity}</strong> (the{" "}
+        <strong>“Operator,” “we,” “us”</strong>), who operates {C.serviceName}
         (the <strong>“Service”</strong>). By creating an account, publishing a
         page, or otherwise using the Service, you agree to these Terms and to our{" "}
         <Link to="/legal/acceptable-use">Acceptable Use Policy</Link> and{" "}
@@ -196,7 +197,7 @@ function TermsPage() {
         for lost profits, data, or goodwill, arising out of or relating to the
         Service. Our total liability for any claim relating to the Service will not
         exceed the greater of the amounts you paid us in the twelve months before
-        the claim or <strong>[USD 100]</strong>. Some jurisdictions do not allow
+        the claim or <strong>{C.liabilityCap || "USD 100"}</strong>. Some jurisdictions do not allow
         these limits, so they may not apply to you.
       </p>
 
@@ -218,9 +219,9 @@ function TermsPage() {
       <h2>17. Governing law and disputes</h2>
       <p>
         These Terms are governed by the laws of{" "}
-        <strong>[Governing Jurisdiction]</strong>, without regard to its
+        <strong>{C.governingJurisdiction}</strong>, without regard to its
         conflict-of-laws rules, and any dispute will be resolved in the courts
-        located in <strong>[Venue]</strong>, unless applicable law provides
+        located in <strong>{C.venue}</strong>, unless applicable law provides
         otherwise.
       </p>
 
@@ -236,8 +237,8 @@ function TermsPage() {
       <h2>19. Contact</h2>
       <p>
         Questions about these Terms:{" "}
-        <a href="mailto:[legal@your-domain]">[legal@your-domain]</a>,{" "}
-        <strong>[Operator Legal Entity]</strong>, <strong>[Mailing Address]</strong>.
+        <a href={`mailto:${legalEmail("legal")}`}>{legalEmail("legal")}</a>,{" "}
+        <strong>{C.legalEntity}</strong>, <strong>{C.mailingAddress}</strong>.
       </p>
     </LegalLayout>
   );

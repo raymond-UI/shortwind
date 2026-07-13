@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { LegalLayout } from "@/components/LegalLayout";
+import { LEGAL_CONFIG as C, legalEmail } from "@/config/legal";
 
 export const Route = createFileRoute("/legal/privacy")({
   head: () => ({
@@ -24,12 +25,13 @@ function PrivacyPage() {
     >
       <h2>1. Who we are</h2>
       <p>
-        <strong>[Operator Legal Entity]</strong> (the <strong>“Operator,” “we”</strong>)
-        operates Shortwind Cloud and is the controller of the personal data
+        <strong>{C.legalEntity}</strong> (the <strong>“Operator,” “we”</strong>)
+        operates {C.serviceName} and is the controller of the personal data
         described here. Contact us at{" "}
-        <a href="mailto:[privacy@your-domain]">[privacy@your-domain]</a>. If your
-        jurisdiction requires a data protection officer or representative, that is{" "}
-        <strong>[DPO / EU-UK Representative, if any]</strong>.
+        <a href={`mailto:${legalEmail("privacy")}`}>{legalEmail("privacy")}</a>.
+        {C.dpo
+          ? ` Our data-protection representative is ${C.dpo}.`
+          : ""}
       </p>
 
       <h2>2. Data we collect</h2>
@@ -102,32 +104,22 @@ function PrivacyPage() {
         (processors) who help us run the Service under contract, including:
       </p>
       <ul>
-        <li>
-          <strong>Edge / CDN, storage, and networking</strong> provider(s) that
-          serve and store your pages and handle custom-domain certificates
-          (e.g. Cloudflare).
-        </li>
-        <li>
-          <strong>Backend and database</strong> provider that runs the application
-          and stores account and control-plane data (e.g. Convex).
-        </li>
-        <li>
-          <strong>Payment processor</strong> for paid plans (e.g. Stripe).
-        </li>
-        <li>
-          <strong>Child-safety authorities:</strong> for suspected CSAM, we report to
-          NCMEC or the relevant authority and preserve the material as required by
-          law.
-        </li>
+        {C.subprocessors.map((s) => (
+          <li key={s.name}>
+            <strong>{s.name}:</strong> {s.role}.
+          </li>
+        ))}
         <li>
           <strong>Law enforcement or others</strong> where required by law, to
           protect rights and safety, or in a corporate transaction (merger, sale).
         </li>
       </ul>
-      <p>
-        Maintain the authoritative, current list of subprocessors at{" "}
-        <strong>[link to your subprocessor list]</strong>.
-      </p>
+      {C.subprocessorsUrl ? (
+        <p>
+          The authoritative, current list of subprocessors is at{" "}
+          <a href={C.subprocessorsUrl}>{C.subprocessorsUrl}</a>.
+        </p>
+      ) : null}
 
       <h2>6. Retention</h2>
       <ul>
@@ -172,8 +164,9 @@ function PrivacyPage() {
       </ul>
       <p>
         To exercise a right we don’t automate, contact{" "}
-        <a href="mailto:[privacy@your-domain]">[privacy@your-domain]</a>. You may also
-        have the right to complain to your local data protection authority.
+        <a href={`mailto:${legalEmail("privacy")}`}>{legalEmail("privacy")}</a>.
+        You may also have the right to complain to your local data protection
+        authority.
       </p>
 
       <h2>8. International transfers</h2>
@@ -206,9 +199,9 @@ function PrivacyPage() {
 
       <h2>12. Contact</h2>
       <p>
-        <strong>[Operator Legal Entity]</strong> —{" "}
-        <a href="mailto:[privacy@your-domain]">[privacy@your-domain]</a>,{" "}
-        <strong>[Mailing Address]</strong>.
+        <strong>{C.legalEntity}</strong> —{" "}
+        <a href={`mailto:${legalEmail("privacy")}`}>{legalEmail("privacy")}</a>,{" "}
+        <strong>{C.mailingAddress}</strong>.
       </p>
     </LegalLayout>
   );

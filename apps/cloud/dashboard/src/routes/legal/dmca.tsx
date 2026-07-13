@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { LegalLayout } from "@/components/LegalLayout";
+import { LEGAL_CONFIG as C, legalEmail } from "@/config/legal";
 
 export const Route = createFileRoute("/legal/dmca")({
   head: () => ({
@@ -36,22 +37,23 @@ function DmcaPage() {
       </p>
       <ul>
         <li>
-          <strong>[DMCA Agent Name]</strong>
+          <strong>{C.dmcaAgent.name}</strong>
         </li>
         <li>
-          <strong>[Operator Legal Entity]</strong>
+          <strong>{C.legalEntity}</strong>
         </li>
         <li>
-          <strong>[DMCA Agent Mailing Address]</strong>
+          <strong>{C.dmcaAgent.address}</strong>
         </li>
         <li>
-          Email: <a href="mailto:[dmca@your-domain]">[dmca@your-domain]</a>
+          Email:{" "}
+          <a href={`mailto:${legalEmail("dmca")}`}>{legalEmail("dmca")}</a>
         </li>
       </ul>
       <p>
         In the United States, register your designated agent with the U.S. Copyright
         Office to be eligible for the DMCA safe harbor:{" "}
-        <strong>[Copyright Office agent registration reference]</strong>.
+        <strong>{C.dmcaAgent.registration}</strong>.
       </p>
 
       <h2>3. How to file a takedown notice</h2>
@@ -135,7 +137,7 @@ function DmcaPage() {
       <p>
         For non-copyright complaints (for example trademark, privacy, or the content
         types in our <Link to="/legal/acceptable-use">Acceptable Use Policy</Link>),
-        contact <a href="mailto:[abuse@your-domain]">[abuse@your-domain]</a>.
+        contact <a href={`mailto:${legalEmail("abuse")}`}>{legalEmail("abuse")}</a>.
       </p>
     </LegalLayout>
   );

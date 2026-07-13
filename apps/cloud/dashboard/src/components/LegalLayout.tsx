@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { SiteHeader } from "@/components/SiteHeader";
+import { LEGAL_CONFIG } from "@/config/legal";
 
 /**
  * Shared shell for the public legal pages (Terms, Acceptable Use, Privacy, DMCA).
@@ -35,30 +36,10 @@ export function LegalLayout({
     <div className="min-h-screen bg-background font-sans text-foreground antialiased">
       <div className="sw-legal-hairline" aria-hidden="true" />
 
-      {/* Top bar — mirrors the marketing header. */}
-      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/85 font-mono backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between px-4 sm:px-6">
-          <a
-            href="https://shortwind.dev"
-            className="flex items-center gap-1.5 text-sm font-bold tracking-tight"
-          >
-            <span className="text-term">▚</span>
-            <span>shortwind</span>
-            <span className="text-muted-foreground">Cloud</span>
-          </a>
-          <div className="flex items-center gap-2 text-xs">
-            <Link
-              to="/"
-              className="rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Home
-            </Link>
-            <span className="mx-1 h-5 w-px bg-border" />
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      {/* The SAME shared site header as the landing page (no bespoke header). */}
+      <SiteHeader />
 
+      {/* The header spans the page; the prose stays a narrow, readable column. */}
       <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-10 sm:px-6">
         {/* Template-adaptation notice (this is the "get counsel" gate). */}
         <div className="rounded-lg border border-term/40 bg-card p-4 text-sm leading-relaxed text-muted-foreground">
@@ -84,8 +65,9 @@ export function LegalLayout({
           </p>
           <p className="mt-4 font-mono text-xs text-muted-foreground">
             Effective date:{" "}
-            <span className="text-foreground">[Effective Date]</span> · Operator:{" "}
-            <span className="text-foreground">[Operator Legal Entity]</span>
+            <span className="text-foreground">{LEGAL_CONFIG.effectiveDate}</span>{" "}
+            · Operator:{" "}
+            <span className="text-foreground">{LEGAL_CONFIG.legalEntity}</span>
           </p>
         </div>
 

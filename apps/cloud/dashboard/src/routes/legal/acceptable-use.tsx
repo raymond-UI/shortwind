@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { LegalLayout } from "@/components/LegalLayout";
+import { legalEmail } from "@/config/legal";
 
 export const Route = createFileRoute("/legal/acceptable-use")({
   head: () => ({
@@ -108,7 +109,7 @@ function AupPage() {
       <h2>5. Reporting abuse</h2>
       <p>
         If you find content on the Service that violates this policy, report it to{" "}
-        <a href="mailto:[abuse@your-domain]">[abuse@your-domain]</a>. Reports are
+        <a href={`mailto:${legalEmail("abuse")}`}>{legalEmail("abuse")}</a>. Reports are
         routed to a monitored channel. Please include the page URL and a short
         description of the problem. Copyright complaints should follow the process
         in our <Link to="/legal/dmca">Copyright / DMCA Policy</Link>.
