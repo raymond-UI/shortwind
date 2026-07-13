@@ -13,6 +13,10 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LegalTermsRouteImport } from './routes/legal/terms'
+import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
+import { Route as LegalCopyrightRouteImport } from './routes/legal/copyright'
+import { Route as LegalAcceptableUseRouteImport } from './routes/legal/acceptable-use'
 import { Route as AuthedDeviceRouteImport } from './routes/_authed/device'
 import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
 import { Route as AuthedDashboardIndexRouteImport } from './routes/_authed/dashboard/index'
@@ -37,6 +41,26 @@ const AuthedRoute = AuthedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalTermsRoute = LegalTermsRouteImport.update({
+  id: '/legal/terms',
+  path: '/legal/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
+  id: '/legal/privacy',
+  path: '/legal/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalCopyrightRoute = LegalCopyrightRouteImport.update({
+  id: '/legal/copyright',
+  path: '/legal/copyright',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalAcceptableUseRoute = LegalAcceptableUseRouteImport.update({
+  id: '/legal/acceptable-use',
+  path: '/legal/acceptable-use',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedDeviceRoute = AuthedDeviceRouteImport.update({
@@ -76,6 +100,10 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/dashboard': typeof AuthedDashboardRouteWithChildren
   '/device': typeof AuthedDeviceRoute
+  '/legal/acceptable-use': typeof LegalAcceptableUseRoute
+  '/legal/copyright': typeof LegalCopyrightRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/dashboard/$section': typeof AuthedDashboardSectionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/dashboard/': typeof AuthedDashboardIndexRoute
@@ -86,6 +114,10 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/device': typeof AuthedDeviceRoute
+  '/legal/acceptable-use': typeof LegalAcceptableUseRoute
+  '/legal/copyright': typeof LegalCopyrightRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/dashboard/$section': typeof AuthedDashboardSectionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/dashboard': typeof AuthedDashboardIndexRoute
@@ -99,6 +131,10 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/_authed/dashboard': typeof AuthedDashboardRouteWithChildren
   '/_authed/device': typeof AuthedDeviceRoute
+  '/legal/acceptable-use': typeof LegalAcceptableUseRoute
+  '/legal/copyright': typeof LegalCopyrightRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/_authed/dashboard/$section': typeof AuthedDashboardSectionRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/dashboard/': typeof AuthedDashboardIndexRoute
@@ -112,6 +148,10 @@ export interface FileRouteTypes {
     | '/signup'
     | '/dashboard'
     | '/device'
+    | '/legal/acceptable-use'
+    | '/legal/copyright'
+    | '/legal/privacy'
+    | '/legal/terms'
     | '/dashboard/$section'
     | '/api/auth/$'
     | '/dashboard/'
@@ -122,6 +162,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/device'
+    | '/legal/acceptable-use'
+    | '/legal/copyright'
+    | '/legal/privacy'
+    | '/legal/terms'
     | '/dashboard/$section'
     | '/api/auth/$'
     | '/dashboard'
@@ -134,6 +178,10 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_authed/dashboard'
     | '/_authed/device'
+    | '/legal/acceptable-use'
+    | '/legal/copyright'
+    | '/legal/privacy'
+    | '/legal/terms'
     | '/_authed/dashboard/$section'
     | '/api/auth/$'
     | '/_authed/dashboard/'
@@ -145,6 +193,10 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  LegalAcceptableUseRoute: typeof LegalAcceptableUseRoute
+  LegalCopyrightRoute: typeof LegalCopyrightRoute
+  LegalPrivacyRoute: typeof LegalPrivacyRoute
+  LegalTermsRoute: typeof LegalTermsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -176,6 +228,34 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/terms': {
+      id: '/legal/terms'
+      path: '/legal/terms'
+      fullPath: '/legal/terms'
+      preLoaderRoute: typeof LegalTermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/privacy': {
+      id: '/legal/privacy'
+      path: '/legal/privacy'
+      fullPath: '/legal/privacy'
+      preLoaderRoute: typeof LegalPrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/copyright': {
+      id: '/legal/copyright'
+      path: '/legal/copyright'
+      fullPath: '/legal/copyright'
+      preLoaderRoute: typeof LegalCopyrightRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/acceptable-use': {
+      id: '/legal/acceptable-use'
+      path: '/legal/acceptable-use'
+      fullPath: '/legal/acceptable-use'
+      preLoaderRoute: typeof LegalAcceptableUseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed/device': {
@@ -257,6 +337,10 @@ const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  LegalAcceptableUseRoute: LegalAcceptableUseRoute,
+  LegalCopyrightRoute: LegalCopyrightRoute,
+  LegalPrivacyRoute: LegalPrivacyRoute,
+  LegalTermsRoute: LegalTermsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
