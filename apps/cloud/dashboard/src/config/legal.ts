@@ -30,19 +30,20 @@ export const LEGAL_CONFIG = {
 
   // ── REQUIRED — set these (legal identity; do not guess on someone's behalf) ─
   /** Your legal entity, e.g. "Shortwind, Inc." — the party the Terms bind to. */
-  legalEntity: "[Your Legal Entity — e.g. Shortwind, Inc.]",
+  legalEntity: "MZED STUDIO LIMITED",
   /** Postal address for legal/DMCA correspondence. */
-  mailingAddress: "[Your Mailing Address]",
+  mailingAddress:
+    "8 Eastfield Close, Townhill, Swansea, SA1 6SG, United Kingdom (Company No. 15854033)",
   /** Governing law, e.g. "the State of Delaware, United States". */
-  governingJurisdiction: "[Your Governing Jurisdiction]",
+  governingJurisdiction: "England and Wales",
   /** Court venue for disputes, e.g. "New Castle County, Delaware". */
-  venue: "[Your Venue]",
+  venue: "the courts of England and Wales",
   /** The date these terms take effect, e.g. "13 July 2026". */
-  effectiveDate: "[Effective Date]",
+  effectiveDate: "13 July 2026",
 
   // ── OPTIONAL (blank "" hides the related sentence) ────────────────────────
   /** Liability cap amount; defaults to USD 100 if blank. */
-  liabilityCap: "USD 100",
+  liabilityCap: "GBP 100",
   /** EU/UK data-protection representative or DPO, if you have one. */
   dpo: "",
   /** Public URL of your subprocessor list, if you maintain one separately. */
@@ -60,10 +61,14 @@ export const LEGAL_CONFIG = {
   // ── DMCA designated agent (REQUIRED for the U.S. §512 safe harbor) ────────
   dmcaAgent: {
     /** Name of your registered DMCA agent. */
-    name: "[DMCA Agent Name]",
+    name: "MZED STUDIO LIMITED (Attn: Copyright Agent)",
     /** The agent's mailing address (may differ from the entity address). */
-    address: "[DMCA Agent Mailing Address]",
-    /** Note/reference for your U.S. Copyright Office agent registration. */
+    address: "8 Eastfield Close, Townhill, Swansea, SA1 6SG, United Kingdom",
+    /**
+     * Note/reference for your U.S. Copyright Office agent registration. Registering
+     * is only needed if you want the U.S. DMCA §512 safe harbor; leave the
+     * placeholder until you have completed registration at dmca.copyright.gov.
+     */
     registration: "[U.S. Copyright Office agent registration reference]",
   },
 
