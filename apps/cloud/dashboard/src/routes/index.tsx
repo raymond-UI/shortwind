@@ -569,6 +569,12 @@ function LandingPage() {
             >
               console
             </Link>
+            <Link to="/legal/terms" className="hover:text-foreground">
+              terms
+            </Link>
+            <Link to="/legal/privacy" className="hover:text-foreground">
+              privacy
+            </Link>
             <span className="text-muted-foreground/60">© 2026</span>
           </div>
         </footer>

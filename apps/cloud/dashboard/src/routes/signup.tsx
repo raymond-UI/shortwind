@@ -96,6 +96,11 @@ function SignupPage() {
           </button>
         </form>
         <p className="auth-foot">
+          By creating an account you agree to our{" "}
+          <Link to="/legal/terms">Terms</Link> and{" "}
+          <Link to="/legal/privacy">Privacy Policy</Link>.
+        </p>
+        <p className="auth-foot">
           Already have an account? <Link to="/login">Sign in</Link>
         </p>
       </div>
