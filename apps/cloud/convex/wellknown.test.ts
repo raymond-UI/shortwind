@@ -138,6 +138,7 @@ describe("api-catalog — RFC 9727 endpoint catalog", () => {
     expect(rels).toEqual([
       "find",
       "publish",
+      "publish-bundle",
       "update",
       "get",
       "delete",

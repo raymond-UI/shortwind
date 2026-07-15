@@ -125,6 +125,14 @@ export function buildApiCatalog(baseUrl: string): {
         scope: SCOPE_PAGES_WRITE,
       },
       {
+        rel: "publish-bundle",
+        method: "POST",
+        href: `${issuer}/v1/bundles`,
+        description:
+          "Publish a linked MULTI-PAGE site: an entry HTML file plus sibling pages, each served at its authored path under one subdomain (no link rewriting).",
+        scope: SCOPE_PAGES_WRITE,
+      },
+      {
         rel: "update",
         method: "PATCH",
         href: `${issuer}/v1/pages/{id}`,

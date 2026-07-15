@@ -15,6 +15,13 @@
       "scope": "pages:write"
     },
     {
+      "rel": "publish-bundle",
+      "method": "POST",
+      "href": "https://cloud.shortwind.dev/v1/bundles",
+      "description": "Publish a linked MULTI-PAGE site: an entry HTML file plus sibling pages, each served at its authored path under one subdomain (no link rewriting).",
+      "scope": "pages:write"
+    },
+    {
       "rel": "update",
       "method": "PATCH",
       "href": "https://cloud.shortwind.dev/v1/pages/{id}",
