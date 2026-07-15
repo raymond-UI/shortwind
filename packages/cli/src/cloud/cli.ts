@@ -118,7 +118,7 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
   registerAuthVerbs(cli);
 
   cli
-    .command("publish <file>", "Create a page from an HTML file (POST /v1/pages)")
+    .command("publish <file>", "Publish an HTML file as a page, or its directory as a linked multi-page site with --bundle")
     .option("--domain <slug>", "Desired subdomain/slug")
     .option("--tag <tag>", "Attach a tag (repeatable)")
     .option("--visibility <level>", "public | unlisted | private")
@@ -248,7 +248,7 @@ export function buildRealCli(): CAC {
   registerAuthVerbs(cli);
 
   cli
-    .command("publish <file>", "Create a page from an HTML file (POST /v1/pages)")
+    .command("publish <file>", "Publish an HTML file as a page, or its directory as a linked multi-page site with --bundle")
     .option("--domain <slug>", "Desired subdomain/slug")
     .option("--tag <tag>", "Attach a tag (repeatable)")
     .option("--visibility <level>", "public | unlisted | private")
