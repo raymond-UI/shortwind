@@ -27,10 +27,12 @@ describe("command registration", () => {
     }
   });
 
-  it("registers exactly the nine verbs (no stray commands)", () => {
+  it("registers exactly the PRD verbs + utility commands (no stray commands)", () => {
     // cac adds a default "" command for the bare invocation; ignore it.
     const verbs = registeredVerbs(buildCli()).filter((v) => v.length > 0);
-    expect(new Set(verbs)).toEqual(new Set(VERBS));
+    // The nine PRD §4 agent verbs plus the local utility commands (auth helpers).
+    const UTILITY = ["whoami"];
+    expect(new Set(verbs)).toEqual(new Set([...VERBS, ...UTILITY]));
   });
 });
 
