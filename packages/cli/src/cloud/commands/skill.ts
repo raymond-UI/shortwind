@@ -60,9 +60,9 @@ const VERB_DOCS: VerbDoc[] = [
     blurb: "Locate existing pages — the account is the only memory; find before you publish.",
   },
   {
-    usage: "shortwind cloud publish <file.html> [--domain <slug>] [--tag <t>] [--visibility <level>] [--json]",
+    usage: "shortwind cloud publish <file.html> [--bundle] [--domain <slug>] [--tag <t>] [--visibility <level>] [--json]",
     route: "POST /v1/pages",
-    blurb: "Create a NEW page from an HTML file. A slug conflict returns the existing id — use update.",
+    blurb: "Create a NEW page from an HTML file — or, with --bundle, publish <file>'s whole directory as ONE linked multi-page site (see Multi-page sites below). A slug conflict returns the existing id — use update.",
   },
   {
     usage: "shortwind cloud update <id> <file.html> [--json]",
@@ -124,6 +124,25 @@ export function renderCloudSkill(registry: Registry): string {
     parts.push(`- \`${v.usage}\``);
     parts.push(`  - ${v.route} — ${v.blurb}`);
   }
+  parts.push("");
+  parts.push("## Multi-page sites");
+  parts.push("");
+  parts.push(
+    "To publish a SITE of multiple linked HTML pages (not a single page), pass `--bundle` to `publish`:",
+  );
+  parts.push("");
+  parts.push(
+    "- `shortwind cloud publish index.html --bundle` deploys the entry file's WHOLE directory of `.html` files as one linked unit (POST /v1/bundles). The entry (`index.html`) is the page the slug/subdomain routes to.",
+  );
+  parts.push(
+    "- Each file serves at its AUTHORED path under the same subdomain: `index.html` → `https://<slug>.shortwind.app/`, `docs/guide.html` → `https://<slug>.shortwind.app/docs/guide.html`.",
+  );
+  parts.push(
+    "- Relative links between pages work as authored — there is NO link rewriting. Write `<a href=\"docs/guide.html\">` normally.",
+  );
+  parts.push(
+    "- The whole bundle is one unit for versioning, visibility, and takedown (it inherits the entry page's lifecycle).",
+  );
   parts.push("");
   parts.push("## Recipe palette");
   parts.push("");

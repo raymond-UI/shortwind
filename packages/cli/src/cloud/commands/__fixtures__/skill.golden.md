@@ -15,8 +15,8 @@ Every verb authenticates with the active account's token (run `shortwind cloud l
 
 - `shortwind cloud find [--q <text>] [--domain <d>] [--tag <t>] [--json]`
   - GET /v1/pages — Locate existing pages — the account is the only memory; find before you publish.
-- `shortwind cloud publish <file.html> [--domain <slug>] [--tag <t>] [--visibility <level>] [--json]`
-  - POST /v1/pages — Create a NEW page from an HTML file. A slug conflict returns the existing id — use update.
+- `shortwind cloud publish <file.html> [--bundle] [--domain <slug>] [--tag <t>] [--visibility <level>] [--json]`
+  - POST /v1/pages — Create a NEW page from an HTML file — or, with --bundle, publish <file>'s whole directory as ONE linked multi-page site (see Multi-page sites below). A slug conflict returns the existing id — use update.
 - `shortwind cloud update <id> <file.html> [--json]`
   - PATCH /v1/pages/{id} — Republish HTML to the SAME URL as a new version. Use the id find/publish returned.
 - `shortwind cloud get <id> [--json]`
@@ -27,6 +27,15 @@ Every verb authenticates with the active account's token (run `shortwind cloud l
   - PATCH /v1/pages/{id}/visibility — Set the access level. Validated client-side against the three known levels.
 - `shortwind cloud bind-domain <id> <hostname> [--json]`
   - POST /v1/pages/{id}/domain — Bind a custom hostname (requires the domains:bind scope — re-login with --scope).
+
+## Multi-page sites
+
+To publish a SITE of multiple linked HTML pages (not a single page), pass `--bundle` to `publish`:
+
+- `shortwind cloud publish index.html --bundle` deploys the entry file's WHOLE directory of `.html` files as one linked unit (POST /v1/bundles). The entry (`index.html`) is the page the slug/subdomain routes to.
+- Each file serves at its AUTHORED path under the same subdomain: `index.html` → `https://<slug>.shortwind.app/`, `docs/guide.html` → `https://<slug>.shortwind.app/docs/guide.html`.
+- Relative links between pages work as authored — there is NO link rewriting. Write `<a href="docs/guide.html">` normally.
+- The whole bundle is one unit for versioning, visibility, and takedown (it inherits the entry page's lifecycle).
 
 ## Recipe palette
 
