@@ -1,0 +1,23 @@
+---
+// Ledger-style section header: a small mono label, a hairline that fades to
+// nothing, and an optional right-aligned meta token. The "index" device the
+// landing page's aesthetic is built around — gives each section a scannable
+// header without adding weight or color.
+interface Props {
+  label: string;
+  meta?: string;
+}
+const { label, meta } = Astro.props;
+---
+
+<div class="flex items-center gap-4 select-none">
+  <span class="font-mono text-[0.7rem] font-medium tracking-[0.25em] text-muted-foreground uppercase">
+    {label}
+  </span>
+  <span class="h-px flex-1 bg-gradient-to-r from-border to-transparent"></span>
+  {meta && (
+    <span class="font-mono text-[0.7rem] tracking-wide text-muted-foreground/50 tabular-nums">
+      {meta}
+    </span>
+  )}
+</div>
