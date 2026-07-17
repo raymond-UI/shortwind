@@ -1,5 +1,6 @@
 import { cac, type CAC } from "cac";
 import { login } from "./commands/login.js";
+import { runWhoami } from "./commands/whoami.js";
 import { initGlobal } from "./commands/init-global.js";
 import {
   publish,
@@ -109,6 +110,16 @@ function registerAuthVerbs(cli: CAC): void {
       process.stderr.write(
         `${result.created ? "created" : "already initialized"} Shortwind home at ${result.home}\n`,
       );
+    });
+
+  cli
+    .command("whoami", "Show the active cloud account (identity, scopes, endpoint)")
+    .option("--endpoint <url>", "Cloud API origin")
+    .option("--json", "Emit machine-readable JSON")
+    .action((opts: { endpoint?: string; json?: boolean }) => {
+      const { output, loggedIn } = runWhoami(opts);
+      process.stdout.write(output + "\n");
+      if (!loggedIn) process.exitCode = 1;
     });
 }
 
