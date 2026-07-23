@@ -8,6 +8,7 @@ import {
   writeHomeLockfile,
   type HomeEnv,
 } from "../../home.js";
+import { tryInstallCloudSkill } from "../skill-install.js";
 
 /**
  * `init --global` — one-time setup of the singular global Shortwind home
@@ -53,6 +54,13 @@ export interface InitGlobalResult {
   endpoint: string | null;
   /** The registry origin written into the lockfile. */
   registry: string;
+  /**
+   * Where the cloud SKILL was installed for agent discovery
+   * (`~/.claude/skills/shortwind-cloud/SKILL.md`), or `null` if the write
+   * failed. Refreshed on every run — even the idempotent no-op path — so a
+   * re-run repairs a deleted discovery drop without `--force`.
+   */
+  skillInstalled: string | null;
 }
 
 /** The default cloud palette registry origin recorded in a fresh lockfile. */
@@ -71,7 +79,8 @@ export async function initGlobal(
   const lockExists = existsSync(paths.lockfile);
   const alreadyInitialized = lockExists && existsSync(skillPath);
 
-  // Idempotent: an initialized home is left exactly as-is unless --force.
+  // Idempotent: an initialized home is left exactly as-is unless --force. The
+  // discovery drop still refreshes, so a re-run repairs a deleted skill.
   if (alreadyInitialized && !opts.force) {
     return {
       created: false,
@@ -81,6 +90,7 @@ export async function initGlobal(
       skillPath,
       endpoint: opts.endpoint ?? null,
       registry,
+      skillInstalled: tryInstallCloudSkill(env),
     };
   }
 
@@ -97,6 +107,7 @@ export async function initGlobal(
     skillPath,
     endpoint: opts.endpoint ?? null,
     registry,
+    skillInstalled: tryInstallCloudSkill(env),
   };
 }
 
