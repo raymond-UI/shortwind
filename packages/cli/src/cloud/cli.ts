@@ -87,6 +87,11 @@ function registerAuthVerbs(cli: CAC): void {
           process.stderr.write(
             `logged in as ${result.account.label} (active account: ${result.account.id})\n`,
           );
+          if (result.skillInstalled) {
+            process.stderr.write(
+              `agents can now discover Cloud — installed skill: ${result.skillInstalled}\n`,
+            );
+          }
         } else {
           process.stderr.write(`login ${result.reason}\n`);
           process.exitCode = 1;
@@ -110,6 +115,11 @@ function registerAuthVerbs(cli: CAC): void {
       process.stderr.write(
         `${result.created ? "created" : "already initialized"} Shortwind home at ${result.home}\n`,
       );
+      if (result.skillInstalled) {
+        process.stderr.write(
+          `agents can now discover Cloud — installed skill: ${result.skillInstalled}\n`,
+        );
+      }
     });
 
   cli
