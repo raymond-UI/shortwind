@@ -1,6 +1,6 @@
 {
   "name": "@shortwind/next",
-  "version": "0.1.0-beta.22",
+  "version": "0.1.0-beta.25",
   "description": "Next.js plugin for Shortwind. Webpack and Turbopack.",
   "type": "module",
   "main": "./dist/index.js",
