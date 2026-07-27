@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import type { Env } from "../src/env";
-import { putArtifact, artifactKey, type ArtifactMeta } from "../src/r2";
+import {
+  putArtifact,
+  artifactKey,
+  currentArtifactKey,
+  type ArtifactMeta,
+} from "../src/r2";
 import {
   lookupRoute,
   type CachedRoute,
@@ -36,12 +41,12 @@ function meta(over: Partial<ArtifactMeta> = {}): ArtifactMeta {
   };
 }
 
+// #232: version-INDEPENDENT route record — the served object is derived from
+// accountId + pageId (`.../current.html`), not carried on the record.
 function route(over: Partial<CachedRoute> = {}): CachedRoute {
   return {
     pageId: "page_40",
     accountId: "acct_40",
-    version: 1,
-    artifactKey: artifactKey("acct_40", "page_40", HASH),
     lifecycle: "active",
     visibility: "public",
     ...over,
@@ -51,7 +56,9 @@ function route(over: Partial<CachedRoute> = {}): CachedRoute {
 const HTML = "<!doctype html><html><body>bound custom domain</body></html>";
 
 async function seedArtifact(r: CachedRoute, html = HTML): Promise<void> {
-  await putArtifact(E, r.artifactKey, html, meta());
+  const m = meta({ accountId: r.accountId, pageId: r.pageId });
+  await putArtifact(E, artifactKey(r.accountId, r.pageId, HASH), html, m);
+  await putArtifact(E, currentArtifactKey(r.accountId, r.pageId), html, m);
 }
 
 function deps(over: Partial<RouterDeps> = {}): RouterDeps {

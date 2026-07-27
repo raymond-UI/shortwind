@@ -256,6 +256,46 @@ describe("killPage — fast global kill (PRD §8.2/§8.4)", () => {
     expect(found.map((p) => p.id)).not.toContain(pageId);
   });
 
+  it("#232: seals BOTH live R2 keys — the hashed object and current.html", async () => {
+    const t = convexTest(schema, modules);
+    __setKillEdgePort(recordingPort().port);
+    const { accountId, bearer } = await seedAuth(t);
+    const pageId = await publishPage(t, bearer, "seal-both");
+
+    const res = await t.mutation(api.moderation.killPage, {
+      bearer,
+      pageId: pageId as never,
+      reason: "malware payload",
+      category: "malware",
+    });
+
+    // The seal runs in a scheduled action (a mutation cannot fetch), so the
+    // contract we can assert here is the JOB ARGS.
+    const jobs = await t.run(async (ctx) =>
+      ctx.db.system.query("_scheduled_functions").collect(),
+    );
+    const seal = jobs.find((j) => j.name.includes("r2_seal"));
+    expect(seal).toBeDefined();
+    const args = seal!.args[0] as {
+      liveKey: string;
+      sealedKey: string;
+      stableKey?: string;
+    };
+
+    // The version-scoped hashed object is copied to the sealed prefix, then
+    // deleted (see lib/r2_seal.test.ts for the S3 trace).
+    expect(args.sealedKey).toBe(res.preservedR2Key);
+    expect(args.liveKey.endsWith(".html")).toBe(true);
+    expect(args.sealedKey).toBe(`quarantine/${args.liveKey}`);
+
+    // #232: the SECOND live copy of the same bytes. Without this the material
+    // survives at `current.html` — unreachable over HTTP (the router refuses a
+    // quarantined page) but still fetchable via the S3 API, which breaks the
+    // seal's stated guarantee for a legal takedown.
+    expect(args.stableKey).toBe(`artifacts/${accountId}/${pageId}/current.html`);
+    expect(args.stableKey).not.toBe(args.liveKey);
+  });
+
   it("CSAM kill sets a ~60-day preservation clock + records ncmecReportId", async () => {
     const t = convexTest(schema, modules);
     const { bearer } = await seedAuth(t);

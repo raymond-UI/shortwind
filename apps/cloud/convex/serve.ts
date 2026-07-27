@@ -17,7 +17,7 @@ import { normalizeBundlePath, normalizeServePath } from "./lib/bundle_path.js";
  *
  * Both are PUBLIC Convex queries (a query can read ctx.db). `resolveRoute` needs
  * NO auth — it returns exactly the {@link ServeRoute} the Worker needs to serve
- * or refuse (pageId/accountId/version/artifactKey/lifecycle/visibility), and the
+ * or refuse (pageId/accountId/lifecycle/visibility), and the
  * Worker enforces visibility/lifecycle itself. `validateRouteToken` re-uses the
  * standard {@link requireRead} guard to validate a bearer for a PRIVATE page.
  *
@@ -34,11 +34,26 @@ import { normalizeBundlePath, normalizeServePath } from "./lib/bundle_path.js";
 // `CachedRoute` field-for-field (the Worker JSON-parses this straight into one).
 // ---------------------------------------------------------------------------
 
+/**
+ * #232 — VERSION-INDEPENDENT. The projection used to carry `version` + the
+ * page version's hashed `artifactKey`; the Worker cached that record in KV, so
+ * every republish left it pointing at the previous version's R2 object for up to
+ * the 1h route TTL. What remains changes only on a lifecycle/visibility change
+ * (both of which evict eagerly), so a republish invalidates nothing.
+ *
+ * The Worker derives the object to stream from `accountId` + `pageId`
+ * (`artifacts/<accountId>/<pageId>/current.html`, overwritten by every publish).
+ * The two optional keys are the exceptions:
+ *   - `fileKey` — a bundle SIBLING file, a different document from the entry
+ *     page and therefore not at the entry's `current.html`. Authoritative.
+ *   - `fallbackArtifactKey` — MIGRATION SHIM: the current version's immutable
+ *     hashed object, read ONLY when `current.html` is absent (a page last
+ *     published before this shipped). Self-healing — the first republish after
+ *     deploy writes `current.html` and the shim is never read again.
+ */
 const serveRouteObject = v.object({
   pageId: v.string(),
   accountId: v.string(),
-  version: v.number(),
-  artifactKey: v.string(),
   lifecycle: v.union(
     v.literal("active"),
     v.literal("quarantined"),
@@ -49,9 +64,26 @@ const serveRouteObject = v.object({
     v.literal("unlisted"),
     v.literal("private"),
   ),
+  fileKey: v.optional(v.string()),
+  fallbackArtifactKey: v.optional(v.string()),
 });
 
 const serveRouteValidator = v.union(serveRouteObject, v.null());
+
+/**
+ * The TS mirror of `serveRouteObject`. Both resolvers annotate their return with
+ * it so the two branches (entry page vs bundle sibling) collapse into ONE shape
+ * with optional keys instead of a union of concrete object literals — callers
+ * (and the Worker's `CachedRoute`) see `fileKey?` / `fallbackArtifactKey?`.
+ */
+export type ServeRoute = {
+  pageId: string;
+  accountId: string;
+  lifecycle: Doc<"pages">["lifecycle"];
+  visibility: Doc<"pages">["visibility"];
+  fileKey?: string;
+  fallbackArtifactKey?: string;
+};
 
 /**
  * The account-domain resolver can also ask the Worker to REDIRECT: a bundle
@@ -91,20 +123,23 @@ export function subdomainLabel(host: string): string | null {
   return label;
 }
 
-/** Project a page row + its current version into the Worker route contract. The
- * artifactKey lives on the current pageVersions row; null when unpublished. */
+/**
+ * Project a page row + its current version into the Worker route contract. The
+ * version row is still required (null when unpublished → no route), but only to
+ * supply the migration fallback key: the Worker streams the stable
+ * `current.html` derived from accountId + pageId (#232).
+ */
 function toServeRoute(
   page: Doc<"pages">,
   version: Doc<"pageVersions"> | null,
-) {
+): ServeRoute | null {
   if (version === null) return null;
   return {
     pageId: page._id as string,
     accountId: page.accountId as string,
-    version: page.currentVersion,
-    artifactKey: version.artifactKey,
     lifecycle: page.lifecycle,
     visibility: page.visibility,
+    fallbackArtifactKey: version.artifactKey,
   };
 }
 
@@ -128,7 +163,7 @@ function toServeRoute(
 export const resolveRoute = query({
   args: { host: v.string(), path: v.string() },
   returns: serveRouteValidator,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<ServeRoute | null> => {
     // SUBDOMAIN-ONLY: a per-page subdomain host (`<label>.shortwind.dev`, label
     // not reserved/system) resolves the page by its globally-unique `subdomain`
     // via the `by_subdomain` index. Any other host (apex, reserved label,
@@ -160,13 +195,14 @@ export const resolveRoute = query({
           : bundleRows.reduce((max, r) => (r.version > max.version ? r : max));
       const file = bundle?.files.find((f) => f.path === subPath);
       if (bundle && file) {
+        // A bundle SIBLING: its own frozen document, so it carries an explicit
+        // `fileKey` rather than resolving to the entry page's `current.html`.
         return {
           pageId: page._id as string,
           accountId: page.accountId as string,
-          version: bundle.version,
-          artifactKey: file.artifactKey,
           lifecycle: page.lifecycle,
           visibility: page.visibility,
+          fileKey: file.artifactKey,
         };
       }
     }
@@ -208,7 +244,10 @@ export function slugFromPath(path: string): string | null {
 export const resolveAccountDomainRoute = query({
   args: { host: v.string(), path: v.string() },
   returns: accountResolveValidator,
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<ServeRoute | { redirectTo: string } | null> => {
     const host = args.host.toLowerCase().replace(/\.$/, "");
     if (host === "") return null;
 
@@ -271,13 +310,14 @@ export const resolveAccountDomainRoute = query({
     if (!bundle) return null;
     const file = bundle.files.find((f) => f.path === subPath);
     if (file) {
+      // Bundle SIBLING (see the subdomain resolver): explicit key, not the
+      // entry page's stable `current.html`.
       return {
         pageId: page._id as string,
         accountId: page.accountId as string,
-        version: bundle.version,
-        artifactKey: file.artifactKey,
         lifecycle: page.lifecycle,
         visibility: page.visibility,
+        fileKey: file.artifactKey,
       };
     }
     // Unknown sub-path within a bundle → fall back to the entry (matches the

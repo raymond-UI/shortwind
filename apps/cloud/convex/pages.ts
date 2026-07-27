@@ -502,11 +502,14 @@ export function makeStoragePort(): StoragePort {
   };
 }
 
-/** Build the edge port. Real invalidation / KV route put deferred to CLOUD-30. */
+/**
+ * Build the edge port. Cache purge only (#232): a publish no longer writes the
+ * KV route, because the route record is version-independent and the Worker
+ * populates it read-through on a cold miss.
+ */
 function makeEdgePort(): EdgePort {
   return {
     invalidate: async (url) => invalidateEdge(url),
-    putRoute: async (route) => putEdgeRoute(route),
   };
 }
 
@@ -610,22 +613,14 @@ async function invalidateEdge(url: string): Promise<void> {
   await purgeEdgeByUrl(url);
 }
 
-async function putEdgeRoute(route: {
-  pageId: string;
-  slug: string;
-  subdomain: string;
-  version: number;
-  artifactKey: string;
-}): Promise<void> {
-  // CLOUD-30: write the hostname → page-version route into the Worker KV
-  // namespace consumed by worker/src/kv.ts so the hot path resolves the artifact.
-  // Serving is subdomain-only, so the one key that maps to this page is the
-  // per-page subdomain key (`route:{subdomain}.{root}/`). The hot path lazily
-  // populates KV on a cold miss, so an eager put here is an optimization, not
-  // required — left as a documented placeholder (the read-through fallback
-  // resolves the subdomain route).
-  void route;
-}
+// #232: the `putEdgeRoute` placeholder that used to live here is GONE. It was an
+// explicit no-op (`void route`) that made the publish path look like it kept the
+// KV route fresh while the record silently went stale on every republish. It is
+// removed rather than implemented because the route record no longer depends on
+// the version (worker/src/kv.ts `CachedRoute`): the Worker's read-through cold
+// miss populates it correctly once, and a republish invalidates nothing. Writing
+// it eagerly from Convex would also be pointless — a KV write from the REST API
+// takes ≥60s to propagate to the colos that serve the page.
 
 async function deleteEdgeRoute(
   route: { pageId: string; slug: string; subdomain?: string | null },
@@ -2051,6 +2046,16 @@ export const setVisibility = mutation({
 
     // Visibility changes what the edge may serve → purge the cached URL.
     await lifecycleEdgePort.invalidate(summaryUrl(pageBaseUrl(), page.slug));
+    // #232 (security): visibility is one of the few fields the KV route record
+    // DOES carry, so — unlike a republish — a flip genuinely invalidates it and
+    // cannot be designed away. Without this eviction a `public → private` page
+    // keeps a KV record saying `public` for up to the 1h route TTL, and the
+    // router serves it with NO bearer check. Scheduled (like deletePage) because
+    // the KV REST delete is a `fetch`, forbidden inside a mutation.
+    await lifecycleEdgePort.evictRoute(
+      { pageId: args.id, slug: page.slug, subdomain: page.subdomain ?? null },
+      ctx,
+    );
 
     return { visibility: args.visibility };
   },

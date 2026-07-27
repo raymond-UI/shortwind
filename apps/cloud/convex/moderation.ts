@@ -10,6 +10,10 @@ import {
   scheduleArtifactSeal,
   type SealSchedulerCtx,
 } from "./lib/r2_seal.js";
+// #232: the STABLE serve key (`.../current.html`) every publish overwrites. It
+// is aliased here because this module already has a version-scoped
+// `liveVersionArtifactKey` and the two must never be confused.
+import { currentArtifactKey as stableArtifactKey } from "./lib/publish_core.js";
 import { scheduleAbuseNotification } from "./lib/abuse_notify.js";
 
 /**
@@ -238,8 +242,16 @@ const lifecycleValidator = v.union(
   v.literal("tombstoned"),
 );
 
-/** The current version's R2 artifact key for a page, or null if unpublished. */
-async function currentArtifactKey(
+/**
+ * The current version's IMMUTABLE hashed R2 artifact key for a page, or null if
+ * unpublished (`artifacts/<accountId>/<pageId>/<expandedHash>.html`).
+ *
+ * NOT to be confused with `lib/publish_core.currentArtifactKey(accountId,
+ * pageId)`, which is the STABLE `current.html` serve key (#232). This one is
+ * version-scoped ("the artifact of the live version"); that one is the fixed key
+ * every publish overwrites. Both are live objects a seal has to remove.
+ */
+async function liveVersionArtifactKey(
   ctx: { db: any },
   pageId: Id<"pages">,
 ): Promise<string | null> {
@@ -483,7 +495,7 @@ export async function applyLifecycle(
 
   let sealed: string | null = null;
   if (result.moderationState !== null) {
-    const liveKey = await currentArtifactKey(ctx, args.pageId);
+    const liveKey = await liveVersionArtifactKey(ctx, args.pageId);
     sealed = result.seals && liveKey ? sealedKey(liveKey) : null;
     // #198 item 4: actually MOVE the R2 object to the sealed prefix (copy →
     // delete-original), preserving the material while removing it from its live
@@ -491,8 +503,21 @@ export async function applyLifecycle(
     // action right after this mutation commits (a mutation cannot fetch), exactly
     // like the KV eviction. Fail-safe: the scheduled action swallows errors; the
     // recorded `preservedR2Key` + lifecycle=quarantined stay the source of truth.
+    //
+    // #232: publish now writes the SAME bytes a SECOND time at the stable serve
+    // key (`current.html`). Sealing only the hashed key would leave that copy
+    // live and fetchable over the S3 API, breaking this module's guarantee that
+    // the material "can no longer be served from — or fetched at — its original
+    // R2 key". The material is already preserved at the sealed key, so the stable
+    // copy is a plain DELETE (no second sealed key).
+    const stableKey = stableArtifactKey(page.accountId as string, args.pageId);
     if (result.seals && liveKey && sealed && ctx.scheduler) {
-      await scheduleArtifactSeal(ctx as SealSchedulerCtx, liveKey, sealed);
+      await scheduleArtifactSeal(
+        ctx as SealSchedulerCtx,
+        liveKey,
+        sealed,
+        stableKey,
+      );
     }
     await upsertModeration(ctx, {
       pageId: args.pageId,

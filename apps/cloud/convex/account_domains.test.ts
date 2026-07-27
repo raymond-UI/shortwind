@@ -504,7 +504,10 @@ describe("resolveAccountDomainRoute — host + path → page", () => {
       path: "/handbook/",
     });
     if (!route || "redirectTo" in route) throw new Error("expected a page route");
-    expect(route.artifactKey).toContain("artifacts/"); // the entry page artifact
+    // #232: the entry page carries NO explicit key — the Worker derives
+    // `artifacts/<accountId>/<pageId>/current.html` from the route identity.
+    expect(route.fileKey).toBeUndefined();
+    expect(route.fallbackArtifactKey).toContain("artifacts/");
   });
 
   it("serves a bundle sub-page at /<slug>/<path>", async () => {
@@ -514,7 +517,8 @@ describe("resolveAccountDomainRoute — host + path → page", () => {
       path: "/handbook/about.html",
     });
     if (!route || "redirectTo" in route) throw new Error("expected a sibling route");
-    expect(route.artifactKey).toContain("bundles/"); // the sibling artifact
+    // A bundle sibling is its own document → explicit key (#232).
+    expect(route.fileKey).toContain("bundles/");
   });
 
   it("does not 301 a single-file page (no trailing-slash redirect)", async () => {

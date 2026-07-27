@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import type { Env } from "../src/env";
 import {
   artifactKey,
+  currentArtifactKey,
   getArtifact,
   putArtifact,
   type ArtifactMeta,
@@ -31,12 +32,12 @@ const META: ArtifactMeta = {
   pageId: "page_abc",
 };
 
+// #232: the route record is version-INDEPENDENT — no `version`, no hashed
+// `artifactKey`. The served object is derived from accountId + pageId.
 function sampleRoute(over: Partial<CachedRoute> = {}): CachedRoute {
   return {
     pageId: "page_abc",
     accountId: "acct_123",
-    version: 3,
-    artifactKey: artifactKey("acct_123", "page_abc", META.expandedHash),
     lifecycle: "active",
     visibility: "public",
     ...over,
@@ -47,6 +48,12 @@ describe("CLOUD-21 r2: artifact store", () => {
   it("artifactKey matches the PageVersion.artifactKey convention", () => {
     expect(artifactKey("acct_123", "page_abc", "abc123")).toBe(
       "artifacts/acct_123/page_abc/abc123.html",
+    );
+  });
+
+  it("currentArtifactKey is the stable per-page serve key (#232)", () => {
+    expect(currentArtifactKey("acct_123", "page_abc")).toBe(
+      "artifacts/acct_123/page_abc/current.html",
     );
   });
 

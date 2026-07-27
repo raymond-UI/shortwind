@@ -43,10 +43,11 @@ import type { Env } from "./env.js";
 import {
   resolveRouteWithFallback,
   putRoute,
+  asCachedRoute,
   type CachedRoute,
   type ColdRouteSource,
 } from "./kv.js";
-import { getArtifact } from "./r2.js";
+import { getArtifact, currentArtifactKey } from "./r2.js";
 import { cacheArtifactResponse, edgeCacheKey, edgeCacheMatch } from "./cache.js";
 
 /**
@@ -266,7 +267,12 @@ export async function handleRequest(
   }
 
   // 4. Stream the frozen artifact from R2. Missing object → 404.
-  const artifact = await getArtifact(env, route.artifactKey);
+  //    #232: the key is DERIVED from the route's identity, not carried on it —
+  //    `artifacts/<accountId>/<pageId>/current.html`, which publish overwrites in
+  //    place. That is what makes a republish visible on the very next request
+  //    without evicting anything. A bundle sibling is a different document from
+  //    the entry page, so it carries its own explicit `fileKey`.
+  const artifact = await resolveArtifact(env, route);
   if (artifact === null) return refuse(404, "Not Found");
 
   // The artifact is already a complete self-contained document; the router just
@@ -295,33 +301,38 @@ export async function handleRequest(
 }
 
 /**
+ * Read the artifact a resolved route serves (#232).
+ *
+ * Resolution order:
+ *  1. `fileKey` — an explicit key, set only for a bundle SIBLING file (its own
+ *     document, not the entry page's). Authoritative when present.
+ *  2. The stable `artifacts/<accountId>/<pageId>/current.html`, overwritten by
+ *     every publish. This is the ordinary page path.
+ *  3. `fallbackArtifactKey` — the migration shim for a page last published before
+ *     `current.html` existed (see kv.ts). Costs one extra R2 miss for those pages
+ *     only, and disappears the first time they are republished.
+ */
+async function resolveArtifact(env: Env, route: CachedRoute) {
+  if (route.fileKey !== undefined) {
+    return getArtifact(env, route.fileKey);
+  }
+  const current = await getArtifact(
+    env,
+    currentArtifactKey(route.accountId, route.pageId),
+  );
+  if (current !== null) return current;
+  if (route.fallbackArtifactKey !== undefined) {
+    return getArtifact(env, route.fallbackArtifactKey);
+  }
+  return null;
+}
+
+/**
  * The route projection the Convex `/internal/resolve` endpoint returns. It is a
  * `CachedRoute` (the Worker JSON-parses it straight into one) or `null`. Declared
  * locally so the router keeps zero Convex dependency (CLAUDE.md).
  */
 type ResolvedRoute = CachedRoute | null;
-
-/** Narrow an unknown JSON value to a CachedRoute (defensive against a malformed
- * cold-source response — anything off-shape resolves to a 404, never a serve). */
-function asCachedRoute(value: unknown): CachedRoute | null {
-  if (value === null || typeof value !== "object") return null;
-  const r = value as Record<string, unknown>;
-  if (
-    typeof r.pageId === "string" &&
-    typeof r.accountId === "string" &&
-    typeof r.version === "number" &&
-    typeof r.artifactKey === "string" &&
-    (r.lifecycle === "active" ||
-      r.lifecycle === "quarantined" ||
-      r.lifecycle === "tombstoned") &&
-    (r.visibility === "public" ||
-      r.visibility === "unlisted" ||
-      r.visibility === "private")
-  ) {
-    return value as unknown as CachedRoute;
-  }
-  return null;
-}
 
 /**
  * Live cold-source deps for a provisioned worker (CLOUD-30b).

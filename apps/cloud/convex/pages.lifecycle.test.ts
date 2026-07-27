@@ -215,6 +215,26 @@ describe("setVisibility — update + cache invalidation (CLOUD-31)", () => {
     expect(spy.invalidated.some((u) => u.includes("/vis-page"))).toBe(true);
   });
 
+  it("#232: evicts the KV route so a public → private flip stops serving at once", async () => {
+    const t = convexTest(schema, modules);
+    const { bearer } = await seedAuth(t);
+    const pageId = await publishPage(t, bearer, "vis-evict");
+
+    const spy = spyEdgePort();
+    __setLifecycleEdgePort(spy.port);
+
+    await t.mutation(api.pages.setVisibility, {
+      bearer,
+      id: pageId as never,
+      visibility: "private",
+    });
+
+    // Without this the KV record keeps saying `public` for up to the 1h route
+    // TTL and the router serves the page with NO bearer check (security bug).
+    expect(spy.evicted.map((e) => e.slug)).toContain("vis-evict");
+    expect(spy.evicted.map((e) => e.pageId)).toContain(pageId);
+  });
+
   it("audits the visibility change (page.visibility)", async () => {
     const t = convexTest(schema, modules);
     const { accountId, bearer } = await seedAuth(t);

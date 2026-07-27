@@ -135,7 +135,6 @@ function makeDeps(): {
   };
   const edge: EdgePort = {
     async invalidate() {},
-    async putRoute() {},
   };
   const publish: PublishDeps = {
     data,
@@ -232,8 +231,9 @@ describe("runPublishBundle (entry-as-page)", () => {
     expect(data.pageVersions).toHaveLength(1);
 
     // The entry artifact + one artifact per sibling were written to R2.
-    // (entry via runPublish's storage; sibling via the bundle path.)
-    expect(artifacts).toHaveLength(2);
+    // (entry via runPublish's storage; sibling via the bundle path.) The entry
+    // contributes TWO objects: its hashed artifact + the stable current.html (#232).
+    expect(artifacts).toHaveLength(3);
 
     // The result lists ONLY the siblings (the entry is the page).
     expect(out.result.files.map((f) => f.path)).toEqual(["about.html"]);
