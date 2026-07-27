@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sealArtifact } from "./r2_seal.js";
-import { currentArtifactKey } from "./publish_core.js";
+import { currentArtifactKey } from "../../shared/src/artifact_keys.js";
 
 /**
  * #232 — the SEAL must leave NO live object for a quarantined page.

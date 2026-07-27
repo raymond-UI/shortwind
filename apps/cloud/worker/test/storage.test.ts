@@ -3,11 +3,11 @@ import { env } from "cloudflare:test";
 import type { Env } from "../src/env";
 import {
   artifactKey,
-  currentArtifactKey,
   getArtifact,
   putArtifact,
   type ArtifactMeta,
 } from "../src/r2";
+import { currentArtifactKey } from "../../shared/src/artifact_keys";
 import {
   lookupRoute,
   putRoute,

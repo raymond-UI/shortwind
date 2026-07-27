@@ -7,6 +7,7 @@ import {
   type PublishBundleInput,
 } from "./bundles.js";
 import { normalizeBundlePath } from "./lib/bundle_path.js";
+import { bundleCurrentKey } from "../shared/src/artifact_keys.js";
 import type {
   AuditWrite,
   EdgePort,
@@ -231,9 +232,10 @@ describe("runPublishBundle (entry-as-page)", () => {
     expect(data.pageVersions).toHaveLength(1);
 
     // The entry artifact + one artifact per sibling were written to R2.
-    // (entry via runPublish's storage; sibling via the bundle path.) The entry
-    // contributes TWO objects: its hashed artifact + the stable current.html (#232).
-    expect(artifacts).toHaveLength(3);
+    // (entry via runPublish's storage; sibling via the bundle path.) #232: EVERY
+    // served document is written twice — its immutable hashed object and its
+    // stable `current.html`. One entry + one sibling = four objects.
+    expect(artifacts).toHaveLength(4);
 
     // The result lists ONLY the siblings (the entry is the page).
     expect(out.result.files.map((f) => f.path)).toEqual(["about.html"]);
@@ -249,6 +251,68 @@ describe("runPublishBundle (entry-as-page)", () => {
     expect(bundleRows[0]!.entryPageId).toBe(out.result.entryPageId);
     expect(bundleRows[0]!.entryPath).toBe("index.html");
     expect(bundleRows[0]!.files.map((f) => f.path)).toEqual(["about.html"]);
+  });
+
+  it("#232: each sibling also gets a STABLE current.html, overwritten on republish", async () => {
+    const { deps, artifacts } = makeDeps();
+    const v1 = await runPublishBundle(baseInput({ slug: "site" }), deps);
+    if (!v1.ok) throw new Error("unexpected collision");
+    const stable = bundleCurrentKey("acct_1", v1.result.entryPageId, "about.html");
+
+    expect(artifacts.filter((a) => a.key === stable)).toHaveLength(1);
+    // Same bytes at both keys.
+    const hashed = artifacts.find(
+      (a) => a.key === v1.result.files[0]!.artifactKey,
+    )!;
+    expect(artifacts.find((a) => a.key === stable)!.html).toBe(hashed.html);
+
+    const v2 = await runPublishBundle(
+      baseInput({
+        slug: "site",
+        files: [
+          { path: "index.html", html: "<p>home v2</p>" },
+          { path: "about.html", html: "<p>about v2</p>" },
+        ],
+      }),
+      deps,
+    );
+    if (!v2.ok) throw new Error("unexpected collision");
+
+    // The SAME key was overwritten — nothing on the serve path is version-coupled,
+    // so the sibling republish is live on the next request with no eviction.
+    const writes = artifacts.filter((a) => a.key === stable);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.html).toContain("about v2");
+    expect(writes[1]!.meta.version).toBe(2);
+    // The v2 hashed sibling is written too (history/rollback).
+    expect(
+      artifacts.some((a) => a.key === v2.result.files[0]!.artifactKey),
+    ).toBe(true);
+    expect(v2.result.files[0]!.artifactKey).not.toBe(
+      v1.result.files[0]!.artifactKey,
+    );
+  });
+
+  it("#232: a FAILED bundle-version commit leaves no sibling current.html", async () => {
+    // Ordering guard, mirroring the single-page one: a sibling's stable object is
+    // public the instant it lands, so it must not exist before the bundleVersions
+    // row that authorizes it is committed.
+    const { deps, artifacts } = makeDeps();
+    deps.insertBundleVersion = async () => {
+      throw new Error("boom: bundle commit failed");
+    };
+
+    await expect(
+      runPublishBundle(baseInput({ slug: "site" }), deps),
+    ).rejects.toThrow(/bundle commit failed/);
+
+    expect(
+      artifacts.some((a) => a.key.startsWith("bundles/") && a.key.endsWith("/current.html")),
+    ).toBe(false);
+    // The immutable sibling object IS durable — unreferenced, so unreachable.
+    expect(
+      artifacts.some((a) => a.key.startsWith("bundles/acct_1/")),
+    ).toBe(true);
   });
 
   it("does NOT rewrite links — the sibling's authored relative link is stored verbatim", async () => {

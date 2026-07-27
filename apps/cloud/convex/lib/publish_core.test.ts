@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   artifactKey,
   assembleArtifact,
-  currentArtifactKey,
   bumpRecipeVersion,
   lockfileVersions,
   resolveRootDomain,
@@ -21,6 +20,7 @@ import {
   type StoragePort,
   type StoredRecipeVersion,
 } from "./publish_core.js";
+import { currentArtifactKey } from "../../shared/src/artifact_keys.js";
 import { computeBodySha } from "../../shared/src/fingerprint.js";
 import { deriveSubdomain } from "../../shared/src/slug.js";
 import type { Lockfile } from "../../shared/src/lockfile-diff.js";
@@ -507,6 +507,65 @@ describe("runUpdate — version bump, same URL, prior retained (PRD §5.6)", () 
     ).toBe(true);
     // The stable object carries the CURRENT version's metadata (etag correctness).
     expect(writes[1]!.meta.version).toBe(2);
+  });
+
+  it("#232: a FAILED version commit leaves current.html unwritten (create)", async () => {
+    // Ordering guard. `current.html` is world-readable the instant it lands, so
+    // it must be the LAST thing a publish does. If the version commit throws
+    // after the artifact write, the only object in the bucket must be the
+    // content-addressed one, which nothing points at and nobody can find.
+    const { data, storage, deps } = makeDeps();
+    data.insertPageVersion = async () => {
+      throw new Error("boom: version commit failed");
+    };
+
+    await expect(runPublish(await basePublishInput(), deps)).rejects.toThrow(
+      /version commit failed/,
+    );
+
+    expect(storage.artifacts).toHaveLength(1);
+    expect(storage.artifacts[0]!.key).toMatch(/\/[0-9a-f]+\.html$/);
+    expect(storage.artifacts.some((a) => a.key.endsWith("/current.html"))).toBe(
+      false,
+    );
+  });
+
+  it("#232: a FAILED version commit leaves current.html on the PREVIOUS version", async () => {
+    const { data, storage, deps } = makeDeps();
+    const created = await runPublish(await basePublishInput(), deps);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const pageId = created.result.id;
+    const stable = currentArtifactKey(ACCOUNT, pageId);
+
+    // Fail at the very last commit step before the stable write.
+    data.patchPageCurrentVersion = async () => {
+      throw new Error("boom: version commit failed");
+    };
+
+    await expect(
+      runUpdate(
+        {
+          actor: { accountId: ACCOUNT, tokenId: TOKEN },
+          pageId,
+          html: '<div class="@card">hello v2</div>',
+          recipes: [{ family: "card", source: await cleanCardSource() }],
+          lockfile: lockfile(),
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/version commit failed/);
+
+    // The stable key was written exactly once (by the successful v1 publish) and
+    // still serves v1 — the uncommitted v2 bytes never became public.
+    const stableWrites = storage.artifacts.filter((a) => a.key === stable);
+    expect(stableWrites).toHaveLength(1);
+    expect(stableWrites[0]!.html).toContain("hello");
+    expect(stableWrites[0]!.html).not.toContain("hello v2");
+    expect(stableWrites[0]!.meta.version).toBe(1);
+    // The v2 hashed object IS durable — an abandoned, unreferenced object, which
+    // is what makes the retry cheap.
+    expect(storage.artifacts).toHaveLength(3);
   });
 
   it("only touched recipes ride up on update (clean body → no recipe write)", async () => {

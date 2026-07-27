@@ -16,9 +16,16 @@
  * #232 — VERSION-INDEPENDENT BY DESIGN. The record used to carry `version` +
  * the hashed `artifactKey`, both of which change on every republish, so the
  * cached record was stale the instant a page was updated and only the 1h TTL
- * cleared it. Nothing here changes on a republish now: the artifact is served
- * from the stable `current.html` key derived from `accountId` + `pageId`
- * (./r2.ts `currentArtifactKey`), which publish overwrites in place.
+ * cleared it. Nothing a republish changes is stored here any more: an ordinary
+ * page serves from `artifacts/<accountId>/<pageId>/current.html` and a bundle
+ * sibling from `bundles/<accountId>/<pageId>/<bundlePath>/current.html`
+ * (`shared/src/artifact_keys.ts`), both derived from fields that only a
+ * lifecycle/visibility change touches — and those evict this record eagerly.
+ *
+ * The two `…artifactKey`/`fileKey` fields that remain are MIGRATION FALLBACKS
+ * only: they are read solely when the corresponding `current.html` is absent
+ * (a page/bundle last published before this shipped) and disappear on the first
+ * republish. Nothing on the live path reads them.
  */
 import type { Env } from "./env.js";
 import type { PageLifecycle, PageVisibility } from "../../shared/src/types.js";
@@ -33,10 +40,27 @@ export interface CachedRoute {
   lifecycle: PageLifecycle;
   visibility: PageVisibility;
   /**
-   * An EXPLICIT R2 key that overrides the stable page key. Set ONLY for a bundle
-   * sibling file (`bundles/<acct>/<page>/<path>/<hash>.html`), which is a
-   * different document from the entry page and therefore is NOT at the entry's
-   * `current.html`. Absent for an ordinary page route.
+   * Set ONLY for a bundle SIBLING route: the sibling's canonical bundle-relative
+   * path (`bundleVersions.files[].path`, e.g. `"docs/guide.html"`). Absent for an
+   * ordinary page and for a bundle ENTRY, both of which serve from the page's own
+   * `current.html`.
+   *
+   * The router needs it to derive `bundles/<acct>/<page>/<path>/current.html`. It
+   * cannot use the REQUEST path instead: under account-domain routing a sibling
+   * is served at `<hostname>/<slug>/<path>`, so the request path carries a slug
+   * prefix the bundle key does not. The cold source (convex/serve.ts) has already
+   * split and normalized it, so it hands back the exact stored string.
+   */
+  bundlePath?: string;
+  /**
+   * MIGRATION SHIM (#232). The bundle SIBLING's immutable hashed key
+   * (`bundles/<acct>/<page>/<path>/<hash>.html`), read only when the sibling's
+   * stable `current.html` is absent — a bundle last published BEFORE this
+   * shipped. Same self-healing story as `fallbackArtifactKey` below.
+   *
+   * A record with `fileKey` but NO `bundlePath` is a pre-#232 sibling record; it
+   * still resolves (the hashed key is authoritative for it) and disappears on the
+   * next resolve.
    */
   fileKey?: string;
   /**
@@ -70,6 +94,7 @@ export function asCachedRoute(value: unknown): CachedRoute | null {
   // Pre-#232 shape → treat as a miss (re-resolve cold), never serve.
   if (r.version !== undefined || r.artifactKey !== undefined) return null;
   if (typeof r.pageId !== "string" || typeof r.accountId !== "string") return null;
+  if (r.bundlePath !== undefined && typeof r.bundlePath !== "string") return null;
   if (r.fileKey !== undefined && typeof r.fileKey !== "string") return null;
   if (
     r.fallbackArtifactKey !== undefined &&

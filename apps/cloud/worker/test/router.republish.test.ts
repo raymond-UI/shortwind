@@ -4,9 +4,12 @@ import type { Env } from "../src/env";
 import {
   putArtifact,
   artifactKey,
-  currentArtifactKey,
   type ArtifactMeta,
 } from "../src/r2";
+import {
+  bundleCurrentKey,
+  currentArtifactKey,
+} from "../../shared/src/artifact_keys";
 import {
   putRoute,
   lookupRoute,
@@ -234,22 +237,135 @@ describe("#232 migration: pre-fix KV records and pre-fix R2 buckets", () => {
   });
 });
 
-describe("#232 bundle siblings keep an explicit artifact key", () => {
-  it("serves the sibling's own object, not the entry page's current.html", async () => {
+describe("#232 bundle siblings resolve to their OWN stable key", () => {
+  /** Simulate a bundle sibling publish: hashed object + stable current.html. */
+  async function publishSibling(
+    accountId: string,
+    pageId: string,
+    path: string,
+    html: string,
+    version: number,
+  ): Promise<string> {
+    const expandedHash = `sib${version}`;
+    const m = meta({ expandedHash, version, accountId, pageId });
+    const hashed = `bundles/${accountId}/${pageId}/${path}/${expandedHash}.html`;
+    await putArtifact(E, hashed, html, m);
+    await putArtifact(E, bundleCurrentKey(accountId, pageId, path), html, m);
+    return hashed;
+  }
+
+  it("serves the sibling's own document, not the entry page's current.html", async () => {
     const accountId = "acct_232";
     const pageId = "page_232_bundle";
     const host = "bundle-232.shortwind.app";
     await publish(accountId, pageId, V1, 1); // the ENTRY page document
-
-    const siblingKey = `bundles/${accountId}/${pageId}/about.html/hash9.html`;
     const sibling = "<!doctype html><html><body>about page</body></html>";
-    await putArtifact(E, siblingKey, sibling, meta({ accountId, pageId }));
+    await publishSibling(accountId, pageId, "about.html", sibling, 1);
 
-    const r = route({ pageId, accountId, fileKey: siblingKey });
+    const r = route({ pageId, accountId, bundlePath: "about.html" });
     await putRoute(E, host, "/about.html", r);
 
     const res = await run(req(host, "/about.html"), deps());
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(sibling);
+  });
+
+  it("a sibling REPUBLISH is immediate — the cached record is version-independent", async () => {
+    const accountId = "acct_232";
+    const pageId = "page_232_bundle_republish";
+    const host = "bundlerp-232.shortwind.app";
+    await publish(accountId, pageId, V1, 1);
+    const v1Key = await publishSibling(accountId, pageId, "about.html", V1, 1);
+
+    const r = route({ pageId, accountId, bundlePath: "about.html", fileKey: v1Key });
+    const cold = vi.fn<ColdRouteSource>(async () => r);
+    const d = deps({ coldRoute: cold });
+
+    const first = await run(req(host, "/about.html"), d);
+    expect(first.status).toBe(200);
+    expect(await first.text()).toBe(V1);
+
+    // v2 overwrites the sibling's stable key. NOTHING evicts the KV route — and
+    // the record still names the v1 HASHED key, which must never be consulted.
+    await publishSibling(accountId, pageId, "about.html", V2, 2);
+    await invalidateRoute(E, `https://${host}/about.html`);
+
+    const second = await run(req(host, "/about.html"), d);
+    expect(second.status).toBe(200);
+    expect(await second.text()).toBe(V2);
+    expect(cold).toHaveBeenCalledTimes(1);
+  });
+
+  it("MIGRATION: a sibling with no stable object falls back to its hashed key", async () => {
+    const accountId = "acct_232";
+    const pageId = "page_232_bundle_legacy";
+    const host = "bundlelegacy-232.shortwind.app";
+    // Pre-#232 bucket state: only the immutable hashed sibling object exists.
+    const hashed = `bundles/${accountId}/${pageId}/about.html/hashold.html`;
+    await putArtifact(E, hashed, V1, meta({ accountId, pageId }));
+
+    const r = route({ pageId, accountId, bundlePath: "about.html", fileKey: hashed });
+    await putRoute(E, host, "/about.html", r);
+
+    const res = await run(req(host, "/about.html"), deps());
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(V1);
+  });
+
+  it("MIGRATION: a pre-#232 record (fileKey, no bundlePath) still serves", async () => {
+    const accountId = "acct_232";
+    const pageId = "page_232_bundle_oldrecord";
+    const host = "bundleold-232.shortwind.app";
+    const hashed = `bundles/${accountId}/${pageId}/about.html/hashold.html`;
+    await putArtifact(E, hashed, V1, meta({ accountId, pageId }));
+
+    await putRoute(E, host, "/about.html", route({ pageId, accountId, fileKey: hashed }));
+    const res = await run(req(host, "/about.html"), deps());
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(V1);
+  });
+});
+
+describe("#232 setVisibility on a BUNDLE pulls the siblings too", () => {
+  it("public → private 401s on a SIBLING path once its own route key is evicted", async () => {
+    // The hole this closes: siblings serve through the entry page but cache under
+    // their OWN route keys (`route:<host>/about.html`). The lifecycle evictions
+    // used to drop only `route:<host>/`, so a flip left every sibling cached as
+    // `public` and the Worker kept serving them with no bearer check.
+    const accountId = "acct_232";
+    const pageId = "page_232_bundle_flip";
+    const host = "bundleflip-232.shortwind.app";
+    const sibling = "<!doctype html><html><body>about page</body></html>";
+    const hashed = `bundles/${accountId}/${pageId}/about.html/sibflip.html`;
+    await putArtifact(E, hashed, sibling, meta({ accountId, pageId }));
+    await putArtifact(
+      E,
+      bundleCurrentKey(accountId, pageId, "about.html"),
+      sibling,
+      meta({ accountId, pageId }),
+    );
+
+    // Warm BOTH the entry and the sibling route records as `public`.
+    const pub = route({ pageId, accountId, visibility: "public" });
+    await putRoute(E, host, "/", pub);
+    await putRoute(E, host, "/about.html", { ...pub, bundlePath: "about.html" });
+    expect((await run(req(host, "/about.html"), deps())).status).toBe(200);
+
+    // What `setVisibility` now schedules: the entry key AND every sibling key
+    // (convex/lib/edge_kv.ts `evictRouteForPage` with `paths`).
+    await deleteRoute(E, host, "/");
+    await invalidateRoute(E, `https://${host}/`);
+    await deleteRoute(E, host, "/about.html");
+    await invalidateRoute(E, `https://${host}/about.html`);
+
+    const priv = {
+      ...route({ pageId, accountId, visibility: "private" }),
+      bundlePath: "about.html",
+    };
+    const res = await run(
+      req(host, "/about.html"),
+      deps({ coldRoute: vi.fn<ColdRouteSource>(async () => priv) }),
+    );
+    expect(res.status).toBe(401);
   });
 });

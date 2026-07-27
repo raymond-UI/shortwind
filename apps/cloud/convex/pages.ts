@@ -39,6 +39,7 @@ import type { Lockfile } from "../shared/src/lockfile-diff.js";
 import { deriveSubdomain } from "../shared/src/slug.js";
 import { themePreamble } from "./lib/theme_preamble.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
+import { bundleSiblingPaths } from "./lib/bundle_routes.js";
 import { purgeEdgeByUrl } from "./lib/cloudflare_cache.js";
 import { loadScanSources } from "./lib/scan_config.js";
 import { scheduleCyberTipReport } from "./lib/ncmec.js";
@@ -623,7 +624,12 @@ async function invalidateEdge(url: string): Promise<void> {
 // takes ≥60s to propagate to the colos that serve the page.
 
 async function deleteEdgeRoute(
-  route: { pageId: string; slug: string; subdomain?: string | null },
+  route: {
+    pageId: string;
+    slug: string;
+    subdomain?: string | null;
+    paths?: readonly string[];
+  },
   ctx?: SchedulerCtx,
 ): Promise<void> {
   // CLOUD-30b: evict the hostname+path → page-version route from the Worker KV
@@ -640,8 +646,16 @@ async function deleteEdgeRoute(
   // `lib/edge_kv` re-derives the route key to match worker/src/kv.ts.
   if (ctx === undefined) return; // No scheduler (shouldn't happen in prod) → skip.
   // CLOUD-SUBDOMAIN: thread the subdomain so the per-page subdomain KV key is
-  // evicted alongside the legacy path-based one (the page serves under both).
-  await scheduleRouteEviction(ctx, route.slug, route.subdomain ?? null);
+  // evicted. #232: thread the bundle sibling paths too — each serves at
+  // `<subdomain>.<root>/<path>` through THIS page and is its own KV record, so
+  // evicting only the entry left them resolving with the pre-change lifecycle
+  // and visibility until the 1h TTL.
+  await scheduleRouteEviction(
+    ctx,
+    route.slug,
+    route.subdomain ?? null,
+    route.paths ?? null,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -661,9 +675,18 @@ export interface LifecycleEdgePort {
    * optional `ctx` carries the calling mutation's scheduler — the production port
    * schedules the KV `fetch` to run in an action (a mutation cannot fetch). The
    * test ports ignore it (a 1-arg `evictRoute(route)` is assignable here).
+   *
+   * `paths` (#232) are the page's bundle sibling paths, each of which serves
+   * through this page under its own KV route key. Omitted/empty for an ordinary
+   * page.
    */
   evictRoute(
-    args: { pageId: string; slug: string; subdomain?: string | null },
+    args: {
+      pageId: string;
+      slug: string;
+      subdomain?: string | null;
+      paths?: readonly string[];
+    },
     ctx?: SchedulerCtx,
   ): Promise<void>;
 }
@@ -896,12 +919,16 @@ export async function runPublishScan(
  *                    HARD reject, so the page must NOT stay public/findable while a
  *                    human actions it. The case reason marks it `classifier-block`.
  *
- * THE LEGAL-CRITICAL STEP (PR #143 review BLOCKER): `runPublish` already published
- * an `active` KV route (`edge.putRoute`) for this page before this mutation runs,
- * so flipping the DB row to `quarantined` is NOT enough — the artifact would keep
- * serving a live 200 from the KV/edge cache for up to the 1h route TTL. We MUST
- * evict the route + purge the edge cache the same way `deletePage`/`killPage` do
- * (`lifecycleEdgePort.invalidate` + `evictRoute`) so it stops serving immediately.
+ * THE LEGAL-CRITICAL STEP (PR #143 review BLOCKER): by the time this mutation
+ * runs, `runPublish` has already made the page live — it wrote the stable
+ * `current.html` and the page's route resolves `active` (#232: Convex no longer
+ * writes the KV record at all; the Worker's read-through populates it on the
+ * first hit, which a scanned publish can easily have taken). So flipping the DB
+ * row to `quarantined` is NOT enough — a route record already resolved would
+ * keep serving a live 200 from KV/the edge cache for up to the 1h route TTL. We
+ * MUST evict the route + purge the edge cache the same way `deletePage`/
+ * `killPage` do (`lifecycleEdgePort.invalidate` + `evictRoute`, with the bundle
+ * sibling paths) so it stops serving immediately.
  *
  * IDEMPOTENT BLOCK (review nit): a publish retried with an idempotencyKey re-scans
  * and re-blocks; the page is then ALREADY `quarantined`, so the pure transition
@@ -984,7 +1011,13 @@ export const commitScanBlock = internalMutation({
     const url = summaryUrl(pageBaseUrl(), page.slug);
     await lifecycleEdgePort.invalidate(url);
     await lifecycleEdgePort.evictRoute(
-      { pageId: args.pageId, slug: page.slug, subdomain: page.subdomain ?? null },
+      {
+        pageId: args.pageId,
+        slug: page.slug,
+        subdomain: page.subdomain ?? null,
+        // #232: a blocked BUNDLE must lose its siblings too, not just the entry.
+        paths: await bundleSiblingPaths(ctx, args.pageId),
+      },
       ctx,
     );
 
@@ -1950,7 +1983,13 @@ export const sweepExpired = internalMutation({
       const url = summaryUrl(pageBaseUrl(), page.slug);
       await lifecycleEdgePort.invalidate(url);
       await lifecycleEdgePort.evictRoute(
-        { pageId: page._id, slug: page.slug, subdomain: page.subdomain ?? null },
+        {
+          pageId: page._id,
+          slug: page.slug,
+          subdomain: page.subdomain ?? null,
+          // #232: an expired BUNDLE loses its siblings with the entry.
+          paths: await bundleSiblingPaths(ctx, page._id),
+        },
         ctx,
       );
       tombstoned += 1;
@@ -1996,7 +2035,13 @@ export const deletePage = mutation({
     const url = summaryUrl(pageBaseUrl(), page.slug);
     await lifecycleEdgePort.invalidate(url);
     await lifecycleEdgePort.evictRoute(
-      { pageId: args.id, slug: page.slug, subdomain: page.subdomain ?? null },
+      {
+        pageId: args.id,
+        slug: page.slug,
+        subdomain: page.subdomain ?? null,
+        // #232: a deleted BUNDLE loses its siblings with the entry.
+        paths: await bundleSiblingPaths(ctx, args.id),
+      },
       ctx,
     );
 
@@ -2052,8 +2097,18 @@ export const setVisibility = mutation({
     // keeps a KV record saying `public` for up to the 1h route TTL, and the
     // router serves it with NO bearer check. Scheduled (like deletePage) because
     // the KV REST delete is a `fetch`, forbidden inside a mutation.
+    //
+    // The BUNDLE SIBLINGS have exactly the same hole and are exactly as exposed:
+    // they inherit this page's visibility but cache under their own route keys,
+    // so a flip that evicted only the entry left `<subdomain>/about.html` served
+    // unauthenticated for up to an hour. They ride along in `paths`.
     await lifecycleEdgePort.evictRoute(
-      { pageId: args.id, slug: page.slug, subdomain: page.subdomain ?? null },
+      {
+        pageId: args.id,
+        slug: page.slug,
+        subdomain: page.subdomain ?? null,
+        paths: await bundleSiblingPaths(ctx, args.id),
+      },
       ctx,
     );
 

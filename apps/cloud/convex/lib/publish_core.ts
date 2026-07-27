@@ -22,8 +22,10 @@
  *     → resolve the recipe set
  *     → expandPage (frozen Tailwind + hash) — CLOUD-20
  *     → ASSEMBLE the complete self-contained served document
- *     → writeArtifact to R2 (storage port)
+ *     → writeArtifact the IMMUTABLE hashed object to R2 (storage port)
  *     → create page + first pageVersion
+ *     → writeArtifact the STABLE `current.html` — last, so nothing is public
+ *       until the version it belongs to is committed (#232)
  *     → store the lockfile snapshot
  *     → invalidate the edge cache for the URL
  *     → audit "page.publish"
@@ -49,6 +51,10 @@ import {
   validateSlug,
   type ExistingPageRef,
 } from "../../shared/src/slug.js";
+// #232: the STABLE `current.html` serve key. Defined in `shared/src` — NOT here
+// and NOT in the Worker — because both trees derive it and CLAUDE.md forbids
+// either importing the other, so a per-tree copy would be undetectable drift.
+import { currentArtifactKey } from "../../shared/src/artifact_keys.js";
 import { expandPage, type RecipeSource } from "../expand.js";
 
 // ---------------------------------------------------------------------------
@@ -326,21 +332,6 @@ export function artifactKey(
   return `artifacts/${accountId}/${pageId}/${expandedHash}.html`;
 }
 
-/**
- * #232 — the STABLE serve key a publish overwrites in place. MIRRORS
- * `worker/src/r2.ts` `currentArtifactKey` byte-for-byte; Convex must never import
- * the Worker (CLAUDE.md dependency direction), so the derivation is duplicated
- * here and golden-tested on both sides.
- *
- * The hashed key above changes every republish, which is exactly why the KV route
- * record can no longer carry it. The router derives THIS key from the route's
- * `accountId` + `pageId`, so overwriting it makes an update live on the very next
- * request (R2 is strongly consistent for same-key overwrites).
- */
-export function currentArtifactKey(accountId: string, pageId: string): string {
-  return `artifacts/${accountId}/${pageId}/current.html`;
-}
-
 /** Render the (legacy path-based) public URL for a page slug under the origin. */
 export function pageUrl(baseUrl: string, slug: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/${slug}`;
@@ -519,14 +510,40 @@ function bodyOf(recipes: readonly IncomingRecipe[], family: string): string {
   return eol === -1 ? "" : r.source.slice(eol + 1);
 }
 
-/** Expand the page, assemble the served doc, and write it to R2. */
+/**
+ * What {@link buildAndStore} hands back: the version-row fields, plus the bytes
+ * and metadata {@link publishStableArtifact} needs to write the stable copy
+ * AFTER the version has been committed.
+ */
+interface BuiltArtifact {
+  artifactKey: string;
+  expandedHash: string;
+  sourceHash: string;
+  /** The assembled served document — identical bytes at both R2 keys. */
+  document: string;
+  /** R2 custom metadata, identical at both keys. */
+  meta: {
+    expandedHash: string;
+    version: number;
+    accountId: string;
+    pageId: string;
+  };
+}
+
+/**
+ * Expand the page, assemble the served doc, and write the IMMUTABLE hashed
+ * object to R2.
+ *
+ * It deliberately does NOT write the stable `current.html` — see
+ * {@link publishStableArtifact} for why that has to happen after the commit.
+ */
 async function buildAndStore(
   pageId: string,
   actor: Actor,
   version: number,
   input: Pick<PublishInput, "html" | "recipes" | "css">,
   deps: PublishDeps,
-): Promise<{ artifactKey: string; expandedHash: string; sourceHash: string }> {
+): Promise<BuiltArtifact> {
   // Expand against the account's STORED palette merged with the recipes CARRIED
   // on this publish — carried wins per family (a local edit overrides the stored
   // body). This is what makes unedited standard recipes (seeded into the store)
@@ -556,23 +573,60 @@ async function buildAndStore(
     pageId,
   };
 
-  // 1. The IMMUTABLE hashed object: history, rollback, dedup (PRD §5.6/§6.2).
+  // The IMMUTABLE hashed object: history, rollback, dedup (PRD §5.6/§6.2).
+  // Safe to write this early — it is content-addressed, so it is invisible until
+  // some record points at it, and an abandoned one is inert (and re-used, not
+  // rewritten, if the identical publish is retried).
   await deps.storage.writeArtifact(key, document, meta);
-  // 2. #232: the STABLE `current.html` — the same bytes, overwritten in place.
-  //    This is what the serve hot path actually streams, which is what makes a
-  //    republish visible immediately instead of after the 1h KV route TTL. A
-  //    SECOND COPY rather than a pointer object: a pointer would cost two R2
-  //    reads per view. Written AFTER the hashed object and before the version
-  //    commit, so a failed write (writeArtifact throws on a non-2xx) aborts the
-  //    publish rather than leaving `current.html` behind the committed version.
-  await deps.storage.writeArtifact(
-    currentArtifactKey(actor.accountId, pageId),
-    document,
-    meta,
-  );
 
   const sourceHash = await sha256Hex(input.html);
-  return { artifactKey: key, expandedHash: expanded.expandedHash, sourceHash };
+  return {
+    artifactKey: key,
+    expandedHash: expanded.expandedHash,
+    sourceHash,
+    document,
+    meta,
+  };
+}
+
+/**
+ * #232: publish the STABLE `artifacts/<accountId>/<pageId>/current.html` — the
+ * same bytes as the hashed object, overwritten in place. This is what the serve
+ * hot path streams, which is what makes a republish visible on the very next
+ * request instead of after the 1h KV route TTL. A second COPY rather than a
+ * pointer object: a pointer would cost two R2 reads per view.
+ *
+ * ORDERING — this MUST run after `patchPageCurrentVersion`. `current.html` is
+ * public the instant it lands, so writing it before the version commit means any
+ * failure between the two (a `pageVersions` insert that throws, a mutation that
+ * is rolled back) leaves uncommitted content served to the world under a version
+ * the database says was never published. Writing it last inverts the failure into
+ * the safe direction: the page keeps serving its previous version, the new hashed
+ * object sits unreferenced, and a retry is cheap because that object is already
+ * durable. A failure here is therefore a PUBLISH failure and is allowed to
+ * propagate (`writeArtifact` throws on a non-2xx).
+ *
+ * CONCURRENCY (known, deliberately unguarded — see
+ * `shared/src/artifact_keys.ts`): two OVERLAPPING publishes of the same page race
+ * on this key, and the loser's bytes can end up as the live copy while the DB
+ * records the winner's version. Nothing self-corrects until the next publish. R2's
+ * S3 API supports `If-Match`/`If-None-Match` on a PUT, but conditions cannot
+ * target custom metadata, so ordering by version number would need a
+ * read-modify-write CAS loop (an extra HEAD per publish, the ETag threaded
+ * through `StoragePort`, and a retry on 412). Not built: no locking scheme until
+ * a real user hits this.
+ */
+async function publishStableArtifact(
+  pageId: string,
+  accountId: string,
+  built: BuiltArtifact,
+  deps: PublishDeps,
+): Promise<void> {
+  await deps.storage.writeArtifact(
+    currentArtifactKey(accountId, pageId),
+    built.document,
+    built.meta,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -658,10 +712,15 @@ export async function runPublish(
   });
   await deps.data.patchPageCurrentVersion(pageId, versionId, version);
 
-  // 9. Persist the lockfile snapshot for the next publish's diff.
+  // 9. ONLY NOW make the bytes public: the stable `current.html` the serve path
+  //    streams (see publishStableArtifact — writing it before the commit above
+  //    would publish content the DB never committed).
+  await publishStableArtifact(pageId, acct, built, deps);
+
+  // 10. Persist the lockfile snapshot for the next publish's diff.
   await deps.data.putStoredLockfile(pageId, input.lockfile);
 
-  // 10. Edge: purge the cached URL. The page's canonical URL is the per-page
+  // 11. Edge: purge the cached URL. The page's canonical URL is the per-page
   //     subdomain (`https://<subdomain>.<root>`). NO KV route write (#232): the
   //     route record is version-independent, so the Worker's read-through cold
   //     miss populates it once and it survives every republish.
@@ -736,6 +795,10 @@ export async function runUpdate(
     lockfile: lockfileVersions(input.lockfile),
   });
   await deps.data.patchPageCurrentVersion(input.pageId, versionId, version);
+  // Only now make the new bytes public (see publishStableArtifact): if any of
+  // the commit steps above throws, `current.html` still holds the PREVIOUS
+  // version and the page keeps serving it.
+  await publishStableArtifact(input.pageId, acct, built, deps);
   await deps.data.putStoredLockfile(input.pageId, input.lockfile);
 
   // SAME url — both the slug AND the subdomain are retained from the page record
@@ -743,8 +806,8 @@ export async function runUpdate(
   //   no stored subdomain fall back to the slug as the label.
   const subdomain = page.subdomain ?? page.slug;
   const url = subdomainUrl(resolveRootDomain(deps.env), subdomain);
-  // #232: no KV route write — `buildAndStore` already overwrote the stable
-  // `current.html` this route resolves to, so the cached record needs no update.
+  // #232: no KV route write — the stable `current.html` this route resolves to
+  // was just overwritten, so the cached record needs no update at all.
   // The edge purge (#207) collapses the public 60s cache TTL to immediate.
   await deps.edge.invalidate(url);
 

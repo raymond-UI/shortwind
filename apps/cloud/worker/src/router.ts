@@ -47,7 +47,11 @@ import {
   type CachedRoute,
   type ColdRouteSource,
 } from "./kv.js";
-import { getArtifact, currentArtifactKey } from "./r2.js";
+import { getArtifact } from "./r2.js";
+import {
+  bundleCurrentKey,
+  currentArtifactKey,
+} from "../../shared/src/artifact_keys.js";
 import { cacheArtifactResponse, edgeCacheKey, edgeCacheMatch } from "./cache.js";
 
 /**
@@ -303,16 +307,29 @@ export async function handleRequest(
 /**
  * Read the artifact a resolved route serves (#232).
  *
- * Resolution order:
- *  1. `fileKey` — an explicit key, set only for a bundle SIBLING file (its own
- *     document, not the entry page's). Authoritative when present.
- *  2. The stable `artifacts/<accountId>/<pageId>/current.html`, overwritten by
- *     every publish. This is the ordinary page path.
- *  3. `fallbackArtifactKey` — the migration shim for a page last published before
- *     `current.html` existed (see kv.ts). Costs one extra R2 miss for those pages
- *     only, and disappears the first time they are republished.
+ * Every live route resolves to a STABLE key derived from route identity, never
+ * from a version — which is what lets the KV record outlive a republish:
+ *  - a bundle SIBLING (`bundlePath` set) →
+ *    `bundles/<accountId>/<pageId>/<bundlePath>/current.html`;
+ *  - anything else (an ordinary page, a bundle ENTRY) →
+ *    `artifacts/<accountId>/<pageId>/current.html`.
+ *
+ * The hashed keys on the record (`fileKey`, `fallbackArtifactKey`) are MIGRATION
+ * FALLBACKS, consulted only when the corresponding `current.html` is absent — a
+ * page/bundle last published before this shipped. That costs one extra R2 miss
+ * for those, and only until their first republish. A pre-#232 sibling record has
+ * `fileKey` with no `bundlePath`; it resolves straight to the hashed key.
  */
 async function resolveArtifact(env: Env, route: CachedRoute) {
+  if (route.bundlePath !== undefined) {
+    const sibling = await getArtifact(
+      env,
+      bundleCurrentKey(route.accountId, route.pageId, route.bundlePath),
+    );
+    if (sibling !== null) return sibling;
+    return route.fileKey !== undefined ? getArtifact(env, route.fileKey) : null;
+  }
+  // Pre-#232 sibling record (explicit key, no bundle path): serve it as-is.
   if (route.fileKey !== undefined) {
     return getArtifact(env, route.fileKey);
   }

@@ -41,15 +41,26 @@ import { normalizeBundlePath, normalizeServePath } from "./lib/bundle_path.js";
  * the 1h route TTL. What remains changes only on a lifecycle/visibility change
  * (both of which evict eagerly), so a republish invalidates nothing.
  *
- * The Worker derives the object to stream from `accountId` + `pageId`
- * (`artifacts/<accountId>/<pageId>/current.html`, overwritten by every publish).
- * The two optional keys are the exceptions:
- *   - `fileKey` — a bundle SIBLING file, a different document from the entry
- *     page and therefore not at the entry's `current.html`. Authoritative.
- *   - `fallbackArtifactKey` — MIGRATION SHIM: the current version's immutable
- *     hashed object, read ONLY when `current.html` is absent (a page last
- *     published before this shipped). Self-healing — the first republish after
- *     deploy writes `current.html` and the shim is never read again.
+ * The Worker derives the object to stream from route IDENTITY, never from a
+ * version:
+ *   - an ordinary page (and a bundle ENTRY, which is one) →
+ *     `artifacts/<accountId>/<pageId>/current.html`;
+ *   - a bundle SIBLING (`bundlePath` set) →
+ *     `bundles/<accountId>/<pageId>/<bundlePath>/current.html`.
+ *
+ * `bundlePath` is the sibling's CANONICAL bundle-relative path (exactly the
+ * string on `bundleVersions.files[].path`). It is carried on the record rather
+ * than re-derived in the Worker because the request path is not the bundle path:
+ * account-domain routing serves a sibling at `<hostname>/<slug>/<path>`, so only
+ * this resolver — which already parsed the slug off — knows which part is the
+ * bundle-relative remainder.
+ *
+ * The two key fields are MIGRATION SHIMS, read only when the corresponding
+ * `current.html` is absent (a page/bundle last published before this shipped),
+ * and self-healing: the first republish after deploy writes `current.html` and
+ * neither is ever read again.
+ *   - `fallbackArtifactKey` — the page version's immutable hashed object.
+ *   - `fileKey` — the sibling's immutable hashed object.
  */
 const serveRouteObject = v.object({
   pageId: v.string(),
@@ -64,6 +75,7 @@ const serveRouteObject = v.object({
     v.literal("unlisted"),
     v.literal("private"),
   ),
+  bundlePath: v.optional(v.string()),
   fileKey: v.optional(v.string()),
   fallbackArtifactKey: v.optional(v.string()),
 });
@@ -81,6 +93,7 @@ export type ServeRoute = {
   accountId: string;
   lifecycle: Doc<"pages">["lifecycle"];
   visibility: Doc<"pages">["visibility"];
+  bundlePath?: string;
   fileKey?: string;
   fallbackArtifactKey?: string;
 };
@@ -195,13 +208,16 @@ export const resolveRoute = query({
           : bundleRows.reduce((max, r) => (r.version > max.version ? r : max));
       const file = bundle?.files.find((f) => f.path === subPath);
       if (bundle && file) {
-        // A bundle SIBLING: its own frozen document, so it carries an explicit
-        // `fileKey` rather than resolving to the entry page's `current.html`.
+        // A bundle SIBLING: its own document, so it resolves one level down from
+        // the entry page — at its own stable `.../<path>/current.html` (#232),
+        // named by `bundlePath`. `fileKey` rides along only as the pre-#232
+        // migration fallback.
         return {
           pageId: page._id as string,
           accountId: page.accountId as string,
           lifecycle: page.lifecycle,
           visibility: page.visibility,
+          bundlePath: subPath,
           fileKey: file.artifactKey,
         };
       }
@@ -310,13 +326,15 @@ export const resolveAccountDomainRoute = query({
     if (!bundle) return null;
     const file = bundle.files.find((f) => f.path === subPath);
     if (file) {
-      // Bundle SIBLING (see the subdomain resolver): explicit key, not the
-      // entry page's stable `current.html`.
+      // Bundle SIBLING (see the subdomain resolver): its own stable key, one
+      // level down from the entry page's. `subPath` is already normalized, so it
+      // is the same string the publish side derived the key from.
       return {
         pageId: page._id as string,
         accountId: page.accountId as string,
         lifecycle: page.lifecycle,
         visibility: page.visibility,
+        bundlePath: subPath,
         fileKey: file.artifactKey,
       };
     }

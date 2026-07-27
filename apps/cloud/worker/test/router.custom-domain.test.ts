@@ -4,9 +4,9 @@ import type { Env } from "../src/env";
 import {
   putArtifact,
   artifactKey,
-  currentArtifactKey,
   type ArtifactMeta,
 } from "../src/r2";
+import { currentArtifactKey } from "../../shared/src/artifact_keys";
 import {
   lookupRoute,
   type CachedRoute,

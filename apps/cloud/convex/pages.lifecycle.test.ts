@@ -81,10 +81,14 @@ async function publishPage(
 function spyEdgePort(): {
   port: LifecycleEdgePort;
   invalidated: string[];
-  evicted: { pageId: string; slug: string }[];
+  evicted: { pageId: string; slug: string; paths?: readonly string[] }[];
 } {
   const invalidated: string[] = [];
-  const evicted: { pageId: string; slug: string }[] = [];
+  const evicted: {
+    pageId: string;
+    slug: string;
+    paths?: readonly string[];
+  }[] = [];
   return {
     invalidated,
     evicted,
@@ -233,6 +237,65 @@ describe("setVisibility — update + cache invalidation (CLOUD-31)", () => {
     // TTL and the router serves the page with NO bearer check (security bug).
     expect(spy.evicted.map((e) => e.slug)).toContain("vis-evict");
     expect(spy.evicted.map((e) => e.pageId)).toContain(pageId);
+    // An ordinary page has no siblings — nothing extra to evict.
+    expect(spy.evicted[0]!.paths ?? []).toEqual([]);
+  });
+
+  it("#232: a BUNDLE flip evicts every SIBLING route, not just the entry", async () => {
+    // Siblings serve through the entry page but cache under their OWN route keys
+    // (`route:<host>/about.html`). Evicting only the entry left them resolving as
+    // `public` — served with no bearer check — for up to the 1h route TTL.
+    const t = convexTest(schema, modules);
+    const { accountId, bearer } = await seedAuth(t);
+    const pageId = await publishPage(t, bearer, "bundle-flip");
+
+    // Make the page a bundle ENTRY with two siblings, and add a SUPERSEDED
+    // version to prove only the CURRENT version's paths are evicted (an older
+    // version's siblings are unreachable through the serve path).
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      const base = {
+        accountId: accountId as never,
+        slug: "bundle-flip",
+        entryPageId: pageId as never,
+        entryPath: "index.html",
+        lockfile: {},
+        createdAt: now,
+      };
+      await ctx.db.insert("bundleVersions", {
+        ...base,
+        version: 1,
+        files: [
+          { path: "stale.html", artifactKey: "k-stale", sourceHash: "s0", entry: false },
+        ],
+      });
+      await ctx.db.insert("bundleVersions", {
+        ...base,
+        version: 2,
+        files: [
+          { path: "about.html", artifactKey: "k1", sourceHash: "s1", entry: false },
+          {
+            path: "docs/guide.html",
+            artifactKey: "k2",
+            sourceHash: "s2",
+            entry: false,
+          },
+        ],
+      });
+    });
+
+    const spy = spyEdgePort();
+    __setLifecycleEdgePort(spy.port);
+
+    await t.mutation(api.pages.setVisibility, {
+      bearer,
+      id: pageId as never,
+      visibility: "private",
+    });
+
+    const paths = spy.evicted[0]!.paths ?? [];
+    expect([...paths].sort()).toEqual(["about.html", "docs/guide.html"]);
+    expect(paths).not.toContain("stale.html");
   });
 
   it("audits the visibility change (page.visibility)", async () => {
