@@ -31,6 +31,15 @@ export function artifactKey(
   return `artifacts/${accountId}/${pageId}/${expandedHash}.html`;
 }
 
+// #232: the STABLE serve keys (`…/current.html`, for a page and for a bundle
+// sibling) are NOT defined here. They are written by Convex and read by this
+// Worker, so a copy in each tree is a drift hazard with nothing enforcing it;
+// they live in the one place both trees already import,
+// `shared/src/artifact_keys.ts`. R2 is strongly consistent for same-key
+// overwrites, and both ends of our path are direct bucket operations (the
+// binding here, the S3 API on the publish side), so the R2 custom-domain cache
+// caveat does not apply to the overwrite.
+
 /**
  * Custom metadata stored alongside an artifact object. Small, JSON-ish scalars
  * only (R2 caps custom metadata size). Lets the router set response headers and

@@ -116,9 +116,10 @@ describe("CLOUD-50 bundle integration — entry-as-page publish + serving", () =
     });
     expect(rootRoute).not.toBeNull();
     expect(siblingRoute).not.toBeNull();
-    // The sibling serves a DIFFERENT artifact than the entry.
-    expect(siblingRoute!.artifactKey).not.toBe(rootRoute!.artifactKey);
-    expect(siblingRoute!.artifactKey).toContain("bundles/");
+    // The sibling serves a DIFFERENT artifact than the entry: it carries an
+    // explicit `fileKey`, while the entry resolves to its stable current.html (#232).
+    expect(rootRoute!.fileKey).toBeUndefined();
+    expect(siblingRoute!.fileKey).toContain("bundles/");
   });
 
   it("re-publishing an owned bundle slug UPDATES it in place (v2, retained)", async () => {

@@ -113,6 +113,32 @@ describe("CLOUD-SUBDOMAIN — serve.resolveRoute (subdomain-only)", () => {
     expect(route!.lifecycle).toBe("active");
   });
 
+  it("#232: the projection is version-INDEPENDENT (no version, no hashed artifactKey)", async () => {
+    const t = convexTest(schema, modules);
+    const bearer = await seedAuth(t, "auth_user_232");
+    const { id } = await publishPage(t, bearer, "immediate-232");
+
+    const route = await t.query(api.serve.resolveRoute, {
+      host: "immediate-232.shortwind.dev",
+      path: "/",
+    });
+    expect(route).not.toBeNull();
+    // The Worker JSON-parses this straight into a `CachedRoute`. Anything
+    // version-coupled here would go stale in KV the moment the page is updated.
+    expect(Object.keys(route!).sort()).toEqual([
+      "accountId",
+      "fallbackArtifactKey",
+      "lifecycle",
+      "pageId",
+      "visibility",
+    ]);
+    expect(route!.pageId).toBe(id);
+    // The migration shim points at the current version's immutable object; the
+    // Worker only reads it when the stable `current.html` is absent.
+    expect(route!.fallbackArtifactKey).toContain(`artifacts/`);
+    expect(route!.fallbackArtifactKey).not.toContain("current.html");
+  });
+
   it("does NOT resolve a reserved/system host by path (subdomain-only — no fallback)", async () => {
     const t = convexTest(schema, modules);
     const bearer = await seedAuth(t, "auth_user_b");

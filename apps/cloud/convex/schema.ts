@@ -220,6 +220,18 @@ export default defineSchema({
   // bundle is identified by its account-scoped `slug` (the entry handle); the
   // CURRENT version is the highest `version` row for that (accountId, slug), so
   // no separate bundle record table is needed (keeps this purely additive).
+  //
+  // #232 — IF ROLLBACK EVER SHIPS, it must REWRITE the stable serve objects, not
+  // just re-point a row. Since #232 the serve path streams
+  // `artifacts/<acct>/<page>/current.html` and, per sibling,
+  // `bundles/<acct>/<page>/<path>/current.html` — keys derived from identity, not
+  // from a version. Retained rows here (and in `pageVersions`) still name the
+  // immutable `<hash>.html` object the old version's bytes live in, but NOTHING
+  // on the hot path reads it. A rollback that only moved `currentVersionId`
+  // backwards would leave both `current.html` objects holding the NEW version and
+  // silently serve the content it was meant to undo. It has to copy the target
+  // version's immutable object over each `current.html` (an S3 CopyObject per
+  // served path), with the same after-commit ordering the publish path uses.
   bundleVersions: defineTable({
     accountId: v.id("accounts"),
     // Stable URL handle of the entry point. Unique per account at the head

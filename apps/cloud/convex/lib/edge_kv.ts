@@ -71,7 +71,54 @@ export function routeKeyForSubdomain(
   subdomain: string,
   root: string = rootDomain(),
 ): string {
-  return routeKey(`${subdomain}.${root}`, "/");
+  return routeKeyForSubdomainPath(subdomain, "/", root);
+}
+
+/**
+ * #232: the route key for ONE path on a page's subdomain host. The entry serves
+ * at `/` ({@link routeKeyForSubdomain}); a BUNDLE SIBLING serves at its authored
+ * bundle-relative path (`about.html`, `docs/guide.html`) on that same host, and
+ * is a separate KV record the Worker caches independently.
+ *
+ * `path` is accepted with or without a leading slash — `routeKey` normalizes it,
+ * exactly as worker/src/kv.ts does, so the stored `bundleVersions.files[].path`
+ * (never leading-slashed) keys the same record the Worker wrote.
+ */
+export function routeKeyForSubdomainPath(
+  subdomain: string,
+  path: string,
+  root: string = rootDomain(),
+): string {
+  return routeKey(`${subdomain}.${root}`, path);
+}
+
+/**
+ * How many evictions run concurrently in {@link evictRouteForPage}.
+ *
+ * A bundle may carry up to `MAX_BUNDLE_FILES` (2000) siblings, each needing a KV
+ * delete AND a cache purge — up to ~4000 requests for one takedown. Strictly
+ * sequential that is minutes of wall clock inside a single scheduled action, and
+ * a kill has to be fast (PRD §8.2 "in seconds"). A small fixed pool keeps it to
+ * seconds without hammering the Cloudflare API rate limit (1200 req / 5 min per
+ * account) hard enough to start collecting 429s.
+ */
+const EVICT_CONCURRENCY = 8;
+
+/** Run `task` over `items` with at most {@link EVICT_CONCURRENCY} in flight. */
+async function pooled<T>(
+  items: readonly T[],
+  task: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(EVICT_CONCURRENCY, items.length) },
+    async () => {
+      for (let i = next++; i < items.length; i = next++) {
+        await task(items[i]!);
+      }
+    },
+  );
+  await Promise.all(workers);
 }
 
 /**
@@ -135,6 +182,13 @@ export async function evictKvRouteByKey(key: string): Promise<boolean> {
  * symmetry, but only the `subdomain` drives an eviction (no subdomain on a legacy
  * row ⇒ nothing to evict; it degrades to stale-until-TTL, the prior behavior).
  *
+ * #232 — `paths` are the page's BUNDLE SIBLING paths (`lib/bundle_routes.ts`
+ * `bundleSiblingPaths`), each of which serves at `<subdomain>.<root>/<path>` and
+ * is its OWN KV record + edge-cache entry. Evicting only the entry left every
+ * sibling cached as `public`/`active` for up to the 1h route TTL, so a
+ * public → private flip (or a delete/kill/expiry) did not actually pull them —
+ * a security hole, not just staleness. Empty for an ordinary page.
+ *
  * IMPORTANT: this does a `fetch`, so it can ONLY run inside a Convex ACTION (a
  * mutation/query forbids `fetch`). The lifecycle/kill paths are MUTATIONS, so
  * they SCHEDULE {@link evictRouteAction} via `scheduleRouteEviction`
@@ -145,20 +199,40 @@ export async function evictKvRouteByKey(key: string): Promise<boolean> {
 export async function evictRouteForPage(
   slug: string,
   subdomain?: string | null,
+  paths?: readonly string[] | null,
 ): Promise<void> {
   void slug;
-  if (subdomain) {
-    // Two evictions for the ONE served host (`<subdomain>.<root>`), both
-    // fail-safe (neither throws — a miss degrades to stale-until-TTL):
-    //   1. KV route  — so the next request re-resolves against Convex and sees
-    //      the tombstone/quarantine (bounds staleness to the 1h route TTL).
-    //   2. Edge cache — a zone purge-by-URL for the SAME host, so an artifact
-    //      already cached at the edge (which sits in FRONT of KV) 404s within
-    //      seconds instead of after the 60s edge TTL (#165 — the moderation
-    //      kill-path needs instant takedown). The purge URL is the page's
-    //      subdomain root, normalized to the Worker's `edgeCacheKey` form.
-    await evictKvRouteByKey(routeKeyForSubdomain(subdomain));
-    await purgeEdgeByUrl(`https://${subdomain}.${rootDomain()}/`);
+  if (!subdomain) return;
+  const root = rootDomain();
+  const host = `${subdomain}.${root}`;
+
+  /**
+   * Two evictions per served URL on this host, both fail-safe (neither throws —
+   * a miss degrades to stale-until-TTL):
+   *   1. KV route  — so the next request re-resolves against Convex and sees the
+   *      tombstone/quarantine/new visibility (bounds staleness to the 1h TTL).
+   *   2. Edge cache — a zone purge-by-URL for the SAME URL, so an artifact
+   *      already cached at the edge (which sits in FRONT of KV) stops serving
+   *      within seconds instead of after the 60s edge TTL (#165 — the moderation
+   *      kill path needs instant takedown). The purge URL is normalized to the
+   *      Worker's `edgeCacheKey` form.
+   */
+  const evictPath = async (path: string): Promise<void> => {
+    const p = path.startsWith("/") ? path : `/${path}`;
+    await evictKvRouteByKey(routeKeyForSubdomainPath(subdomain, p, root));
+    await purgeEdgeByUrl(`https://${host}${p}`);
+  };
+
+  // The entry route first — it is the one a takedown most urgently needs gone.
+  await evictPath("/");
+
+  // #232: then every bundle sibling served through this same page. De-duped and
+  // "/"-filtered so a bundle whose entry path also appears in `files` can't
+  // double-purge. Pooled (see EVICT_CONCURRENCY) because a 2000-file bundle is
+  // ~4000 requests and a kill has to complete in seconds.
+  if (paths && paths.length > 0) {
+    const unique = [...new Set(paths)].filter((p) => p !== "" && p !== "/");
+    await pooled(unique, evictPath);
   }
 }
 
@@ -174,10 +248,14 @@ export const evictRouteAction = internalAction({
     slug: v.string(),
     // CLOUD-SUBDOMAIN: evict the per-page subdomain route key too when present.
     subdomain: v.optional(v.union(v.string(), v.null())),
+    // #232: the page's bundle sibling paths, each its own route key + cache
+    // entry. Optional so scheduled jobs enqueued by a PREVIOUS deploy (which
+    // carried no `paths`) still validate and run.
+    paths: v.optional(v.array(v.string())),
   },
   returns: v.null(),
   handler: async (_ctx, args) => {
-    await evictRouteForPage(args.slug, args.subdomain ?? null);
+    await evictRouteForPage(args.slug, args.subdomain ?? null, args.paths ?? null);
     return null;
   },
 });
@@ -208,10 +286,17 @@ export async function scheduleRouteEviction(
   ctx: SchedulerCtx,
   slug: string,
   subdomain?: string | null,
+  paths?: readonly string[] | null,
 ): Promise<void> {
   await ctx.scheduler.runAfter(0, internal.lib.edge_kv.evictRouteAction, {
     slug,
     // CLOUD-SUBDOMAIN: thread the subdomain so the action evicts that key too.
     subdomain: subdomain ?? null,
+    // #232: thread the bundle sibling paths so they are pulled with the entry.
+    // Bounded by MAX_BUNDLE_FILES (2000) short strings — comfortably inside
+    // Convex's function-argument size limit, and the only realistic pressure is
+    // wall clock inside the action, which `EVICT_CONCURRENCY` bounds. Omitted
+    // when empty so an ordinary page's scheduled args are unchanged.
+    ...(paths && paths.length > 0 ? { paths: [...paths] } : {}),
   });
 }

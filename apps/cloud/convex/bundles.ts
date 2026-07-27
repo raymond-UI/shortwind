@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireWrite } from "./lib/auth_guard.js";
 import { deriveSlug, validateSlug } from "../shared/src/slug.js";
 import { normalizeBundlePath } from "./lib/bundle_path.js";
+import { bundleCurrentKey } from "../shared/src/artifact_keys.js";
 import {
   assembleArtifact,
   lockfileVersions,
@@ -163,9 +164,15 @@ async function sha256Hex(s: string): Promise<string> {
 }
 
 /**
- * A sibling file's served R2 key namespaces the bundle by its ENTRY PAGE id (the
- * stable identity) + the authored path. Mirrors the single-file
+ * A sibling file's IMMUTABLE R2 key namespaces the bundle by its ENTRY PAGE id
+ * (the stable identity) + the authored path. Mirrors the single-file
  * `artifacts/<acct>/<pageId>/<hash>.html` layout under a `bundles/` prefix.
+ *
+ * Content-addressed, so it changes on every republish — which is why it is NOT
+ * what the serve path resolves. That is `bundleCurrentKey` (the stable
+ * `.../<path>/current.html`, `shared/src/artifact_keys.ts`), written from the
+ * same bytes right after the bundle version commits; this key remains the
+ * history/rollback record and the pre-#232 migration fallback.
  */
 export function bundleArtifactKey(
   accountId: string,
@@ -279,6 +286,12 @@ export async function runPublishBundle(
     (f) => normalizeBundlePath(f.path) !== entry,
   );
   const fileResults: BundleFileResult[] = [];
+  /** The stable-copy writes deferred until after the version commit (#232). */
+  const stableWrites: {
+    path: string;
+    document: string;
+    meta: { expandedHash: string; version: number; accountId: string; pageId: string };
+  }[] = [];
   for (const file of siblings) {
     const path = normalizeBundlePath(file.path);
     const expanded = await expandPage({
@@ -288,12 +301,16 @@ export async function runPublishBundle(
     });
     const document = assembleArtifact(expanded.expandedHtml, expanded.css);
     const key = bundleArtifactKey(acct, pageId, path, expanded.expandedHash);
-    await deps.publish.storage.writeArtifact(key, document, {
+    const meta = {
       expandedHash: expanded.expandedHash,
       version,
       accountId: acct,
       pageId,
-    });
+    };
+    // The IMMUTABLE object only. Content-addressed, so writing it before the
+    // commit publishes nothing: no record points at it yet.
+    await deps.publish.storage.writeArtifact(key, document, meta);
+    stableWrites.push({ path, document, meta });
     const sourceHash = await sha256Hex(file.html);
     fileResults.push({ path, artifactKey: key, sourceHash, entry: false });
   }
@@ -313,6 +330,22 @@ export async function runPublishBundle(
     })),
     lockfile: lockfileVersions(input.lockfile),
   });
+
+  // 6. #232: ONLY NOW publish each sibling's STABLE `.../<path>/current.html` —
+  //    the object the serve path actually streams. Same ordering rule as the
+  //    single-page path (`publishStableArtifact` in lib/publish_core.ts): these
+  //    bytes are world-readable the instant they land, so nothing may become
+  //    public before the `bundleVersions` row that authorizes it is committed.
+  //    Writing them last means a failed commit leaves the PREVIOUS bundle
+  //    version serving, with the new hashed objects sitting unreferenced (which
+  //    makes a retry cheap). A failure here is a publish failure and propagates.
+  for (const w of stableWrites) {
+    await deps.publish.storage.writeArtifact(
+      bundleCurrentKey(acct, pageId, w.path),
+      w.document,
+      w.meta,
+    );
+  }
 
   return {
     ok: true,

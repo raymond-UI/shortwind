@@ -6,10 +6,15 @@ import {
   type ModerationAuthContext,
 } from "./lib/auth_guard.js";
 import { scheduleRouteEviction, type SchedulerCtx } from "./lib/edge_kv.js";
+import { bundleSiblingPaths } from "./lib/bundle_routes.js";
 import {
   scheduleArtifactSeal,
   type SealSchedulerCtx,
 } from "./lib/r2_seal.js";
+// #232: the STABLE serve key (`.../current.html`) every publish overwrites. It
+// is aliased here because this module already has a version-scoped
+// `liveVersionArtifactKey` and the two must never be confused.
+import { currentArtifactKey as stableArtifactKey } from "../shared/src/artifact_keys.js";
 import { scheduleAbuseNotification } from "./lib/abuse_notify.js";
 
 /**
@@ -238,8 +243,16 @@ const lifecycleValidator = v.union(
   v.literal("tombstoned"),
 );
 
-/** The current version's R2 artifact key for a page, or null if unpublished. */
-async function currentArtifactKey(
+/**
+ * The current version's IMMUTABLE hashed R2 artifact key for a page, or null if
+ * unpublished (`artifacts/<accountId>/<pageId>/<expandedHash>.html`).
+ *
+ * NOT to be confused with `shared/src/artifact_keys.currentArtifactKey(
+ * accountId, pageId)`, which is the STABLE `current.html` serve key (#232). This one is
+ * version-scoped ("the artifact of the live version"); that one is the fixed key
+ * every publish overwrites. Both are live objects a seal has to remove.
+ */
+async function liveVersionArtifactKey(
   ctx: { db: any },
   pageId: Id<"pages">,
 ): Promise<string | null> {
@@ -483,7 +496,7 @@ export async function applyLifecycle(
 
   let sealed: string | null = null;
   if (result.moderationState !== null) {
-    const liveKey = await currentArtifactKey(ctx, args.pageId);
+    const liveKey = await liveVersionArtifactKey(ctx, args.pageId);
     sealed = result.seals && liveKey ? sealedKey(liveKey) : null;
     // #198 item 4: actually MOVE the R2 object to the sealed prefix (copy →
     // delete-original), preserving the material while removing it from its live
@@ -491,8 +504,21 @@ export async function applyLifecycle(
     // action right after this mutation commits (a mutation cannot fetch), exactly
     // like the KV eviction. Fail-safe: the scheduled action swallows errors; the
     // recorded `preservedR2Key` + lifecycle=quarantined stay the source of truth.
+    //
+    // #232: publish now writes the SAME bytes a SECOND time at the stable serve
+    // key (`current.html`). Sealing only the hashed key would leave that copy
+    // live and fetchable over the S3 API, breaking this module's guarantee that
+    // the material "can no longer be served from — or fetched at — its original
+    // R2 key". The material is already preserved at the sealed key, so the stable
+    // copy is a plain DELETE (no second sealed key).
+    const stableKey = stableArtifactKey(page.accountId as string, args.pageId);
     if (result.seals && liveKey && sealed && ctx.scheduler) {
-      await scheduleArtifactSeal(ctx as SealSchedulerCtx, liveKey, sealed);
+      await scheduleArtifactSeal(
+        ctx as SealSchedulerCtx,
+        liveKey,
+        sealed,
+        stableKey,
+      );
     }
     await upsertModeration(ctx, {
       pageId: args.pageId,
@@ -576,9 +602,17 @@ export interface KillEdgePort {
    * optional `ctx` carries the kill mutation's scheduler — the production port
    * schedules the KV `fetch` to run in an action (a mutation cannot fetch). The
    * test port ignores it (a 1-arg `evictRoute(route)` is assignable here).
+   *
+   * `paths` (#232) are the page's bundle sibling paths, each served through this
+   * page under its own KV route key. Omitted/empty for an ordinary page.
    */
   evictRoute(
-    args: { pageId: string; slug: string; subdomain?: string | null },
+    args: {
+      pageId: string;
+      slug: string;
+      subdomain?: string | null;
+      paths?: readonly string[];
+    },
     ctx?: SchedulerCtx,
   ): Promise<void>;
 }
@@ -596,15 +630,23 @@ export interface KillEdgePort {
  * to match worker/src/kv.ts (Convex never imports the Worker — CLAUDE.md).
  */
 const defaultKillEdgePort: KillEdgePort = {
+  // Deliberately a NO-OP, kept for the port shape and as the seam the kill
+  // integration tests assert against. It cannot do the purge: `killPage` is a
+  // MUTATION (Convex forbids `fetch`), and the `url` it is handed is the legacy
+  // apex/path summary form (`https://<root>/<slug>`), not the
+  // `https://<subdomain>.<root>/…` the Worker actually caches under. The real
+  // purge rides the scheduled `evictRoute` action below, which runs in an ACTION
+  // and derives the correct per-URL keys (lib/edge_kv.ts `evictRouteForPage`).
   invalidate: async () => {},
-  evictRoute: async ({ slug, subdomain }, ctx) => {
+  evictRoute: async ({ slug, subdomain, paths }, ctx) => {
     // A mutation cannot `fetch`; schedule the KV REST delete to run in an action
     // the instant `killPage` commits. No scheduler (shouldn't happen in prod) →
     // skip. Fail-safe: the scheduled action swallows + logs any Cloudflare error.
     // CLOUD-SUBDOMAIN: thread the subdomain so the per-page subdomain KV key —
-    // the only key serving is keyed on now — is evicted.
+    // the only key serving is keyed on now — is evicted. #232: thread the bundle
+    // sibling paths so the whole killed unit goes, not just its entry.
     if (ctx === undefined) return;
-    await scheduleRouteEviction(ctx, slug, subdomain ?? null);
+    await scheduleRouteEviction(ctx, slug, subdomain ?? null, paths ?? null);
   },
 };
 
@@ -775,10 +817,18 @@ export const killPage = mutation({
     });
 
     // Fast global kill: purge the edge cache + evict the KV route so the pulled
-    // page stops resolving on the hot path. One object, one cache key (PRD §8.2).
+    // page stops resolving on the hot path (PRD §8.2). #232: a BUNDLE is one
+    // page but MANY served URLs — every sibling caches under its own route key,
+    // so a kill that evicted only the entry left the rest of the killed content
+    // serving for up to the 1h route TTL. All of them go.
     await killEdgePort.invalidate(publicUrl(page.slug));
     await killEdgePort.evictRoute(
-      { pageId: args.pageId, slug: page.slug, subdomain: page.subdomain ?? null },
+      {
+        pageId: args.pageId,
+        slug: page.slug,
+        subdomain: page.subdomain ?? null,
+        paths: await bundleSiblingPaths(ctx, args.pageId),
+      },
       ctx,
     );
 

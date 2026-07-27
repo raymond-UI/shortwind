@@ -20,6 +20,7 @@ import {
   type StoragePort,
   type StoredRecipeVersion,
 } from "./publish_core.js";
+import { currentArtifactKey } from "../../shared/src/artifact_keys.js";
 import { computeBodySha } from "../../shared/src/fingerprint.js";
 import { deriveSubdomain } from "../../shared/src/slug.js";
 import type { Lockfile } from "../../shared/src/lockfile-diff.js";
@@ -172,26 +173,13 @@ class MemoryStorage implements StoragePort {
   }
 }
 
+// #232: the edge port no longer registers a route on publish. The KV record is
+// version-independent, so a republish has nothing to update there; the read-
+// through cold miss populates it. All that remains is the edge-cache purge.
 class MemoryEdge implements EdgePort {
   invalidated: string[] = [];
-  routes: {
-    pageId: string;
-    slug: string;
-    subdomain: string;
-    version: number;
-    artifactKey: string;
-  }[] = [];
   async invalidate(url: string): Promise<void> {
     this.invalidated.push(url);
-  }
-  async putRoute(args: {
-    pageId: string;
-    slug: string;
-    subdomain: string;
-    version: number;
-    artifactKey: string;
-  }): Promise<void> {
-    this.routes.push(args);
   }
 }
 
@@ -268,20 +256,23 @@ describe("runPublish — create", () => {
     expect(out.result.url).toBe("https://my-status.shortwind.app");
     expect(out.result.version).toBe(1);
 
-    expect(storage.artifacts).toHaveLength(1);
+    // #232: TWO objects per publish — the immutable hashed artifact (history /
+    // rollback / dedup) and the stable `current.html` the router serves.
+    expect(storage.artifacts).toHaveLength(2);
     expect(storage.artifacts[0]!.key).toBe(
       artifactKey(ACCOUNT, out.result.id, storage.artifacts[0]!.meta.expandedHash),
     );
+    expect(storage.artifacts[1]!.key).toBe(
+      currentArtifactKey(ACCOUNT, out.result.id),
+    );
+    expect(storage.artifacts[1]!.html).toBe(storage.artifacts[0]!.html);
     expect(data.pageVersions).toHaveLength(1);
     expect(data.pageVersions[0]!.version).toBe(1);
     // The stored page points at version 1.
     expect(data.pages.get(out.result.id)!.currentVersion).toBe(1);
     // The lockfile snapshot is persisted for the next diff.
     expect(data.lockfiles.get(out.result.id)).toEqual(lockfile());
-    // Edge route registered (carries slug + subdomain) + URL invalidated.
-    expect(edge.routes).toHaveLength(1);
-    expect(edge.routes[0]!.slug).toBe("my-status");
-    expect(edge.routes[0]!.subdomain).toBe("my-status");
+    // The published URL's edge cache is purged (#207). No KV route write (#232).
     expect(edge.invalidated).toEqual(["https://my-status.shortwind.app"]);
     // A page.publish audit row exists.
     expect(data.audits.some((a) => a.action === "page.publish")).toBe(true);
@@ -370,10 +361,11 @@ describe("runPublish — idempotency", () => {
     expect(first.ok && second.ok).toBe(true);
     if (!first.ok || !second.ok) return;
     expect(second.result).toEqual(first.result);
-    // No duplicate page / version / artifact.
+    // No duplicate page / version / artifact. (#232: one publish = two objects,
+    // the hashed artifact + the stable current.html; the retry writes neither.)
     expect(data.pages.size).toBe(1);
     expect(data.pageVersions).toHaveLength(1);
-    expect(storage.artifacts).toHaveLength(1);
+    expect(storage.artifacts).toHaveLength(2);
   });
 });
 
@@ -467,14 +459,113 @@ describe("runUpdate — version bump, same URL, prior retained (PRD §5.6)", () 
     expect(data.pageVersions).toHaveLength(2);
     expect(data.pageVersions.map((v) => v.version).sort()).toEqual([1, 2]);
     expect(data.pages.get(pageId)!.currentVersion).toBe(2);
-    // A fresh artifact written for v2 (distinct content hash).
-    expect(storage.artifacts).toHaveLength(2);
+    // A fresh artifact written for v2 (distinct content hash) PLUS the stable
+    // `current.html` overwrite — two objects per publish, four in total (#232).
+    expect(storage.artifacts).toHaveLength(4);
     // Edge invalidated the same (subdomain) URL again.
     expect(edge.invalidated).toEqual([
       "https://my-status.shortwind.app",
       "https://my-status.shortwind.app",
     ]);
     expect(data.audits.some((a) => a.action === "page.update")).toBe(true);
+  });
+
+  it("#232: update OVERWRITES the stable current.html so a republish is immediate", async () => {
+    const { storage, deps } = makeDeps();
+    const created = await runPublish(await basePublishInput(), deps);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const pageId = created.result.id;
+    const stable = currentArtifactKey(ACCOUNT, pageId);
+
+    const v1 = storage.artifacts.filter((a) => a.key === stable);
+    expect(v1).toHaveLength(1);
+
+    const updated = await runUpdate(
+      {
+        actor: { accountId: ACCOUNT, tokenId: TOKEN },
+        pageId,
+        html: '<div class="@card">hello v2</div>',
+        recipes: [{ family: "card", source: await cleanCardSource() }],
+        lockfile: lockfile(),
+      },
+      deps,
+    );
+    expect(updated.ok).toBe(true);
+
+    // The SAME key was written again, with the new bytes — the serve path needs
+    // no eviction because nothing it caches is version-coupled.
+    const writes = storage.artifacts.filter((a) => a.key === stable);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.html).not.toBe(writes[0]!.html);
+    expect(writes[1]!.html).toContain("hello v2");
+    // The v2 hashed artifact is still written alongside it (history/rollback).
+    expect(
+      storage.artifacts.some(
+        (a) => a.key === artifactKey(ACCOUNT, pageId, writes[1]!.meta.expandedHash),
+      ),
+    ).toBe(true);
+    // The stable object carries the CURRENT version's metadata (etag correctness).
+    expect(writes[1]!.meta.version).toBe(2);
+  });
+
+  it("#232: a FAILED version commit leaves current.html unwritten (create)", async () => {
+    // Ordering guard. `current.html` is world-readable the instant it lands, so
+    // it must be the LAST thing a publish does. If the version commit throws
+    // after the artifact write, the only object in the bucket must be the
+    // content-addressed one, which nothing points at and nobody can find.
+    const { data, storage, deps } = makeDeps();
+    data.insertPageVersion = async () => {
+      throw new Error("boom: version commit failed");
+    };
+
+    await expect(runPublish(await basePublishInput(), deps)).rejects.toThrow(
+      /version commit failed/,
+    );
+
+    expect(storage.artifacts).toHaveLength(1);
+    expect(storage.artifacts[0]!.key).toMatch(/\/[0-9a-f]+\.html$/);
+    expect(storage.artifacts.some((a) => a.key.endsWith("/current.html"))).toBe(
+      false,
+    );
+  });
+
+  it("#232: a FAILED version commit leaves current.html on the PREVIOUS version", async () => {
+    const { data, storage, deps } = makeDeps();
+    const created = await runPublish(await basePublishInput(), deps);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const pageId = created.result.id;
+    const stable = currentArtifactKey(ACCOUNT, pageId);
+
+    // Fail at the very last commit step before the stable write.
+    data.patchPageCurrentVersion = async () => {
+      throw new Error("boom: version commit failed");
+    };
+
+    await expect(
+      runUpdate(
+        {
+          actor: { accountId: ACCOUNT, tokenId: TOKEN },
+          pageId,
+          html: '<div class="@card">hello v2</div>',
+          recipes: [{ family: "card", source: await cleanCardSource() }],
+          lockfile: lockfile(),
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/version commit failed/);
+
+    // The stable key was written exactly once (by the successful v1 publish) and
+    // still serves v1 — the uncommitted v2 bytes never became public.
+    const stableWrites = storage.artifacts.filter((a) => a.key === stable);
+    expect(stableWrites).toHaveLength(1);
+    expect(stableWrites[0]!.html).toContain("hello");
+    expect(stableWrites[0]!.html).not.toContain("hello v2");
+    expect(stableWrites[0]!.meta.version).toBe(1);
+    // The v2 hashed object IS durable — an abandoned, unreferenced object, which
+    // is what makes the retry cheap.
+    expect(storage.artifacts).toHaveLength(3);
   });
 
   it("only touched recipes ride up on update (clean body → no recipe write)", async () => {

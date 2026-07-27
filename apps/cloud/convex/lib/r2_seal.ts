@@ -8,6 +8,13 @@
  * (at the sealed key, held for the legal window) and can no longer be served
  * from — or fetched at — its original R2 key.
  *
+ * #232 — a published page now has TWO live objects holding the same bytes: the
+ * immutable `<expandedHash>.html` and the stable `current.html` the Worker
+ * streams. BOTH must go, or the guarantee above is false for the second one (the
+ * router refuses a quarantined page before any R2 read, but the object would
+ * still be fetchable over the S3 API). The sealed copy is made from the hashed
+ * key; `current.html` is then plainly DELETED (it is a duplicate, not evidence).
+ *
  * Like the KV eviction (lib/edge_kv.ts), the R2 S3 calls are `fetch`es, so they
  * can ONLY run in an ACTION. The seal is SCHEDULED from the sealing mutation
  * (`ctx.scheduler.runAfter(0, …)`) via {@link scheduleArtifactSeal}.
@@ -58,10 +65,19 @@ export type SealStatus = "skipped" | "sealed" | "failed";
  * `failed` on a real error (which the caller alerts on). Never throws.
  * Idempotent enough for a retry: a re-run whose live object is already gone (404
  * on copy-source) is treated as an already-sealed success.
+ *
+ * `stableKey` (#232) is the page's STABLE serve object
+ * (`artifacts/<accountId>/<pageId>/current.html`) — a SECOND copy of the same
+ * bytes the publish path writes so a republish is immediate. It holds no unique
+ * material (the sealed key preserves the bytes), so it is a plain DELETE, not a
+ * second copy. It is deleted even when the live copy is already gone (a retry),
+ * so a partially-applied seal converges. A 404 is success; a real failure is
+ * logged and reported as `failed` (never thrown).
  */
 export async function sealArtifact(
   liveKey: string,
   sealedKey: string,
+  stableKey?: string | null,
 ): Promise<SealStatus> {
   const creds = r2Creds();
   if (!creds) return "skipped"; // Un-provisioned (dev/test): nothing to seal.
@@ -76,37 +92,53 @@ export async function sealArtifact(
   const base = creds.endpoint.replace(/\/+$/, "");
   const enc = (k: string) => k.split("/").map(encodeURIComponent).join("/");
   const sealedUrl = `${base}/${creds.bucket}/${enc(sealedKey)}`;
-  const liveUrl = `${base}/${creds.bucket}/${enc(liveKey)}`;
+
+  /** DELETE one key. A 404 is success (already gone). Returns false on a real error. */
+  const deleteKey = async (key: string, label: string): Promise<boolean> => {
+    const del = await client.fetch(`${base}/${creds.bucket}/${enc(key)}`, {
+      method: "DELETE",
+    });
+    if (del.ok || del.status === 404) return true;
+    const detail = await del.text().catch(() => "");
+    console.error(
+      `[r2_seal] ${label} failed (${del.status}) ${key}: ${detail.slice(0, 200)}`,
+    );
+    return false;
+  };
 
   try {
+    let status: SealStatus = "sealed";
     // 1. COPY live → sealed. S3 CopyObject: PUT the destination with an
     //    `x-amz-copy-source` header naming `/{bucket}/{liveKey}`.
     const copy = await client.fetch(sealedUrl, {
       method: "PUT",
       headers: { "x-amz-copy-source": `/${creds.bucket}/${enc(liveKey)}` },
     });
-    // Already gone (a retry after a prior seal) ⇒ treat as sealed, skip delete.
-    if (copy.status === 404) return "sealed";
-    if (!copy.ok) {
+    if (copy.status === 404) {
+      // Already gone (a retry after a prior seal) ⇒ the hashed key is sealed;
+      // fall through to the stable-copy delete so a partial seal converges.
+    } else if (!copy.ok) {
       const detail = await copy.text().catch(() => "");
       console.error(
         `[r2_seal] copy failed (${copy.status}) ${liveKey} → ${sealedKey}: ${detail.slice(0, 200)}`,
       );
-      return "failed";
+      status = "failed";
+    } else {
+      // 2. DELETE the original live object so it can no longer be served/fetched.
+      //    The COPY succeeded, so the material IS preserved at the sealed key —
+      //    the legal hold holds. A delete failure is reported so the caller/
+      //    alerting knows the original wasn't removed (it is already unreachable
+      //    via KV/find).
+      if (!(await deleteKey(liveKey, "delete-original"))) status = "failed";
     }
-    // 2. DELETE the original live object so it can no longer be served/fetched.
-    const del = await client.fetch(liveUrl, { method: "DELETE" });
-    if (!del.ok && del.status !== 404) {
-      const detail = await del.text().catch(() => "");
-      console.error(
-        `[r2_seal] delete-original failed (${del.status}) ${liveKey}: ${detail.slice(0, 200)}`,
-      );
-      // The COPY succeeded, so the material IS preserved at the sealed key — the
-      // legal hold holds. Report failed so the caller/alerting knows the original
-      // wasn't removed (it is already unreachable via KV/find).
-      return "failed";
+    // 3. #232: DELETE the stable serve copy (`current.html`) — the same bytes at
+    //    a second key. Attempted even when the copy hard-failed: the material is
+    //    still at `liveKey` in that case, so removing this copy only ever shrinks
+    //    the live footprint, never the preserved evidence.
+    if (stableKey) {
+      if (!(await deleteKey(stableKey, "delete-stable"))) status = "failed";
     }
-    return "sealed";
+    return status;
   } catch (err) {
     console.error(`[r2_seal] seal threw for ${liveKey} → ${sealedKey}:`, err);
     return "failed";
@@ -120,10 +152,20 @@ export async function sealArtifact(
  * forever-retrying scheduled job.
  */
 export const sealArtifactAction = internalAction({
-  args: { liveKey: v.string(), sealedKey: v.string() },
+  args: {
+    liveKey: v.string(),
+    sealedKey: v.string(),
+    // #232. Optional so an in-flight job scheduled by the PREVIOUS deploy (whose
+    // args carry no `stableKey`) still runs — it just seals the hashed key.
+    stableKey: v.optional(v.string()),
+  },
   returns: v.null(),
   handler: async (_ctx, args) => {
-    const status = await sealArtifact(args.liveKey, args.sealedKey);
+    const status = await sealArtifact(
+      args.liveKey,
+      args.sealedKey,
+      args.stableKey ?? null,
+    );
     // #202 alerting: a FAILED seal (not merely unconfigured) is a legal-
     // preservation gap — the material may linger at its live key — so page an
     // operator rather than swallow silently.
@@ -156,10 +198,12 @@ export async function scheduleArtifactSeal(
   ctx: SealSchedulerCtx,
   liveKey: string,
   sealedKey: string,
+  stableKey?: string | null,
 ): Promise<void> {
   const { internal } = await import("../_generated/api.js");
   await ctx.scheduler.runAfter(0, internal.lib.r2_seal.sealArtifactAction, {
     liveKey,
     sealedKey,
+    ...(stableKey ? { stableKey } : {}),
   });
 }

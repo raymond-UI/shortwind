@@ -43,10 +43,15 @@ import type { Env } from "./env.js";
 import {
   resolveRouteWithFallback,
   putRoute,
+  asCachedRoute,
   type CachedRoute,
   type ColdRouteSource,
 } from "./kv.js";
 import { getArtifact } from "./r2.js";
+import {
+  bundleCurrentKey,
+  currentArtifactKey,
+} from "../../shared/src/artifact_keys.js";
 import { cacheArtifactResponse, edgeCacheKey, edgeCacheMatch } from "./cache.js";
 
 /**
@@ -266,7 +271,12 @@ export async function handleRequest(
   }
 
   // 4. Stream the frozen artifact from R2. Missing object → 404.
-  const artifact = await getArtifact(env, route.artifactKey);
+  //    #232: the key is DERIVED from the route's identity, not carried on it —
+  //    `artifacts/<accountId>/<pageId>/current.html`, which publish overwrites in
+  //    place. That is what makes a republish visible on the very next request
+  //    without evicting anything. A bundle sibling is a different document from
+  //    the entry page, so it carries its own explicit `fileKey`.
+  const artifact = await resolveArtifact(env, route);
   if (artifact === null) return refuse(404, "Not Found");
 
   // The artifact is already a complete self-contained document; the router just
@@ -295,33 +305,51 @@ export async function handleRequest(
 }
 
 /**
+ * Read the artifact a resolved route serves (#232).
+ *
+ * Every live route resolves to a STABLE key derived from route identity, never
+ * from a version — which is what lets the KV record outlive a republish:
+ *  - a bundle SIBLING (`bundlePath` set) →
+ *    `bundles/<accountId>/<pageId>/<bundlePath>/current.html`;
+ *  - anything else (an ordinary page, a bundle ENTRY) →
+ *    `artifacts/<accountId>/<pageId>/current.html`.
+ *
+ * The hashed keys on the record (`fileKey`, `fallbackArtifactKey`) are MIGRATION
+ * FALLBACKS, consulted only when the corresponding `current.html` is absent — a
+ * page/bundle last published before this shipped. That costs one extra R2 miss
+ * for those, and only until their first republish. A pre-#232 sibling record has
+ * `fileKey` with no `bundlePath`; it resolves straight to the hashed key.
+ */
+async function resolveArtifact(env: Env, route: CachedRoute) {
+  if (route.bundlePath !== undefined) {
+    const sibling = await getArtifact(
+      env,
+      bundleCurrentKey(route.accountId, route.pageId, route.bundlePath),
+    );
+    if (sibling !== null) return sibling;
+    return route.fileKey !== undefined ? getArtifact(env, route.fileKey) : null;
+  }
+  // Pre-#232 sibling record (explicit key, no bundle path): serve it as-is.
+  if (route.fileKey !== undefined) {
+    return getArtifact(env, route.fileKey);
+  }
+  const current = await getArtifact(
+    env,
+    currentArtifactKey(route.accountId, route.pageId),
+  );
+  if (current !== null) return current;
+  if (route.fallbackArtifactKey !== undefined) {
+    return getArtifact(env, route.fallbackArtifactKey);
+  }
+  return null;
+}
+
+/**
  * The route projection the Convex `/internal/resolve` endpoint returns. It is a
  * `CachedRoute` (the Worker JSON-parses it straight into one) or `null`. Declared
  * locally so the router keeps zero Convex dependency (CLAUDE.md).
  */
 type ResolvedRoute = CachedRoute | null;
-
-/** Narrow an unknown JSON value to a CachedRoute (defensive against a malformed
- * cold-source response — anything off-shape resolves to a 404, never a serve). */
-function asCachedRoute(value: unknown): CachedRoute | null {
-  if (value === null || typeof value !== "object") return null;
-  const r = value as Record<string, unknown>;
-  if (
-    typeof r.pageId === "string" &&
-    typeof r.accountId === "string" &&
-    typeof r.version === "number" &&
-    typeof r.artifactKey === "string" &&
-    (r.lifecycle === "active" ||
-      r.lifecycle === "quarantined" ||
-      r.lifecycle === "tombstoned") &&
-    (r.visibility === "public" ||
-      r.visibility === "unlisted" ||
-      r.visibility === "private")
-  ) {
-    return value as unknown as CachedRoute;
-  }
-  return null;
-}
 
 /**
  * Live cold-source deps for a provisioned worker (CLOUD-30b).

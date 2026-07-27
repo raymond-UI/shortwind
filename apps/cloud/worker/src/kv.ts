@@ -9,9 +9,23 @@
  * back into KV.
  *
  * A `CachedRoute` carries exactly what the router needs to serve or refuse
- * without a DB read: the R2 artifact key to stream, plus lifecycle/visibility
- * so the router can return 410 (tombstoned), 451-style sealed (quarantined), or
- * gate a private page.
+ * without a DB read: the page/account identity the stable R2 key is derived from,
+ * plus lifecycle/visibility so the router can return 410 (tombstoned), 451-style
+ * sealed (quarantined), or gate a private page.
+ *
+ * #232 — VERSION-INDEPENDENT BY DESIGN. The record used to carry `version` +
+ * the hashed `artifactKey`, both of which change on every republish, so the
+ * cached record was stale the instant a page was updated and only the 1h TTL
+ * cleared it. Nothing a republish changes is stored here any more: an ordinary
+ * page serves from `artifacts/<accountId>/<pageId>/current.html` and a bundle
+ * sibling from `bundles/<accountId>/<pageId>/<bundlePath>/current.html`
+ * (`shared/src/artifact_keys.ts`), both derived from fields that only a
+ * lifecycle/visibility change touches — and those evict this record eagerly.
+ *
+ * The two `…artifactKey`/`fileKey` fields that remain are MIGRATION FALLBACKS
+ * only: they are read solely when the corresponding `current.html` is absent
+ * (a page/bundle last published before this shipped) and disappear on the first
+ * republish. Nothing on the live path reads them.
  */
 import type { Env } from "./env.js";
 import type { PageLifecycle, PageVisibility } from "../../shared/src/types.js";
@@ -23,12 +37,86 @@ import type { PageLifecycle, PageVisibility } from "../../shared/src/types.js";
 export interface CachedRoute {
   pageId: string;
   accountId: string;
-  /** Current version number served by this route. */
-  version: number;
-  /** R2 key of the frozen artifact to stream (see ./r2.ts `artifactKey`). */
-  artifactKey: string;
   lifecycle: PageLifecycle;
   visibility: PageVisibility;
+  /**
+   * Set ONLY for a bundle SIBLING route: the sibling's canonical bundle-relative
+   * path (`bundleVersions.files[].path`, e.g. `"docs/guide.html"`). Absent for an
+   * ordinary page and for a bundle ENTRY, both of which serve from the page's own
+   * `current.html`.
+   *
+   * The router needs it to derive `bundles/<acct>/<page>/<path>/current.html`. It
+   * cannot use the REQUEST path instead: under account-domain routing a sibling
+   * is served at `<hostname>/<slug>/<path>`, so the request path carries a slug
+   * prefix the bundle key does not. The cold source (convex/serve.ts) has already
+   * split and normalized it, so it hands back the exact stored string.
+   */
+  bundlePath?: string;
+  /**
+   * MIGRATION SHIM (#232). The bundle SIBLING's immutable hashed key
+   * (`bundles/<acct>/<page>/<path>/<hash>.html`), read only when the sibling's
+   * stable `current.html` is absent — a bundle last published BEFORE this
+   * shipped. Same self-healing story as `fallbackArtifactKey` below.
+   *
+   * A record with `fileKey` but NO `bundlePath` is a pre-#232 sibling record; it
+   * still resolves (the hashed key is authoritative for it) and disappears on the
+   * next resolve.
+   */
+  fileKey?: string;
+  /**
+   * MIGRATION SHIM (#232). The current version's immutable hashed key, used ONLY
+   * when the stable `current.html` object does not exist — i.e. a page last
+   * published BEFORE this change shipped, whose bucket has no `current.html`
+   * yet. Self-healing: the first republish after deploy writes `current.html`,
+   * after which this field is never read again. Safe despite being
+   * version-coupled precisely because it is only consulted when `current.html`
+   * is absent, which means the page has not been republished since the record
+   * was resolved.
+   */
+  fallbackArtifactKey?: string;
+}
+
+/**
+ * Narrow an unknown JSON value (a KV read or a cold-source response) to a
+ * {@link CachedRoute}. Anything off-shape resolves to `null`, which the caller
+ * treats as a miss — the router then re-resolves cold and, failing that, 404s.
+ * It never serves from a record it could not verify.
+ *
+ * MIGRATION (#232): a record carrying the PRE-fix fields (`version` /
+ * `artifactKey`) is deliberately REJECTED. Those records pin a page to one
+ * version's R2 key, so honoring them would keep serving the old version for up
+ * to the 1h TTL after deploy. Rejecting makes the next request a cold miss that
+ * re-resolves against Convex and writes the version-independent record back.
+ */
+export function asCachedRoute(value: unknown): CachedRoute | null {
+  if (value === null || typeof value !== "object") return null;
+  const r = value as Record<string, unknown>;
+  // Pre-#232 shape → treat as a miss (re-resolve cold), never serve.
+  if (r.version !== undefined || r.artifactKey !== undefined) return null;
+  if (typeof r.pageId !== "string" || typeof r.accountId !== "string") return null;
+  if (r.bundlePath !== undefined && typeof r.bundlePath !== "string") return null;
+  if (r.fileKey !== undefined && typeof r.fileKey !== "string") return null;
+  if (
+    r.fallbackArtifactKey !== undefined &&
+    typeof r.fallbackArtifactKey !== "string"
+  ) {
+    return null;
+  }
+  if (
+    r.lifecycle !== "active" &&
+    r.lifecycle !== "quarantined" &&
+    r.lifecycle !== "tombstoned"
+  ) {
+    return null;
+  }
+  if (
+    r.visibility !== "public" &&
+    r.visibility !== "unlisted" &&
+    r.visibility !== "private"
+  ) {
+    return null;
+  }
+  return value as unknown as CachedRoute;
 }
 
 /**
@@ -41,8 +129,12 @@ export type ColdRouteSource = (
   path: string,
 ) => Promise<CachedRoute | null>;
 
-/** TTL for cached route entries, in seconds. Publish/delete invalidate eagerly,
- * so this is only a backstop against stale records if an invalidation is missed. */
+/**
+ * TTL for cached route entries, in seconds. Publish does NOT need to touch this
+ * record at all (#232 — nothing in it is version-coupled); the paths that DO
+ * change it (delete/kill/expire, visibility flips) evict eagerly. So this is only
+ * a backstop against a missed eviction.
+ */
 const ROUTE_TTL_SECONDS = 60 * 60; // 1 hour
 
 /**
@@ -56,14 +148,18 @@ export function routeKey(host: string, path: string): string {
   return `route:${h}${p}`;
 }
 
-/** Read a route from KV. Returns `null` on miss (caller falls back to Convex). */
+/**
+ * Read a route from KV. Returns `null` on miss OR on an unrecognized record
+ * (see {@link asCachedRoute} — a pre-#232, version-coupled record is treated as
+ * a miss so the caller re-resolves against Convex instead of serving stale).
+ */
 export async function lookupRoute(
   env: Env,
   host: string,
   path: string,
 ): Promise<CachedRoute | null> {
   const raw = await env.ROUTES.get(routeKey(host, path), "json");
-  return (raw as CachedRoute | null) ?? null;
+  return asCachedRoute(raw);
 }
 
 /** Write/refresh a route in KV (called after a cold hit and on publish). */

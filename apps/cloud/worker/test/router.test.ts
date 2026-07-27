@@ -1,7 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import type { Env } from "../src/env";
-import { putArtifact, artifactKey, type ArtifactMeta } from "../src/r2";
+import {
+  putArtifact,
+  artifactKey,
+  type ArtifactMeta,
+} from "../src/r2";
+import { currentArtifactKey } from "../../shared/src/artifact_keys";
 import {
   putRoute,
   lookupRoute,
@@ -35,12 +40,12 @@ function meta(over: Partial<ArtifactMeta> = {}): ArtifactMeta {
   };
 }
 
+// #232: a route record is version-INDEPENDENT (no `version`, no hashed
+// `artifactKey`); the served object is derived from accountId + pageId.
 function route(over: Partial<CachedRoute> = {}): CachedRoute {
   return {
     pageId: "page_22",
     accountId: "acct_22",
-    version: 1,
-    artifactKey: artifactKey("acct_22", "page_22", HASH),
     lifecycle: "active",
     visibility: "public",
     ...over,
@@ -49,9 +54,14 @@ function route(over: Partial<CachedRoute> = {}): CachedRoute {
 
 const HTML = "<!doctype html><html><body>frozen artifact</body></html>";
 
-/** Seed the R2 artifact a route points at. */
+/**
+ * Seed the R2 artifact a route serves: the stable `current.html` the router
+ * derives, plus the immutable hashed object publish also writes.
+ */
 async function seedArtifact(r: CachedRoute, html = HTML): Promise<void> {
-  await putArtifact(E, r.artifactKey, html, meta());
+  const m = meta({ accountId: r.accountId, pageId: r.pageId });
+  await putArtifact(E, artifactKey(r.accountId, r.pageId, HASH), html, m);
+  await putArtifact(E, currentArtifactKey(r.accountId, r.pageId), html, m);
 }
 
 /** Build router deps with default stubs; override per test. */
@@ -249,9 +259,9 @@ describe("CLOUD-22 router: not found", () => {
   });
 
   it("route resolves but R2 object is missing → 404", async () => {
-    const r = route({ pageId: "page_no_r2", artifactKey: "artifacts/acct_22/page_no_r2/absent.html" });
+    const r = route({ pageId: "page_no_r2" });
     await putRoute(E, "nor2.example.com", "/n", r);
-    // no putArtifact → R2 miss
+    // no putArtifact → the derived `current.html` key misses in R2
 
     const res = await run(req("nor2.example.com", "/n"), deps());
     expect(res.status).toBe(404);

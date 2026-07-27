@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { routeKey, routeKeyForSubdomain } from "./edge_kv.js";
+import {
+  routeKey,
+  routeKeyForSubdomain,
+  routeKeyForSubdomainPath,
+} from "./edge_kv.js";
 
 /**
  * CLOUD-SUBDOMAIN — the kill-path KV eviction key derivation.
@@ -35,5 +39,31 @@ describe("edge_kv routeKey matches the worker/src/kv.ts byte form", () => {
 
   it("routeKey normalizes a path with no leading slash", () => {
     expect(routeKey("Foo.Bar", "baz")).toBe("route:foo.bar/baz");
+  });
+
+  // #232 — a BUNDLE serves many URLs through ONE page: each sibling caches under
+  // its own route key, so a lifecycle/visibility eviction has to derive one key
+  // per sibling path. `bundleVersions.files[].path` is stored WITHOUT a leading
+  // slash, and the Worker keys the request path WITH one, so the normalization
+  // is what makes the two ends meet.
+  it("derives a sibling's route key from its stored (slash-less) bundle path", () => {
+    expect(
+      routeKeyForSubdomainPath("cloud-ops", "about.html", "shortwind.dev"),
+    ).toBe("route:cloud-ops.shortwind.dev/about.html");
+    expect(
+      routeKeyForSubdomainPath("cloud-ops", "docs/guide.html", "shortwind.dev"),
+    ).toBe("route:cloud-ops.shortwind.dev/docs/guide.html");
+  });
+
+  it("a sibling path that already has a leading slash keys identically", () => {
+    expect(
+      routeKeyForSubdomainPath("cloud-ops", "/about.html", "shortwind.dev"),
+    ).toBe(routeKeyForSubdomainPath("cloud-ops", "about.html", "shortwind.dev"));
+  });
+
+  it("the entry key is the same derivation at path `/`", () => {
+    expect(routeKeyForSubdomainPath("cloud-ops", "/", "shortwind.dev")).toBe(
+      routeKeyForSubdomain("cloud-ops", "shortwind.dev"),
+    );
   });
 });
