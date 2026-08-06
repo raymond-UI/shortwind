@@ -460,12 +460,12 @@ export function buildRealCli(): CAC {
     });
 
   cli
-    .command("skill", "Emit the cloud SKILL.md (verbs + this account's recipe palette)")
-    .option("--out <file>", "Write the SKILL.md to a file instead of stdout")
+    .command("skill", "Emit the cloud SKILL.md (invocation + verbs; references written with --out)")
+    .option("--out <file>", "Write SKILL.md here, plus its references/ alongside")
     .action((opts: { out?: string }) => {
       const markdown = runSkill(opts);
       if (opts.out) {
-        process.stderr.write(`wrote ${opts.out}\n`);
+        process.stderr.write(`wrote ${opts.out} (+ references/)\n`);
       } else {
         process.stdout.write(markdown + "\n");
       }

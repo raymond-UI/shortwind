@@ -26,6 +26,14 @@ function seedPalette(source: string): void {
   writeFileSync(path.join(recipesDir, "ui.css"), source);
 }
 
+/** The installed `references/recipes.md`, where the palette actually lives. */
+function readRecipesReference(): string {
+  return readFileSync(
+    path.join(path.dirname(cloudSkillPath(env())), "references", "recipes.md"),
+    "utf8",
+  );
+}
+
 describe("installCloudSkill — agent-discovery drop", () => {
   it("writes the SKILL to ~/.claude/skills/shortwind-cloud/SKILL.md", () => {
     const written = installCloudSkill(env());
@@ -43,12 +51,25 @@ describe("installCloudSkill — agent-discovery drop", () => {
     expect(skill).toMatch(/shortwind cloud find/);
   });
 
-  it("reflects the account's current recipe palette", () => {
-    seedPalette(
-      "/* @recipe card version=1.0.0 */\n@recipe card { @apply rounded-lg border p-4; }\n",
-    );
+  it("installs the on-demand references beside the SKILL", () => {
+    const root = path.dirname(installCloudSkill(env()));
+    expect(existsSync(path.join(root, "references", "publishing.md"))).toBe(true);
+    expect(existsSync(path.join(root, "references", "recipes.md"))).toBe(true);
+  });
+
+  it("reflects the account's current recipe palette in the recipes reference", () => {
+    seedPalette("/* shortwind: ui@0.0.1 sha:000000 */\n@recipe ui-card {\n  rounded-lg border p-4\n}\n");
+    installCloudSkill(env());
+    expect(readRecipesReference()).toMatch(/ui-card/);
+  });
+
+  it("keeps the palette OUT of the always-loaded SKILL.md", () => {
+    // An empty or unfamiliar palette must never read as "publishing unavailable",
+    // so SKILL.md carries no palette listing at all.
+    seedPalette("/* shortwind: ui@0.0.1 sha:000000 */\n@recipe ui-card {\n  rounded-lg border p-4\n}\n");
     const skill = readFileSync(installCloudSkill(env()), "utf8");
-    expect(skill).toMatch(/card/);
+    expect(skill).not.toMatch(/ui-card/);
+    expect(skill).toContain("references/recipes.md");
   });
 
   it("is idempotent — a second run rewrites the same current bytes", () => {
@@ -69,8 +90,8 @@ describe("installCloudSkill — agent-discovery drop", () => {
     const cwd = process.cwd();
     process.chdir(repo);
     try {
-      const skill = readFileSync(installCloudSkill(env()), "utf8");
-      expect(skill).not.toMatch(/leakonly/);
+      installCloudSkill(env());
+      expect(readRecipesReference()).not.toMatch(/leakonly/);
     } finally {
       process.chdir(cwd);
     }
