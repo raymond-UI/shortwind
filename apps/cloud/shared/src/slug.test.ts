@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveSlug,
+  htmlTitle,
   deriveSubdomain,
   isReservedSubdomain,
   MAX_SLUG_LENGTH,
@@ -210,5 +211,41 @@ describe("validateHostname (#156 — bind-domain pre-flight)", () => {
   it("rejects an over-long hostname", () => {
     const long = `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.example.com`;
     expect(validateHostname(long).ok).toBe(false);
+  });
+});
+
+describe("htmlTitle", () => {
+  it("extracts the document title", () => {
+    expect(htmlTitle("<html><head><title>Q3 Revenue Report</title></head></html>")).toBe(
+      "Q3 Revenue Report",
+    );
+  });
+
+  it("is case-insensitive and tolerates attributes on the tag", () => {
+    expect(htmlTitle('<TITLE lang="en">Hello</TITLE>')).toBe("Hello");
+  });
+
+  it("collapses surrounding whitespace and newlines", () => {
+    expect(htmlTitle("<title>\n  Spaced   Out\n</title>")).toBe("Spaced Out");
+  });
+
+  it("drops character references rather than slugifying them into words", () => {
+    // `&amp;` must not become the word "amp" in the derived slug.
+    expect(htmlTitle("<title>R&amp;D Notes</title>")).toBe("R D Notes");
+  });
+
+  it("returns null when there is no title, or it is empty", () => {
+    expect(htmlTitle("<html><body>hi</body></html>")).toBeNull();
+    expect(htmlTitle("<title></title>")).toBeNull();
+    expect(htmlTitle("<title>   </title>")).toBeNull();
+  });
+
+  it("takes the first title only", () => {
+    expect(htmlTitle("<title>First</title><svg><title>Icon</title></svg>")).toBe("First");
+  });
+
+  it("feeds deriveSlug a human handle instead of markup", () => {
+    const title = htmlTitle("<!doctype html><html lang=\"en\"><head><title>Action Items Review</title>");
+    expect(deriveSlug(title!)).toEqual({ ok: true, value: "action-items-review" });
   });
 });

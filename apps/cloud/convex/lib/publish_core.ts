@@ -47,9 +47,12 @@ import {
 } from "../../shared/src/fingerprint.js";
 import {
   deriveSlug,
+  htmlTitle,
+  mintSubdomainId,
   slugCollision,
   validateSlug,
   type ExistingPageRef,
+  type SlugResult,
 } from "../../shared/src/slug.js";
 // #232: the STABLE `current.html` serve key. Defined in `shared/src` — NOT here
 // and NOT in the Worker — because both trees derive it and CLAUDE.md forbids
@@ -81,8 +84,9 @@ export interface PublishInput {
   /** The page's shorthand HTML (recipe tokens in `class=`/`className=`). */
   html: string;
   /**
-   * Desired stable handle. When omitted, a slug is derived from `title` (or, as
-   * a last resort, the html). A client-supplied slug is validated, not rewritten.
+   * Desired stable handle. When omitted, a slug is derived from `title`, then
+   * the document's `<title>`, and failing both an opaque `page-<id>` handle
+   * (see {@link resolveSlug}). A client-supplied slug is validated, not rewritten.
    */
   slug?: string;
   /** Optional human title used to derive a slug when `slug` is omitted. */
@@ -829,10 +833,27 @@ export async function runUpdate(
 // Local pure helpers.
 // ---------------------------------------------------------------------------
 
-function resolveSlug(input: PublishInput) {
+/**
+ * Resolve the page's handle: an explicit `slug` is validated (never rewritten),
+ * otherwise one is derived from the best human name available.
+ *
+ * The seed is NEVER the raw markup. Slugifying a document body produced handles
+ * like `doctype-html-html-lang-en-data-appearance-dark-head-meta-charse`, which
+ * is worse than no name at all for a URL a human is meant to receive. Order:
+ * the caller's `title`, then the document's own `<title>`, then an opaque
+ * minted handle. A seed that slugifies to nothing or lands on a reserved word
+ * falls through to the minted handle too: a publish is not worth failing over a
+ * name the caller never asked for.
+ */
+function slugSeed(input: PublishInput): string {
+  return input.title ?? htmlTitle(input.html) ?? "";
+}
+
+function resolveSlug(input: PublishInput): SlugResult {
   if (input.slug !== undefined) return validateSlug(input.slug);
-  const seed = input.title ?? input.html;
-  return deriveSlug(seed);
+  // An empty/unusable seed makes `deriveSlug` fail, which lands on the mint.
+  const derived = deriveSlug(slugSeed(input));
+  return derived.ok ? derived : { ok: true, value: `page-${mintSubdomainId()}` };
 }
 
 function auditMetadata(

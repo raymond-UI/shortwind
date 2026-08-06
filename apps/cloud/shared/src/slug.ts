@@ -8,6 +8,12 @@
  */
 
 /** Result envelope mirroring core's `parse`/`resolve` convention. */
+// This whole module is DELIBERATELY duplicated: `packages/cli/src/cloud/contract/slug.ts`
+// is a byte-identical vendored copy of the wire contract, kept so the CLI can
+// validate a slug before spending a network round-trip without the CLI taking a
+// dependency on apps/cloud (see that file's sibling README). Deduplicating it
+// would reverse an arrow the architecture forbids.
+// fallow-ignore-next-line code-duplication
 export type SlugResult =
   | { ok: true; value: string }
   | { ok: false; error: string };
@@ -166,6 +172,31 @@ export function deriveSlug(input: string): SlugResult {
   }
 
   return { ok: true, value: truncated };
+}
+
+/**
+ * The `<title>` element's text, or `null` when the document has none (or it is
+ * blank). This is the ONLY human-meaningful name a bare HTML document carries,
+ * so it is the seed for a derived slug.
+ *
+ * Never slugify a whole document instead: a body seed yields handles like
+ * `doctype-html-html-lang-en-head-meta-charse`, which reads as a bug to anyone
+ * who receives the URL.
+ */
+const TITLE_PATTERN = /<title[^>]*>([\s\S]*?)<\/title>/i;
+
+/**
+ * Character references would slugify into their own words (`&amp;` → "amp"),
+ * so drop them rather than decode them; deriveSlug keeps only [a-z0-9] anyway.
+ */
+const TITLE_ENTITY = /&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/gi;
+
+export function htmlTitle(html: string): string | null {
+  // No non-string guard (unlike deriveSlug): `exec` stringifies its argument, so
+  // a non-string input simply matches no title and yields null. Never throws.
+  const raw = TITLE_PATTERN.exec(html)?.[1] ?? "";
+  const text = raw.replace(TITLE_ENTITY, " ").replace(/\s+/g, " ").trim();
+  return text === "" ? null : text;
 }
 
 /**
