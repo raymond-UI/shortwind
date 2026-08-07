@@ -633,6 +633,21 @@ async function publishStableArtifact(
   );
 }
 
+/**
+ * The result a previous call under this idempotency key produced, or `null` when
+ * the call is new. Shared by publish and update: a retry must return the SAME
+ * result rather than create a second page (publish) or version (update).
+ */
+async function replayIdempotent(
+  acct: string,
+  key: string | undefined,
+  deps: PublishDeps,
+): Promise<PublishOutcome | null> {
+  if (!key) return null;
+  const cached = await deps.data.getIdempotency(acct, key);
+  return cached ? { ok: true, result: cached.result as unknown as PublishResult } : null;
+}
+
 // ---------------------------------------------------------------------------
 // runPublish — create a new page (PRD §6.2).
 // ---------------------------------------------------------------------------
@@ -644,25 +659,18 @@ export async function runPublish(
   const acct = input.actor.accountId;
 
   // 1. Idempotency: a retry with the same key returns the same result, no dup.
-  if (input.idempotencyKey) {
-    const cached = await deps.data.getIdempotency(acct, input.idempotencyKey);
-    if (cached) {
-      return { ok: true, result: cached.result as unknown as PublishResult };
-    }
-  }
+  const replay = await replayIdempotent(acct, input.idempotencyKey, deps);
+  if (replay) return replay;
 
-  // 2. Resolve / validate the slug.
-  const slug = resolveSlug(input);
-  if (!slug.ok) {
-    throw new Error(`shortwind publish: ${slug.error}`);
-  }
+  // 2. Resolve / validate the slug (a minted one comes back already free).
+  const slug = await resolveSlug(input, acct, deps);
 
   // 3. Slug-collision → 409 with the existing id (PRD §3.2).
-  const existing = await deps.data.findPageBySlug(acct, slug.value);
+  const existing = await deps.data.findPageBySlug(acct, slug);
   const ref: ExistingPageRef | null = existing
     ? { id: existing.id, slug: existing.slug }
     : null;
-  const collision = slugCollision(slug.value, ref);
+  const collision = slugCollision(slug, ref);
   if (collision.collision) {
     return {
       ok: false,
@@ -677,7 +685,7 @@ export async function runPublish(
   //    The authoritative committed subdomain comes back from the insert.
   const inserted = await deps.data.insertPage({
     accountId: acct,
-    slug: slug.value,
+    slug,
     visibility: input.visibility ?? "public",
     tags: [...(input.tags ?? [])],
   });
@@ -756,12 +764,8 @@ export async function runUpdate(
   const acct = input.actor.accountId;
 
   // Idempotency first (an update retry returns the same version).
-  if (input.idempotencyKey) {
-    const cached = await deps.data.getIdempotency(acct, input.idempotencyKey);
-    if (cached) {
-      return { ok: true, result: cached.result as unknown as PublishResult };
-    }
-  }
+  const replay = await replayIdempotent(acct, input.idempotencyKey, deps);
+  if (replay) return replay;
 
   const page = await deps.data.getPage(input.pageId);
   if (!page) {
@@ -849,11 +853,47 @@ function slugSeed(input: PublishInput): string {
   return input.title ?? htmlTitle(input.html) ?? "";
 }
 
-function resolveSlug(input: PublishInput): SlugResult {
+/**
+ * The handle the CALLER asked for: validated if explicit, derived from the seed
+ * otherwise, or `null` when nothing usable was supplied (mint one instead).
+ */
+function namedSlug(input: PublishInput): SlugResult | null {
   if (input.slug !== undefined) return validateSlug(input.slug);
-  // An empty/unusable seed makes `deriveSlug` fail, which lands on the mint.
+  // An empty/unusable/reserved seed makes `deriveSlug` fail, which lands on the mint.
   const derived = deriveSlug(slugSeed(input));
-  return derived.ok ? derived : { ok: true, value: `page-${mintSubdomainId()}` };
+  return derived.ok ? derived : null;
+}
+
+/**
+ * Length of a minted handle. Longer than the 6-char disambiguating suffix
+ * {@link mintSubdomainId} was built for: here the id is the ENTIRE handle, and
+ * for an `unlisted` page the URL is the only thing guarding it. 10 chars over a
+ * 30-symbol alphabet is ~49 bits, drawn from WebCrypto.
+ */
+export const MINTED_HANDLE_LENGTH = 10;
+
+/** A minted handle that no page in the account already holds. */
+async function mintFreeSlug(acct: string, deps: PublishDeps): Promise<string> {
+  // Bounded: at ~49 bits a single retry is already paranoid, but a caller must
+  // never get a 409 naming a page they did not ask for.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const candidate = `page-${mintSubdomainId(MINTED_HANDLE_LENGTH)}`;
+    if (!(await deps.data.findPageBySlug(acct, candidate))) return candidate;
+  }
+  return `page-${mintSubdomainId(MINTED_HANDLE_LENGTH * 2)}`;
+}
+
+async function resolveSlug(
+  input: PublishInput,
+  acct: string,
+  deps: PublishDeps,
+): Promise<string> {
+  const named = namedSlug(input);
+  if (named === null) return await mintFreeSlug(acct, deps);
+  // Only an EXPLICIT bad slug is an error; a bad derivation already fell through
+  // to the mint above rather than failing the publish.
+  if (!named.ok) throw new Error(`shortwind publish: ${named.error}`);
+  return named.value;
 }
 
 function auditMetadata(

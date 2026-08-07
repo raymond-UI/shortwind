@@ -33,7 +33,7 @@ Credentials live at `~/.shortwind/credentials.json`, and every invocation route 
 Four rules that prevent the usual mistakes:
 
 1. `find` before you publish. A page from an earlier session is discoverable only through the account.
-2. Always pass `--domain <slug>`. Omit it and the server derives a handle from the document, which rarely yields a URL worth giving to a person.
+2. Always pass `--domain <slug>`. Omitting it falls back to the document title, then the file name, then an opaque handle, so the URL says whatever the document happens to be called rather than what the user would call it.
 3. Revise with `update <id>`, never a second `publish`. Publishing again mints a second page at a second URL; it does not move or replace the first.
 4. Report the `id` and `url` from the response back to the user. Nothing on disk remembers them for the next session.
 
@@ -63,7 +63,7 @@ Every verb authenticates with the active account. Add `--json` to any of them fo
 - `shortwind cloud whoami [--json]`
   - identity, scopes, endpoint. The cheapest check that the CLI resolves AND the stored token works. Use it as the probe in step 1 above.
 - `shortwind cloud login [--scope <scope>]`
-  - OAuth device flow. Needed once per machine, and again only to add a scope. It is interactive: never run it speculatively.
+  - OAuth device flow. Needed once per machine. It is interactive: never run it speculatively. --scope REPLACES the grant, so if you ever pass it, pass every scope you still need.
 - `shortwind cloud init-global [--force]`
   - creates ~/.shortwind/. Create the global home. Login does this for you; run it only if the home is missing.
 
@@ -72,7 +72,7 @@ Every verb authenticates with the active account. Add `--json` to any of them fo
 - `shortwind cloud domains [--json]`
   - GET /v1/domains. List the account's custom domains and their status.
 - `shortwind cloud bind-domain <hostname> [--json]`
-  - POST /v1/domains. Bind a hostname to the account. Requires the domains:bind scope: re-run login with --scope domains:bind.
+  - POST /v1/domains. Bind a hostname to the account. It re-authorizes itself for the domains:bind scope, so do NOT run login by hand for it.
 - `shortwind cloud approve-domain <hostname> [--json]`
   - POST /v1/domains/approve. Approve a domain that is waiting on human confirmation.
 

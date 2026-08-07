@@ -352,6 +352,29 @@ describe("runPublishBundle (entry-as-page)", () => {
     expect(out.result.url).toBe("https://index.shortwind.app");
   });
 
+  it("mints a handle when the entry title is reserved, instead of failing", async () => {
+    // Regression: the CLI sends the entry's <title>, so an index.html titled
+    // "Docs" (a RESERVED_SLUG) used to throw where the entry PATH had published
+    // fine. Only an EXPLICIT slug may fail a publish.
+    const { deps } = makeDeps();
+    const out = await runPublishBundle(
+      baseInput({ slug: undefined, entryPath: "index.html", title: "Docs" }),
+      deps,
+    );
+    if (!out.ok) throw new Error("unexpected collision");
+    expect(out.result.url).toMatch(/^https:\/\/page-[a-z0-9]{10}\.shortwind\.app$/);
+  });
+
+  it("mints a handle when the entry title slugifies to nothing", async () => {
+    const { deps } = makeDeps();
+    const out = await runPublishBundle(
+      baseInput({ slug: undefined, entryPath: "index.html", title: "!!!" }),
+      deps,
+    );
+    if (!out.ok) throw new Error("unexpected collision");
+    expect(out.result.url).toMatch(/^https:\/\/page-[a-z0-9]{10}\.shortwind\.app$/);
+  });
+
   it("throws when the entry path is not one of the files", async () => {
     const { deps } = makeDeps();
     await expect(

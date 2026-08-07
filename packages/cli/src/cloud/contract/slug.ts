@@ -5,14 +5,16 @@
  *
  * Pure plain-data helpers — no IO, no classes. Expected-error cases return
  * result objects (`{ ok: false, error }`), never throws (CLAUDE.md).
+ *
+ * This whole module is DELIBERATELY duplicated: `packages/cli/src/cloud/contract/slug.ts`
+ * is a byte-identical vendored copy of the wire contract, kept so the CLI can
+ * validate a slug before spending a network round-trip without the CLI taking a
+ * dependency on apps/cloud (see that file's sibling README). Deduplicating it
+ * would reverse an arrow the architecture forbids, so the clone-detection
+ * suppression below is load-bearing, not decorative.
  */
 
 /** Result envelope mirroring core's `parse`/`resolve` convention. */
-// This whole module is DELIBERATELY duplicated: `packages/cli/src/cloud/contract/slug.ts`
-// is a byte-identical vendored copy of the wire contract, kept so the CLI can
-// validate a slug before spending a network round-trip without the CLI taking a
-// dependency on apps/cloud (see that file's sibling README). Deduplicating it
-// would reverse an arrow the architecture forbids.
 // fallow-ignore-next-line code-duplication
 export type SlugResult =
   | { ok: true; value: string }
@@ -78,19 +80,35 @@ export function isReservedSubdomain(label: string): boolean {
 }
 
 /**
- * Mint a short, lowercase, DNS-label-safe id used to disambiguate a colliding
- * subdomain (`<slug>-<id>`). 6 chars from a 32-symbol alphabet (no vowels/ambiguous
- * chars) → ~10^9 space, plenty for collision-avoidance with a retry loop.
+ * A uniform `[0, 1)` drawn from WebCrypto, falling back to `Math.random` only on
+ * a runtime without it (Convex, Node ≥ 18 and every browser have it).
  *
- * Pure-ish: takes an injected `rand` (defaults to `Math.random`) so callers/tests
- * can make it deterministic. Returns only `[a-z0-9]`, so the result is always a
- * valid slug fragment.
+ * NOT cosmetic: a minted id is sometimes the WHOLE handle (a page published with
+ * no derivable name), and for an `unlisted` page the URL is the only capability
+ * guarding it. `Math.random` is seed-recoverable from a handful of observed
+ * outputs, which would make those URLs guessable.
+ */
+function cryptoUnit(): number {
+  const c = globalThis.crypto;
+  if (typeof c?.getRandomValues !== "function") return Math.random();
+  return c.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
+}
+
+/**
+ * Mint a short, lowercase, DNS-label-safe id used to disambiguate a colliding
+ * subdomain (`<slug>-<id>`). 6 chars from a 30-symbol alphabet (no vowels/ambiguous
+ * chars) → ~7×10^8 space, plenty for collision-avoidance with a retry loop.
+ * Callers that use the id as the ENTIRE handle pass a longer `length`.
+ *
+ * Pure-ish: takes an injected `rand` (defaults to {@link cryptoUnit}) so
+ * callers/tests can make it deterministic. Returns only `[a-z0-9]`, so the
+ * result is always a valid slug fragment.
  */
 const SUBDOMAIN_ID_ALPHABET = "0123456789bcdfghjkmnpqrstvwxyz";
 
 export function mintSubdomainId(
   length = 6,
-  rand: () => number = Math.random,
+  rand: () => number = cryptoUnit,
 ): string {
   let out = "";
   for (let i = 0; i < length; i += 1) {
@@ -186,16 +204,25 @@ export function deriveSlug(input: string): SlugResult {
 const TITLE_PATTERN = /<title[^>]*>([\s\S]*?)<\/title>/i;
 
 /**
- * Character references would slugify into their own words (`&amp;` → "amp"),
- * so drop them rather than decode them; deriveSlug keeps only [a-z0-9] anyway.
+ * Markup that must not survive into a slug. Tags first: `<title>Foo <b>bar</b>`
+ * would otherwise slugify to `foo-b-bar-b`, the exact class of markup-in-the-URL
+ * bug this function exists to prevent (`<title>` may not legally contain
+ * elements, but real documents ship them). Then character references, which
+ * would slugify into their own words (`&amp;` → "amp"); dropping beats decoding
+ * since deriveSlug keeps only [a-z0-9] anyway.
  */
+const TITLE_TAG = /<[^>]*>/g;
 const TITLE_ENTITY = /&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/gi;
 
 export function htmlTitle(html: string): string | null {
   // No non-string guard (unlike deriveSlug): `exec` stringifies its argument, so
   // a non-string input simply matches no title and yields null. Never throws.
   const raw = TITLE_PATTERN.exec(html)?.[1] ?? "";
-  const text = raw.replace(TITLE_ENTITY, " ").replace(/\s+/g, " ").trim();
+  const text = raw
+    .replace(TITLE_TAG, " ")
+    .replace(TITLE_ENTITY, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return text === "" ? null : text;
 }
 

@@ -458,17 +458,24 @@ function toPosix(p: string): string {
  * project. Shared by publish, `publish --bundle` and update so the three shells
  * cannot drift on where identity, palette or base URL come from.
  */
-export interface PublishContext {
+export interface PublishContext<C extends ApiClient = ApiClient> {
   lockfile: Lockfile;
   candidates: CandidateRecipe[];
-  client: ApiClient;
+  client: C;
 }
 
-export function loadPublishContext(deps: {
+/**
+ * `C` carries the CALLER's client type through: `publish --bundle` injects a
+ * {@link BundleCapableClient} and gets one back, so a double missing
+ * `publishBundle` is a type error at the call site rather than a runtime one.
+ * The single cast is on the client this function CONSTRUCTS, where the caller's
+ * `deps` type is the only thing that can vouch for the extra surface.
+ */
+export function loadPublishContext<C extends ApiClient = ApiClient>(deps: {
   home?: ResolvedHome | undefined;
-  client?: ApiClient | undefined;
+  client?: C | undefined;
   baseUrl?: string | undefined;
-}): PublishContext {
+}): PublishContext<C> {
   const home = deps.home ?? resolveHome();
   const account = readActiveCloudAccount();
   if (!account) {
@@ -482,7 +489,7 @@ export function loadPublishContext(deps: {
     candidates: readPaletteCandidates(home),
     client:
       deps.client ??
-      createApiClient({
+      (createApiClient({
         baseUrl,
         ...refreshAuthConfig({
           baseUrl,
@@ -490,7 +497,7 @@ export function loadPublishContext(deps: {
           refreshToken: account.token.refreshToken,
           onTokenRefreshed: (t) => updateAccountToken(account.id, t),
         }),
-      }),
+      }) as C),
   };
 }
 
@@ -523,7 +530,7 @@ export async function publishBundleFromFile(
     // the entry PATH, which is already a sane handle (unlike raw markup).
     title: htmlTitle(files.find((f) => f.path === entryPath)?.html ?? "") ?? undefined,
   });
-  return runBundle(client as BundleCapableClient, payload, Boolean(opts.json));
+  return runBundle(client, payload, Boolean(opts.json));
 }
 
 export async function publishFromFile(

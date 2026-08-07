@@ -30,7 +30,7 @@ shortwind cloud publish site/index.html --bundle --domain my-site --json
 - `--domain <slug>` sets the handle. Grammar: lowercase letters and digits in hyphen-separated groups, up to 63 characters (`q3-report`, `acme-pricing-v2`).
 - Pick something a human would recognize: the product or the document, not the file name or the framework.
 - These handles are reserved and will be refused: api, admin, app, auth, dashboard, docs, find, health, internal, login, logout, new, settings, static, status, www.
-- Omit `--domain` and the server derives a handle from the document. Pass it explicitly instead; a derived handle is not something to hand to a person.
+- Omit `--domain` and the handle comes from the document title, else the file name, else an opaque `page-<id>`. That is a fallback, not a naming scheme: pass `--domain` so the URL reads as the thing it is.
 - Publishing to a slug this account already uses returns 409 WITH the existing page id. That is the signal to `update <id> <file>`, not to pick a different slug.
 
 ## Visibility
@@ -70,7 +70,7 @@ shortwind cloud bind-domain mockups.acme.com --json
 shortwind cloud approve-domain mockups.acme.com --json
 ```
 
-`bind-domain` needs the `domains:bind` scope. If it returns a scope error, re-run `shortwind cloud login --scope domains:bind`. A domain can land in a pending-human state that `approve-domain` clears once DNS verification passes.
+`bind-domain` needs the `domains:bind` scope and performs that step-up itself, so there is nothing to do first. Never re-run login with `--scope domains:bind` alone: `--scope` REPLACES the grant rather than adding to it, so that token would lose `pages:read`/`pages:write` and every later publish would 403. If a manual login is ever unavoidable, pass the whole set: `shortwind cloud login --scope pages:read --scope pages:write --scope domains:bind`. A domain can land in a pending-human state that `approve-domain` clears once DNS verification passes.
 
 ## When something fails
 
@@ -78,9 +78,9 @@ shortwind cloud approve-domain mockups.acme.com --json
 | --- | --- | --- |
 | `command not found` | The binary is not on this shell's PATH | Re-run via `npx -y @shortwind/cli cloud ...`. This is not a blocker. |
 | 401 | No token, or it expired | `shortwind cloud login`, then retry. |
-| 403 naming a scope | The token lacks that scope | Re-run login with `--scope <name>`. |
+| 403 naming a scope | The token lacks that scope | For `domains:bind`, just re-run `bind-domain`: it steps up on its own. Otherwise re-run login passing EVERY scope you need (`--scope` replaces the grant, it does not add to it). |
 | 409 on publish | The slug is taken; the response carries the existing id | `update <id> <file>`. Do not invent a new slug. |
-| A URL full of markup words | `--domain` was omitted, so the handle came from the document | `update` cannot move a URL: publish once at the right slug, then `delete` the wrong page. |
+| A URL you did not choose | `--domain` was omitted, so the handle came from the document title or file name | `update` cannot move a URL: publish once at the right slug, then `delete` the wrong page. |
 | Raw `@name` text visible on the page | A recipe this account does not ship | Remove it, or use a name from `recipes.md`. |
 
 Retrying a publish that may have partly succeeded: pass the same `--idempotency-key <key>` and the retry returns the original result instead of creating a second page.

@@ -136,6 +136,15 @@ describe("renderCloudSkill (SKILL.md)", () => {
     expect(out).not.toContain("## Available recipes");
   });
 
+  it("never tells an agent to re-login with a single scope", () => {
+    // `--scope` REPLACES the grant (login.ts), so `login --scope domains:bind`
+    // silently drops pages:read/pages:write and 403s every later publish.
+    // bind-domain steps up on its own, so the advice was wrong AND unnecessary.
+    for (const doc of renderCloudSkillFiles(FIXED_REGISTRY)) {
+      expect(doc.contents).not.toMatch(/login\s+--scope\s+domains:bind(?!\s+--scope)/);
+    }
+  });
+
   it("is palette-independent, so an empty home never reads as 'cannot publish'", () => {
     // Same bytes for every account: the SKILL takes no Registry at all.
     expect(renderCloudSkill()).toContain("no Shortwind recipes required");
