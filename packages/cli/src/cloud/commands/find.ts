@@ -4,7 +4,8 @@ import type { ApiClient, FindQuery, PageSummary } from "../api-client.js";
 /**
  * `find` — GET /v1/pages?q=&tag= : the load-bearing verb that lets a stateless
  * agent locate an existing page before acting, preventing duplicate publishes
- * (PRD §4). `--tag` is repeatable. (The per-page `--domain` filter was removed
+ * (PRD §4). `--tag` is repeatable and each one NARROWS: a page must carry every
+ * tag passed (the server ANDs them). (The per-page `--domain` filter was removed
  * with the per-page custom-domain model; domains are account-level now.)
  *
  * The pure {@link find} parse function below is retained for the CLI skeleton's

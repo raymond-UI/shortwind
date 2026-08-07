@@ -288,6 +288,8 @@ function renderPublishingReference(): string {
     "shortwind cloud publish mock.html --domain acme-mock --tag acme --tag design-mock",
     "```",
     "",
+    "On `find`, repeated tags NARROW: `find --tag acme --tag design-mock` returns only pages carrying both. Search one tag at a time to widen.",
+    "",
     "## Revising a page",
     "",
     "```",

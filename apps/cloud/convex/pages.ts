@@ -1607,7 +1607,12 @@ export interface PageRowLike {
 /** The normalized, trimmed `find` filters. `undefined`/blank ⇒ "no filter". */
 export interface FindFilters {
   q?: string;
-  tag?: string;
+  /**
+   * `--tag` is repeatable on the CLI, so this is a SET: a page matches only when
+   * it carries EVERY tag (AND, narrowing). Absent or all-blank ⇒ no filter; the
+   * field is never present-but-empty, so `undefined` is the only "no filter".
+   */
+  tags?: string[];
   // CLOUD-51 (additive): restrict to a single project group.
   group?: string;
 }
@@ -1666,15 +1671,28 @@ export function normalizeFilter(
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
+/**
+ * Trim + de-duplicate a repeated query param; all-blank (or absent) ⇒ absent.
+ * `?tag=ops&tag=+&tag=ops` is one filter, `ops`.
+ */
+export function normalizeFilters(
+  values: readonly (string | null | undefined)[] | null | undefined,
+): string[] | undefined {
+  const kept = (values ?? [])
+    .map(normalizeFilter)
+    .filter((v): v is string => v !== undefined);
+  return kept.length === 0 ? undefined : [...new Set(kept)];
+}
+
 /** Normalize a raw filter bag (parsed query params) into `FindFilters`. */
 export function normalizeFindFilters(raw: {
   q?: string | null;
-  tag?: string | null;
+  tags?: readonly (string | null | undefined)[] | null;
   group?: string | null;
 }): FindFilters {
   return {
     q: normalizeFilter(raw.q),
-    tag: normalizeFilter(raw.tag),
+    tags: normalizeFilters(raw.tags),
     // CLOUD-51 (additive): the optional project-group filter.
     group: normalizeFilter(raw.group),
   };
@@ -1693,12 +1711,24 @@ export function matchesTag(row: { tags: string[] }, tag: string): boolean {
 }
 
 /**
+ * True when the page carries EVERY requested tag. Repeating `--tag` narrows the
+ * result (AND), matching how the flag reads: each one is another requirement,
+ * not another candidate.
+ */
+export function matchesTags(
+  row: { tags: string[] },
+  tags: readonly string[],
+): boolean {
+  return tags.every((tag) => matchesTag(row, tag));
+}
+
+/**
  * Apply the residual (non-index) `find` filters to an already account-scoped,
  * index-narrowed candidate set. The adapter drives the scan from the most
  * selective INDEX (see {@link planFindIndex}); the filters no index can serve
  * are applied here:
  *   - the free-text substring `q` (no equality index exists for it), and
- *   - `tag` MEMBERSHIP. Convex's `by_tag` index keys on the WHOLE `tags` array,
+ *   - `tags` MEMBERSHIP. Convex's `by_tag` index keys on the WHOLE `tags` array,
  *     not on individual elements, so it can only answer whole-array equality —
  *     not "contains this tag". Membership is therefore enforced here over the
  *     account-scoped candidate set (still index-backed via `by_account`; see
@@ -1713,9 +1743,9 @@ export function applyResidualFilters<
     const q = filters.q;
     out = out.filter((r) => matchesQuery(r, q));
   }
-  if (filters.tag !== undefined) {
-    const tag = filters.tag;
-    out = out.filter((r) => matchesTag(r, tag));
+  if (filters.tags !== undefined) {
+    const tags = filters.tags;
+    out = out.filter((r) => matchesTags(r, tags));
   }
   // CLOUD-51 (additive): the project-group filter. When `by_project` drove the
   // scan this is already satisfied; applying it residually is a cheap no-op then
@@ -1731,8 +1761,8 @@ export function applyResidualFilters<
  * The INDEX the adapter drives the scan from, as plain data (so the "no full
  * scan" choice is unit-testable without a DB):
  *   - `group` present → `by_project` (accountId, projectGroup) equality index.
- *   - else            → `by_account` (the caller's pages). `tag`-only and
- *     `q`-only both land here; `tag` membership is then a residual filter (see
+ *   - else            → `by_account` (the caller's pages). `tags`-only and
+ *     `q`-only both land here; tag membership is then a residual filter (see
  *     {@link applyResidualFilters} for why `by_tag` cannot serve membership).
  * Every branch is constrained to ONE account downstream, so there is never a
  * cross-account leak and never a full-table scan.
@@ -1798,7 +1828,8 @@ export const find = query({
   args: {
     bearer: v.string(),
     q: v.optional(v.string()),
-    tag: v.optional(v.string()),
+    // `--tag` is repeatable, so this is a list and a page must carry ALL of them.
+    tags: v.optional(v.array(v.string())),
     // CLOUD-51 (additive): restrict the find to a single project group.
     group: v.optional(v.string()),
   },
@@ -1807,7 +1838,7 @@ export const find = query({
     const auth = await requireRead(ctx, args.bearer);
     const filters = normalizeFindFilters({
       q: args.q,
-      tag: args.tag,
+      tags: args.tags,
       group: args.group,
     });
     const plan = planFindIndex(filters);

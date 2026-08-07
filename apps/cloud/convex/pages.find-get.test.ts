@@ -46,9 +46,9 @@ function row(over: Partial<PageRowLike>): PageRowLike {
 
 describe("normalizeFindFilters", () => {
   it("trims values and drops blank / whitespace-only ones", () => {
-    expect(normalizeFindFilters({ q: "  status ", tag: "   " })).toEqual({
+    expect(normalizeFindFilters({ q: "  status ", tags: ["   "] })).toEqual({
       q: "status",
-      tag: undefined,
+      tags: undefined,
       group: undefined,
     });
   });
@@ -56,12 +56,24 @@ describe("normalizeFindFilters", () => {
   it("treats missing/null params as absent", () => {
     expect(normalizeFindFilters({})).toEqual({
       q: undefined,
-      tag: undefined,
+      tags: undefined,
       group: undefined,
     });
-    expect(normalizeFindFilters({ q: null, tag: null })).toEqual({
+    expect(normalizeFindFilters({ q: null, tags: null })).toEqual({
       q: undefined,
-      tag: undefined,
+      tags: undefined,
+      group: undefined,
+    });
+    // An empty repeated param (`GET /v1/pages` with no `tag=`) is "no filter",
+    // never "match a page with zero tags".
+    expect(normalizeFindFilters({ tags: [] }).tags).toBeUndefined();
+  });
+
+  it("keeps every repeated tag, trimmed and de-duplicated", () => {
+    // `--tag` is repeatable, so `?tag=ops&tag=+&tag=+prod+&tag=ops` is {ops,prod}.
+    expect(normalizeFindFilters({ tags: ["ops", " ", " prod ", "ops"] })).toEqual({
+      q: undefined,
+      tags: ["ops", "prod"],
       group: undefined,
     });
   });
@@ -80,7 +92,7 @@ describe("planFindIndex — find is index-backed (never a full scan)", () => {
     expect(planFindIndex({ q: "status" })).toEqual({ index: "by_account" });
     // tag membership cannot be served by the whole-array by_tag index, so it
     // rides the account-scoped scan as a residual filter.
-    expect(planFindIndex({ tag: "ops" })).toEqual({ index: "by_account" });
+    expect(planFindIndex({ tags: ["ops"] })).toEqual({ index: "by_account" });
   });
 });
 
@@ -97,12 +109,21 @@ describe("applyResidualFilters — filters no index can serve (q substring, tag 
   });
 
   it("filters by tag membership (not whole-array equality)", () => {
-    const got = applyResidualFilters(rows, { tag: "ops" });
+    const got = applyResidualFilters(rows, { tags: ["ops"] });
     expect(got.map((r) => r._id)).toEqual(["pg_a", "pg_c"]);
   });
 
+  it("ANDs repeated tags: every one must be on the page", () => {
+    // Repeating `--tag` narrows. pg_c is the only row carrying both.
+    expect(
+      applyResidualFilters(rows, { tags: ["ops", "prod"] }).map((r) => r._id),
+    ).toEqual(["pg_c"]);
+    // A tag no page carries yields nothing, rather than falling back to OR.
+    expect(applyResidualFilters(rows, { tags: ["ops", "sales"] })).toEqual([]);
+  });
+
   it("combines q and tag filters", () => {
-    const got = applyResidualFilters(rows, { q: "status", tag: "prod" });
+    const got = applyResidualFilters(rows, { q: "status", tags: ["prod"] });
     expect(got.map((r) => r._id)).toEqual(["pg_c"]);
   });
 
