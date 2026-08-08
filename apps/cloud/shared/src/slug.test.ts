@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   deriveSlug,
+  htmlTitle,
   deriveSubdomain,
   isReservedSubdomain,
   MAX_SLUG_LENGTH,
@@ -130,6 +131,27 @@ describe("CLOUD-SUBDOMAIN — reserved subdomain labels", () => {
   });
 });
 
+describe("mintSubdomainId — entropy source", () => {
+  it("honours an explicit length (the whole-handle case asks for a long one)", () => {
+    expect(mintSubdomainId(10)).toMatch(/^[a-z0-9]{10}$/);
+  });
+
+  it("defaults to WebCrypto, not Math.random", () => {
+    // A minted id can BE the whole URL of an unlisted page, so it must not come
+    // from a source that is recoverable from a few observed outputs.
+    const spy = vi.spyOn(globalThis.crypto, "getRandomValues");
+    const random = vi.spyOn(Math, "random");
+    try {
+      expect(mintSubdomainId()).toMatch(/^[a-z0-9]{6}$/);
+      expect(spy).toHaveBeenCalled();
+      expect(random).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      random.mockRestore();
+    }
+  });
+});
+
 describe("CLOUD-SUBDOMAIN — mintSubdomainId", () => {
   it("produces a lowercase DNS-label-safe id of the requested length", () => {
     const id = mintSubdomainId(6, () => 0.5);
@@ -210,5 +232,51 @@ describe("validateHostname (#156 — bind-domain pre-flight)", () => {
   it("rejects an over-long hostname", () => {
     const long = `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.example.com`;
     expect(validateHostname(long).ok).toBe(false);
+  });
+});
+
+describe("htmlTitle", () => {
+  it("extracts the document title", () => {
+    expect(htmlTitle("<html><head><title>Q3 Revenue Report</title></head></html>")).toBe(
+      "Q3 Revenue Report",
+    );
+  });
+
+  it("is case-insensitive and tolerates attributes on the tag", () => {
+    expect(htmlTitle('<TITLE lang="en">Hello</TITLE>')).toBe("Hello");
+  });
+
+  it("collapses surrounding whitespace and newlines", () => {
+    expect(htmlTitle("<title>\n  Spaced   Out\n</title>")).toBe("Spaced Out");
+  });
+
+  it("drops character references rather than slugifying them into words", () => {
+    // `&amp;` must not become the word "amp" in the derived slug.
+    expect(htmlTitle("<title>R&amp;D Notes</title>")).toBe("R D Notes");
+  });
+
+  it("returns null when there is no title, or it is empty", () => {
+    expect(htmlTitle("<html><body>hi</body></html>")).toBeNull();
+    expect(htmlTitle("<title></title>")).toBeNull();
+    expect(htmlTitle("<title>   </title>")).toBeNull();
+  });
+
+  it("strips markup inside the title rather than slugifying the tags", () => {
+    // `<title>` may not legally hold elements, but real documents ship them —
+    // and `foo-b-bar-b` is the exact markup-in-the-URL bug this guards.
+    expect(htmlTitle("<title>Foo <b>bar</b></title>")).toBe("Foo bar");
+    expect(deriveSlug(htmlTitle("<title>Q3 <em>Draft</em></title>")!)).toEqual({
+      ok: true,
+      value: "q3-draft",
+    });
+  });
+
+  it("takes the first title only", () => {
+    expect(htmlTitle("<title>First</title><svg><title>Icon</title></svg>")).toBe("First");
+  });
+
+  it("feeds deriveSlug a human handle instead of markup", () => {
+    const title = htmlTitle("<!doctype html><html lang=\"en\"><head><title>Action Items Review</title>");
+    expect(deriveSlug(title!)).toEqual({ ok: true, value: "action-items-review" });
   });
 });

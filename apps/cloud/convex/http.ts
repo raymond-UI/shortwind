@@ -96,7 +96,9 @@ const findHandler = httpAction(async (ctx, request) => {
     const pages = await ctx.runQuery(api.pages.find, {
       bearer,
       q: url.searchParams.get("q") ?? undefined,
-      tag: url.searchParams.get("tag") ?? undefined,
+      // `getAll`, not `get`: `--tag` is repeatable and the CLI sends one `tag`
+      // param per flag, so reading only the first silently dropped the rest.
+      tags: url.searchParams.getAll("tag"),
       group: url.searchParams.get("group") ?? undefined,
     });
     return json({ pages }, 200);

@@ -243,7 +243,10 @@ export class ApiError extends Error {
 /** Filters for `find` (all optional; blank/absent ⇒ no filter). */
 export interface FindQuery {
   q?: string | undefined;
-  /** Repeatable tag filter — each becomes a `tag=` query param. */
+  /**
+   * Repeatable tag filter — each becomes a `tag=` query param, and the server
+   * ANDs them: a page must carry every tag listed here to come back.
+   */
   tags?: string[] | undefined;
 }
 

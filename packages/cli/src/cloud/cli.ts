@@ -176,7 +176,7 @@ export function buildCli(onStub: (result: StubResult) => void = reportStub): CAC
   cli
     .command("find", "Locate existing pages (GET /v1/pages?q=&tag=)")
     .option("--q <query>", "Free-text query")
-    .option("--tag <tag>", "Filter by tag (repeatable)")
+    .option("--tag <tag>", "Filter by tag (repeatable; matches pages carrying ALL of them)")
     .option("--json", "Emit machine-readable JSON")
     .action((opts: { q?: string; tag?: string | string[]; json?: boolean }) => {
       onStub(find(opts));
@@ -330,7 +330,7 @@ export function buildRealCli(): CAC {
   cli
     .command("find", "Locate existing pages (GET /v1/pages?q=&tag=)")
     .option("--q <query>", "Free-text query")
-    .option("--tag <tag>", "Filter by tag (repeatable)")
+    .option("--tag <tag>", "Filter by tag (repeatable; matches pages carrying ALL of them)")
     .option("--endpoint <url>", "Cloud API origin")
     .option("--json", "Emit machine-readable JSON")
     .action(
@@ -460,12 +460,12 @@ export function buildRealCli(): CAC {
     });
 
   cli
-    .command("skill", "Emit the cloud SKILL.md (verbs + this account's recipe palette)")
-    .option("--out <file>", "Write the SKILL.md to a file instead of stdout")
+    .command("skill", "Emit the cloud SKILL.md (invocation + verbs; references written with --out)")
+    .option("--out <file>", "Write SKILL.md here, plus its references/ alongside")
     .action((opts: { out?: string }) => {
       const markdown = runSkill(opts);
       if (opts.out) {
-        process.stderr.write(`wrote ${opts.out}\n`);
+        process.stderr.write(`wrote ${opts.out} (+ references/)\n`);
       } else {
         process.stdout.write(markdown + "\n");
       }

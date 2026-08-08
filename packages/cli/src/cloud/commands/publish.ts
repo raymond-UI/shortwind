@@ -9,7 +9,7 @@ import {
   type ResolvedHome,
 } from "../../home.js";
 import { type CandidateRecipe } from "../contract/fingerprint.js";
-import { validateSlug } from "../contract/slug.js";
+import { htmlTitle, validateSlug } from "../contract/slug.js";
 import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
   ApiError,
@@ -124,6 +124,12 @@ export async function assemblePublishPayload(input: {
   lockfile: Lockfile;
   candidates: readonly CandidateRecipe[];
   domain?: string | undefined;
+  /**
+   * Human name for the page, used ONLY to derive a slug when `--domain` is
+   * omitted (see {@link publishTitle}). Sending it keeps the server from having
+   * to name the page itself.
+   */
+  title?: string | undefined;
   tags?: string[] | undefined;
   visibility?: string | undefined;
   idempotencyKey?: string | undefined;
@@ -143,10 +149,24 @@ export async function assemblePublishPayload(input: {
     lockfile: input.lockfile,
     recipes,
     ...(input.domain ? { slug: input.domain } : {}),
+    ...(input.title ? { title: input.title } : {}),
     ...(input.tags && input.tags.length > 0 ? { tags: input.tags } : {}),
     ...(visibility ? { visibility } : {}),
     ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
   };
+}
+
+/**
+ * The human name to send with a publish: the document's `<title>`, else the
+ * file's base name. Only ever used to derive a slug when `--domain` is omitted.
+ *
+ * Both beat the alternative the server would otherwise be left with. Publishing
+ * `action-items-review-round2.html` used to mint
+ * `doctype-html-html-lang-en-data-appearance-dark-head-meta-charse` because the
+ * whole document was the seed; the file name alone would have been right.
+ */
+export function publishTitle(file: string, html: string): string {
+  return htmlTitle(html) ?? path.basename(file).replace(/\.[a-z0-9]+$/i, "");
 }
 
 /**
@@ -324,7 +344,7 @@ export async function runBundle(
  * recipes (family = filename without extension). A missing palette ⇒ no
  * candidates. The `.shortwind-lock.json` and dotfiles are skipped.
  */
-export function readPaletteCandidates(home: ResolvedHome): CandidateRecipe[] {
+function readPaletteCandidates(home: ResolvedHome): CandidateRecipe[] {
   const dir = home.recipesDir;
   if (!existsSync(dir)) return [];
   const out: CandidateRecipe[] = [];
@@ -429,6 +449,59 @@ function toPosix(p: string): string {
 }
 
 /**
+ * The local inputs every publish-shaped flow needs: the lockfile + palette from
+ * the resolved home, and an authenticated api-client for the target origin.
+ *
+ * Identity is machine-global (login writes the GLOBAL home) while the palette
+ * and lockfile come from `home` (a repo-local `recipes/` when present): reading
+ * the token from `home` would falsely fail when publishing from a recipe
+ * project. Shared by publish, `publish --bundle` and update so the three shells
+ * cannot drift on where identity, palette or base URL come from.
+ */
+export interface PublishContext<C extends ApiClient = ApiClient> {
+  lockfile: Lockfile;
+  candidates: CandidateRecipe[];
+  client: C;
+}
+
+/**
+ * `C` carries the CALLER's client type through: `publish --bundle` injects a
+ * {@link BundleCapableClient} and gets one back, so a double missing
+ * `publishBundle` is a type error at the call site rather than a runtime one.
+ * The single cast is on the client this function CONSTRUCTS, where the caller's
+ * `deps` type is the only thing that can vouch for the extra surface.
+ */
+export function loadPublishContext<C extends ApiClient = ApiClient>(deps: {
+  home?: ResolvedHome | undefined;
+  client?: C | undefined;
+  baseUrl?: string | undefined;
+}): PublishContext<C> {
+  const home = deps.home ?? resolveHome();
+  const account = readActiveCloudAccount();
+  if (!account) {
+    throw new Error(
+      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
+    );
+  }
+  const baseUrl = resolveBaseUrl(deps.baseUrl);
+  return {
+    lockfile: readHomeLockfile(home.root),
+    candidates: readPaletteCandidates(home),
+    client:
+      deps.client ??
+      (createApiClient({
+        baseUrl,
+        ...refreshAuthConfig({
+          baseUrl,
+          accessToken: account.token.accessToken,
+          refreshToken: account.token.refreshToken,
+          onTokenRefreshed: (t) => updateAccountToken(account.id, t),
+        }),
+      }) as C),
+  };
+}
+
+/**
  * The `publish --bundle <entry-file>` flow: resolve the home + token, read the
  * entry file's directory as a bundle (entry + siblings), assemble the payload
  * (touched bodies only, shared across the bundle), and POST it to `/v1/bundles`.
@@ -445,38 +518,18 @@ export async function publishBundleFromFile(
 ): Promise<PublishRun> {
   // Validate the slug locally first — fail fast before walking the directory.
   assertValidSlug(opts.domain);
-  const home = deps.home ?? resolveHome();
-  // Identity is machine-global (login writes the global home); the palette/
-  // lockfile come from `home` (local repo `recipes/` if present). Reading the
-  // token from `home` would falsely fail when publishing from a recipe project.
-  const account = readActiveCloudAccount();
-  if (!account) {
-    throw new Error(
-      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
-    );
-  }
+  const { lockfile, candidates, client } = loadPublishContext(deps);
   const { files, entryPath } = readBundleDir(file);
-  const lockfile = readHomeLockfile(home.root);
-  const candidates = readPaletteCandidates(home);
   const payload = await assembleBundlePayload({
     files,
     entryPath,
     lockfile,
     candidates,
     domain: opts.domain,
+    // Only the entry's <title>: with no title the server names the bundle from
+    // the entry PATH, which is already a sane handle (unlike raw markup).
+    title: htmlTitle(files.find((f) => f.path === entryPath)?.html ?? "") ?? undefined,
   });
-  const bundleBaseUrl = resolveBaseUrl(deps.baseUrl);
-  const client =
-    deps.client ??
-    (createApiClient({
-      baseUrl: bundleBaseUrl,
-      ...refreshAuthConfig({
-        baseUrl: bundleBaseUrl,
-        accessToken: account.token.accessToken,
-        refreshToken: account.token.refreshToken,
-        onTokenRefreshed: (t) => updateAccountToken(account.id, t),
-      }),
-    }) as BundleCapableClient);
   return runBundle(client, payload, Boolean(opts.json));
 }
 
@@ -499,39 +552,17 @@ export async function publishFromFile(
   }
   // Validate the slug locally first — fail fast before reading the file/network.
   assertValidSlug(opts.domain);
-  const home = deps.home ?? resolveHome();
-  // Identity is machine-global (login writes the global home); the palette/
-  // lockfile come from `home` (local repo `recipes/` if present). Reading the
-  // token from `home` would falsely fail when publishing from a recipe project.
-  const account = readActiveCloudAccount();
-  if (!account) {
-    throw new Error(
-      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
-    );
-  }
+  const { lockfile, candidates, client } = loadPublishContext(deps);
   const html = readFileSync(file, "utf8");
-  const lockfile = readHomeLockfile(home.root);
-  const candidates = readPaletteCandidates(home);
   const payload = await assemblePublishPayload({
     html,
     lockfile,
     candidates,
     domain: opts.domain,
+    title: publishTitle(file, html),
     tags: toArray(opts.tag),
     visibility: opts.visibility,
     idempotencyKey: opts.idempotencyKey,
   });
-  const publishBaseUrl = resolveBaseUrl(deps.baseUrl);
-  const client =
-    deps.client ??
-    createApiClient({
-      baseUrl: publishBaseUrl,
-      ...refreshAuthConfig({
-        baseUrl: publishBaseUrl,
-        accessToken: account.token.accessToken,
-        refreshToken: account.token.refreshToken,
-        onTokenRefreshed: (t) => updateAccountToken(account.id, t),
-      }),
-    });
   return runPublish(client, payload, Boolean(opts.json));
 }

@@ -3,12 +3,13 @@ import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireWrite } from "./lib/auth_guard.js";
-import { deriveSlug, validateSlug } from "../shared/src/slug.js";
+import { deriveSlug, mintSubdomainId, validateSlug } from "../shared/src/slug.js";
 import { normalizeBundlePath } from "./lib/bundle_path.js";
 import { bundleCurrentKey } from "../shared/src/artifact_keys.js";
 import {
   assembleArtifact,
   lockfileVersions,
+  MINTED_HANDLE_LENGTH,
   runPublish,
   runUpdate,
   type Actor,
@@ -183,7 +184,14 @@ export function bundleArtifactKey(
   return `bundles/${accountId}/${entryPageId}/${normalizeBundlePath(path)}/${expandedHash}.html`;
 }
 
-/** Resolve/validate the bundle's entry slug (account-scoped handle). */
+/**
+ * Resolve/validate the bundle's entry slug (account-scoped handle).
+ *
+ * Only an EXPLICIT slug can fail the publish. A derived one that slugifies to
+ * nothing or lands on a reserved word (an entry titled "Docs" or "API") falls
+ * through to a minted handle, matching the single-page path: a publish is not
+ * worth failing over a name the caller never asked for.
+ */
 function resolveBundleSlug(input: PublishBundleInput): string {
   if (input.slug !== undefined) {
     const r = validateSlug(input.slug);
@@ -192,8 +200,7 @@ function resolveBundleSlug(input: PublishBundleInput): string {
   }
   const seed = input.title ?? input.entryPath.replace(/\.[a-z0-9]+$/i, "");
   const r = deriveSlug(seed);
-  if (!r.ok) throw new Error(`shortwind bundle: ${r.error}`);
-  return r.value;
+  return r.ok ? r.value : `page-${mintSubdomainId(MINTED_HANDLE_LENGTH)}`;
 }
 
 // ===========================================================================

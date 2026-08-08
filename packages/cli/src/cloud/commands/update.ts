@@ -2,22 +2,13 @@ import { readFileSync } from "node:fs";
 import { type StubResult } from "./stub.js";
 import {
   assemblePublishPayload,
-  readPaletteCandidates,
+  loadPublishContext,
   renderPublishResult,
 } from "./publish.js";
-import {
-  resolveHome,
-  readActiveCloudAccount,
-  readHomeLockfile,
-  updateAccountToken,
-  type ResolvedHome,
-} from "../../home.js";
+import { type ResolvedHome } from "../../home.js";
 import type { CandidateRecipe } from "../contract/fingerprint.js";
 import type { Lockfile } from "../contract/lockfile-diff.js";
 import {
-  createApiClient,
-  refreshAuthConfig,
-  resolveBaseUrl,
   type ApiClient,
   type PublishResult,
   type UpdatePayload,
@@ -100,34 +91,14 @@ export async function updateFromFile(
   opts: UpdateOptions,
   deps: { home?: ResolvedHome; client?: ApiClient; baseUrl?: string } = {},
 ): Promise<{ output: string; result: PublishResult }> {
-  const home = deps.home ?? resolveHome();
-  // Identity is machine-global; palette/lockfile come from `home` (see publish).
-  const account = readActiveCloudAccount();
-  if (!account) {
-    throw new Error(
-      "not logged in — run `shortwind cloud login` (no active account in the Shortwind home)",
-    );
-  }
+  // Identity, palette and client all come from the shared publish context.
+  const { lockfile, candidates, client } = loadPublishContext(deps);
   const html = readFileSync(file, "utf8");
-  const lockfile = readHomeLockfile(home.root);
-  const candidates = readPaletteCandidates(home);
   const payload = await assembleUpdatePayload({
     html,
     lockfile,
     candidates,
     ...(opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
   });
-  const updateBaseUrl = resolveBaseUrl(deps.baseUrl);
-  const client =
-    deps.client ??
-    createApiClient({
-      baseUrl: updateBaseUrl,
-      ...refreshAuthConfig({
-        baseUrl: updateBaseUrl,
-        accessToken: account.token.accessToken,
-        refreshToken: account.token.refreshToken,
-        onTokenRefreshed: (t) => updateAccountToken(account.id, t),
-      }),
-    });
   return runUpdate(client, id, payload, Boolean(opts.json));
 }

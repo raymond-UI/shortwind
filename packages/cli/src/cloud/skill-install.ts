@@ -1,11 +1,10 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { globalHomeRoot, homePaths, type HomeEnv } from "../home.js";
-import { loadHomePalette, renderCloudSkill } from "./commands/skill.js";
+import { loadHomePalette, renderCloudSkillFiles, writeSkillFiles } from "./commands/skill.js";
 
 /**
- * Auto-install the cloud SKILL.md into the machine's agent-discovery path
+ * Auto-install the cloud SKILL into the machine's agent-discovery path
  * (PRD §7.3 "works-today" discovery, taken one hop further).
  *
  * `shortwind cloud skill` can *emit* the SKILL, but an agent has to already know
@@ -15,10 +14,10 @@ import { loadHomePalette, renderCloudSkill } from "./commands/skill.js";
  * `init-global` is the missing hop: after one login, any agent on the machine
  * sees `shortwind-cloud` in its skills and knows Cloud exists without being told.
  *
- * The written bytes are the SAME `renderCloudSkill` output as the `skill`
- * command, rendered against the GLOBAL home's palette (not `resolveHome`): the
- * install is machine-global, so a repo-local `recipes/` the login happened to
- * run inside must not leak into the machine-wide skill.
+ * The written bytes are the SAME `renderCloudSkillFiles` output as the `skill`
+ * command — SKILL.md plus its `references/` — rendered against the GLOBAL home's
+ * palette (not `resolveHome`): the install is machine-global, so a repo-local
+ * `recipes/` the login happened to run inside must not leak into it.
  */
 export const CLOUD_SKILL_NAME = "shortwind-cloud";
 
@@ -33,8 +32,9 @@ export function cloudSkillPath(env: HomeEnv): string {
 }
 
 /**
- * Render the cloud SKILL from the active account's global palette and write it
- * to the agent-discovery path. Idempotent: always writes the current bytes.
+ * Render the cloud SKILL from the active account's global palette and write the
+ * whole directory to the agent-discovery path. Idempotent: always writes the
+ * current bytes. Returns the SKILL.md path (what callers report to the user).
  *
  * Discovery is a convenience, never a gate — a login must not fail because
  * `~/.claude` is missing or unwritable. Callers wrap this and treat a thrown
@@ -42,10 +42,8 @@ export function cloudSkillPath(env: HomeEnv): string {
  */
 export function installCloudSkill(env: HomeEnv = process.env as HomeEnv): string {
   const recipesDir = homePaths(globalHomeRoot(env)).recipesDir;
-  const markdown = renderCloudSkill(loadHomePalette(recipesDir));
   const file = cloudSkillPath(env);
-  mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, markdown.endsWith("\n") ? markdown : markdown + "\n");
+  writeSkillFiles(file, renderCloudSkillFiles(loadHomePalette(recipesDir)));
   return file;
 }
 

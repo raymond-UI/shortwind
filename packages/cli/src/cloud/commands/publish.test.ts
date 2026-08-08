@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assemblePublishPayload,
   normalizeVisibility,
+  publishTitle,
   renderConflict,
   renderPublishResult,
   runPublish,
@@ -89,6 +90,43 @@ describe("assemblePublishPayload — carries the full palette", () => {
     expect(payload.slug).toBeUndefined();
     expect(payload.tags).toBeUndefined();
     expect(payload.visibility).toBeUndefined();
+  });
+
+  it("carries the title so the server never has to name the page from markup", async () => {
+    const payload = await assemblePublishPayload({
+      html: "<p/>",
+      lockfile: LOCKFILE,
+      candidates: [],
+      title: "Action Items Review",
+    });
+    expect(payload.title).toBe("Action Items Review");
+  });
+
+  it("omits the title when there is none", async () => {
+    const payload = await assemblePublishPayload({
+      html: "<p/>",
+      lockfile: LOCKFILE,
+      candidates: [],
+    });
+    expect(payload.title).toBeUndefined();
+  });
+});
+
+describe("publishTitle — the name a page gets when --domain is omitted", () => {
+  it("prefers the document's <title>", () => {
+    const html = '<!doctype html><html lang="en"><head><title>Q3 Revenue</title></head></html>';
+    expect(publishTitle("/tmp/mocks/round2.html", html)).toBe("Q3 Revenue");
+  });
+
+  it("falls back to the file name, not the markup", () => {
+    const html = '<!doctype html><html lang="en"><body>no title here</body></html>';
+    expect(publishTitle("/tmp/mocks/action-items-review-round2.html", html)).toBe(
+      "action-items-review-round2",
+    );
+  });
+
+  it("ignores a blank title element", () => {
+    expect(publishTitle("/tmp/report.html", "<title>   </title>")).toBe("report");
   });
 });
 

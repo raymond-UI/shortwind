@@ -348,6 +348,73 @@ describe("runPublish — create", () => {
     const out = await runPublish(input, deps);
     expect(out.ok && out.result.url).toBe("https://my-status-page.shortwind.app");
   });
+
+  it("falls back to the document's <title> when neither slug nor title is given", async () => {
+    const { deps } = makeDeps();
+    const input = await basePublishInput({
+      slug: undefined,
+      title: undefined,
+      html: "<!doctype html><html lang=\"en\"><head><title>Action Items Review</title></head><body>hi</body></html>",
+    });
+    const out = await runPublish(input, deps);
+    expect(out.ok && out.result.url).toBe("https://action-items-review.shortwind.app");
+  });
+
+  it("NEVER derives a slug from raw markup (regression: doctype-html-html-lang-en-...)", async () => {
+    const { deps } = makeDeps();
+    const input = await basePublishInput({
+      slug: undefined,
+      title: undefined,
+      // No <title> anywhere: the old code slugified the document source itself.
+      html: "<!doctype html><html lang=\"en\" data-appearance=\"dark\"><head><meta charset=\"utf-8\"></head><body>hi</body></html>",
+    });
+    const out = await runPublish(input, deps);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    for (const markup of ["doctype", "html-lang", "meta", "charset", "appearance"]) {
+      expect(out.result.url).not.toContain(markup);
+    }
+    // An opaque minted handle instead — short, and obviously machine-made.
+    expect(out.result.url).toMatch(/^https:\/\/page-[a-z0-9]{10}\.shortwind\.app$/);
+  });
+
+  it("mints a handle rather than failing when the title slugifies to nothing", async () => {
+    const { deps } = makeDeps();
+    const input = await basePublishInput({ slug: undefined, title: "!!!" });
+    const out = await runPublish(input, deps);
+    expect(out.ok && out.result.url).toMatch(/^https:\/\/page-[a-z0-9]{10}\.shortwind\.app$/);
+  });
+
+  it("mints a handle rather than failing when the title is a reserved word", async () => {
+    const { deps } = makeDeps();
+    const input = await basePublishInput({ slug: undefined, title: "API" });
+    const out = await runPublish(input, deps);
+    expect(out.ok && out.result.url).toMatch(/^https:\/\/page-[a-z0-9]{10}\.shortwind\.app$/);
+  });
+
+  it("re-mints rather than 409-ing when the first minted handle is taken", async () => {
+    // A caller who never named a page must never get a conflict pointing at
+    // some other page, so the mint is probed for freeness before it is used.
+    const { data, deps } = makeDeps();
+    const taken: string[] = [];
+    const realFind = data.findPageBySlug.bind(data);
+    let first = true;
+    data.findPageBySlug = async (accountId: string, slug: string) => {
+      if (first && slug.startsWith("page-")) {
+        first = false;
+        taken.push(slug);
+        // Report the very first minted candidate as occupied.
+        return { id: "pg_other", accountId, slug, subdomain: slug, currentVersion: 1 };
+      }
+      return realFind(accountId, slug);
+    };
+    const input = await basePublishInput({ slug: undefined, title: "!!!" });
+    const out = await runPublish(input, deps);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.url).toMatch(/^https:\/\/page-[a-z0-9]{10}\.shortwind\.app$/);
+    expect(out.result.url).not.toContain(taken[0]!);
+  });
 });
 
 describe("runPublish — idempotency", () => {
