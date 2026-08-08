@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { cloudSkillPath, installCloudSkill, tryInstallCloudSkill } from "./skill-install.js";
+import {
+  cloudSkillPath,
+  cloudSkillStampPath,
+  installCloudSkill,
+  installedSkillVersion,
+  refreshCloudSkillIfStale,
+  tryInstallCloudSkill,
+} from "./skill-install.js";
 import { globalHomeRoot, homePaths, type HomeEnv } from "../home.js";
 
 let sandbox: string;
@@ -94,6 +101,59 @@ describe("installCloudSkill — agent-discovery drop", () => {
       expect(readRecipesReference()).not.toMatch(/leakonly/);
     } finally {
       process.chdir(cwd);
+    }
+  });
+});
+
+describe("refreshCloudSkillIfStale — self-heal an out-of-date install", () => {
+  it("stamps the writing CLI version beside the SKILL", () => {
+    installCloudSkill(env(), "1.2.3");
+    expect(readFileSync(cloudSkillStampPath(env()), "utf8")).toBe("1.2.3\n");
+    expect(installedSkillVersion(env())).toBe("1.2.3");
+    // A dotfile, so an agent listing the skills dir never sees it as content.
+    expect(path.basename(cloudSkillStampPath(env())).startsWith(".")).toBe(true);
+  });
+
+  it("rewrites the SKILL when an older CLI installed it", () => {
+    installCloudSkill(env(), "0.1.0-beta.25");
+    // Simulate the stale bytes a previous release wrote.
+    writeFileSync(cloudSkillPath(env()), "stale advice\n");
+
+    expect(refreshCloudSkillIfStale(env(), "0.1.0-beta.26")).toBe(cloudSkillPath(env()));
+    expect(readFileSync(cloudSkillPath(env()), "utf8")).toMatch(/shortwind cloud publish/);
+    expect(installedSkillVersion(env())).toBe("0.1.0-beta.26");
+  });
+
+  it("rewrites when the stamp is missing (installed before stamping existed)", () => {
+    installCloudSkill(env(), "0.1.0-beta.25");
+    rmSync(cloudSkillStampPath(env()));
+    expect(refreshCloudSkillIfStale(env(), "0.1.0-beta.25")).toBe(cloudSkillPath(env()));
+  });
+
+  it("does nothing when the installed SKILL is already current", () => {
+    installCloudSkill(env(), "1.2.3");
+    const before = readFileSync(cloudSkillPath(env()), "utf8");
+    writeFileSync(cloudSkillPath(env()), before + "hand edit\n");
+    // Same version ⇒ no write at all, so even a hand edit survives.
+    expect(refreshCloudSkillIfStale(env(), "1.2.3")).toBeNull();
+    expect(readFileSync(cloudSkillPath(env()), "utf8")).toContain("hand edit");
+  });
+
+  it("never installs for a machine that never logged in", () => {
+    // login / init-global are the only commands that put the SKILL on a machine
+    // the first time; a bare `shortwind cloud find` must not create one.
+    expect(refreshCloudSkillIfStale(env(), "1.2.3")).toBeNull();
+    expect(existsSync(cloudSkillPath(env()))).toBe(false);
+  });
+
+  it("returns null instead of throwing when the rewrite fails", () => {
+    const skill = installCloudSkill(env(), "1.2.3");
+    // A read-only SKILL.md: the rewrite hits EACCES mid-flight.
+    chmodSync(skill, 0o400);
+    try {
+      expect(refreshCloudSkillIfStale(env(), "9.9.9")).toBeNull();
+    } finally {
+      chmodSync(skill, 0o600);
     }
   });
 });
