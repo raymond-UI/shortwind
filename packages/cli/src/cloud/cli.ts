@@ -24,6 +24,7 @@ import {
 import { runListDomains } from "./commands/list-domains.js";
 import { runApproveDomain } from "./commands/approve-domain.js";
 import { runSkill } from "./commands/skill.js";
+import { refreshCloudSkillIfStale } from "./skill-install.js";
 import {
   ApiError,
   createApiClient,
@@ -560,6 +561,10 @@ async function stepUpBindScope(endpoint?: string): Promise<StepUpOutcome> {
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {
+  // Self-heal a SKILL an older CLI installed, before the command runs: an agent
+  // reading stale instructions is the failure this guards against, and only a
+  // `cloud` invocation proves the CLI was upgraded. Silent and non-fatal.
+  refreshCloudSkillIfStale();
   const cli = buildRealCli();
   // cac's parse() invokes the matched action but does NOT await it; parse
   // without running, then await the matched command so an async rejection
