@@ -7,7 +7,6 @@ import {
 } from "../device-flow.js";
 import { addAccount, globalHomeRoot, type Account, type HomeEnv } from "../../home.js";
 import { resolveBaseUrl } from "../api-client.js";
-import { tryInstallCloudSkill } from "../skill-install.js";
 import { toArray } from "./stub.js";
 
 /**
@@ -70,12 +69,6 @@ export type LoginResult =
   | {
       ok: true;
       account: Account;
-      /**
-       * Where the cloud SKILL was auto-installed for agent discovery
-       * (`~/.claude/skills/shortwind-cloud/SKILL.md`), or `null` if the
-       * discovery-dir write failed — login still succeeds either way (§7.3).
-       */
-      skillInstalled: string | null;
     }
   | { ok: false; reason: "denied" | "expired" };
 
@@ -142,12 +135,7 @@ export async function login(
   });
   const account = creds.accounts[who.id]!;
 
-  // Drop the cloud SKILL into the machine's agent-discovery path so any agent
-  // learns Cloud exists without being told (§7.3). Non-fatal: a failed write
-  // never fails the login.
-  const skillInstalled = tryInstallCloudSkill(env);
-
-  return { ok: true, account, skillInstalled };
+  return { ok: true, account };
 }
 
 /**
