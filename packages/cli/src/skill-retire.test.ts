@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   cloudSkillDir,
   cloudSkillPath,
@@ -9,15 +18,16 @@ import {
   retireCloudSkill,
   retirementNotice,
 } from "./skill-retire.js";
-import type { HomeEnv } from "../home.js";
+import type { HomeEnv } from "./home.js";
 
 /**
  * Retiring the `~/.claude/skills/shortwind-cloud/` injection (#21).
  *
  * The install these tests used to cover is gone; what is left is a delete that
- * runs before every `shortwind cloud` command, in someone's home directory,
+ * runs before every `shortwind` command, in someone's home directory,
  * unattended. So the interesting cases are all about restraint: what it refuses
- * to touch, and what happens when it cannot.
+ * to touch, and what happens when it cannot — plus, at the bottom, the two
+ * facts that keep the shim alive long enough to finish its job.
  */
 
 let sandbox: string;
@@ -109,7 +119,32 @@ describe("retirementNotice", () => {
     const text = retirementNotice("/home/u/.claude/skills/shortwind-cloud");
     expect(text).toContain("/home/u/.claude/skills/shortwind-cloud");
     expect(text).toContain("https://github.com/raymond-UI/emits-plugin");
-    // The escape hatch: `skill` still prints the SKILL for anyone who wants it.
-    expect(text).toContain("shortwind cloud skill");
+  });
+
+  it("points at nothing that leaves with the cloud namespace", () => {
+    // The notice outlives `shortwind cloud`. Telling someone to recover the
+    // skill with a command that has since been deleted is worse than silence.
+    expect(retirementNotice("/tmp/x")).not.toContain("shortwind cloud");
+  });
+});
+
+/**
+ * The shim can only run while it is reachable, and it is reachable for exactly
+ * as long as two things hold. Both are about a future commit rather than this
+ * one: the cloud namespace is being removed from this CLI, and the obvious way
+ * to do that removes the cleanup with it and strands the directory forever.
+ */
+describe("surviving the removal of the cloud namespace", () => {
+  const DIR = path.dirname(fileURLToPath(import.meta.url));
+  const src = (f: string) => readFileSync(path.join(DIR, f), "utf8");
+
+  it("lives outside cloud/, and pulls nothing out of it", () => {
+    expect(existsSync(path.join(DIR, "skill-retire.ts"))).toBe(true);
+    expect(src("skill-retire.ts")).not.toMatch(/from\s+"\.\/cloud\//);
+  });
+
+  it("is called from the top-level run(), not from a cloud verb", () => {
+    // `cli.ts` survives any amount of cloud deletion; `cloud/cli.ts` does not.
+    expect(src("cli.ts")).toContain("retireCloudSkill");
   });
 });

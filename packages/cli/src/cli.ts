@@ -22,6 +22,7 @@ import { init, cliVersion, type InitOptions, DEFAULT_REGISTRY } from "./init.js"
 import { bench, formatBenchTable } from "./commands/bench.js";
 import { newFamily, NewFamilyError } from "./commands/new.js";
 import { reseal } from "./commands/reseal.js";
+import { retireCloudSkill, retirementNotice } from "./skill-retire.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
 export const DEFAULT_PRESET = "starter";
@@ -52,6 +53,17 @@ export async function resolveInitPreset(
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {
+  // Clean up the SKILL an older CLI wrote into ~/.claude/skills/, before any
+  // command runs (#21). It sits at the top of the *root* entry rather than in
+  // the cloud sub-program that installed it, for two reasons: this is the only
+  // path every user takes (most never type `shortwind cloud`, and the ones who
+  // installed the skill did it once, at login, and never logged in again), and
+  // the cloud namespace is leaving this CLI — a shim living inside it would be
+  // deleted along with it, stranding the directory on every machine that has
+  // one. Idempotent, silent when there is nothing to do, and never throws.
+  const removed = retireCloudSkill();
+  if (removed) process.stderr.write(retirementNotice(removed));
+
   // `shortwind cloud <verb>` is the Shortwind Cloud namespace (login, publish,
   // find, …). It is a cohesive cac sub-program (`./cloud/cli.ts`) graduated out
   // of the former standalone `shortwind-cloud` binary; we delegate the `cloud`
