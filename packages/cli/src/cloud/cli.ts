@@ -24,7 +24,6 @@ import {
 import { runListDomains } from "./commands/list-domains.js";
 import { runApproveDomain } from "./commands/approve-domain.js";
 import { runSkill } from "./commands/skill.js";
-import { retireCloudSkill, retirementNotice } from "./skill-retire.js";
 import {
   ApiError,
   createApiClient,
@@ -551,13 +550,10 @@ async function stepUpBindScope(endpoint?: string): Promise<StepUpOutcome> {
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {
-  // Clean up the SKILL an older CLI installed into ~/.claude/skills/, before
-  // the command runs. This rides the path that used to self-heal that file,
-  // because it is the only one that reaches a machine whose owner will never
-  // log in again. Non-fatal, and it announces itself: removing something from
-  // a home directory silently is worse than having put it there.
-  const removed = retireCloudSkill();
-  if (removed) process.stderr.write(retirementNotice(removed));
+  // The retired-SKILL cleanup used to run here. It moved up to `run()` in
+  // ../cli.ts: this file is scheduled for deletion along with the rest of the
+  // cloud namespace, and a cleanup shim that ships inside the thing it is
+  // cleaning up after gets deleted before it has finished its job.
   const cli = buildRealCli();
   // cac's parse() invokes the matched action but does NOT await it; parse
   // without running, then await the matched command so an async rejection

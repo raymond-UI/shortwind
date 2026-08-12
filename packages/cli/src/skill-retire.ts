@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { HomeEnv } from "../home.js";
+import type { HomeEnv } from "./home.js";
 
 /**
  * Remove the cloud SKILL this CLI used to install into `~/.claude/skills/`.
@@ -17,10 +17,13 @@ import type { HomeEnv } from "../home.js";
  * CLI. So the injection is retired rather than ported, and this module exists
  * only to clean up after it.
  *
- * The removal rides the self-heal path in `cloud/cli.ts`, which already runs on
- * every `shortwind cloud` invocation. That is the only carrier that reaches a
- * machine whose owner will never log in again, which is most of them: nobody
- * logs in twice.
+ * **This module deliberately lives outside `cloud/`, and must stay there.** The
+ * cloud namespace is leaving this CLI, and it would take a cleanup shim living
+ * inside it along on the way out — stranding the directory it was written to
+ * delete on every machine that already has one. So the carrier is `run()` in
+ * `cli.ts`, which cannot be deleted while the CLI exists, and which reaches
+ * every user rather than only the ones who still type `shortwind cloud`. The
+ * guards in `skill-retire.test.ts` fail if either half of that drifts.
  */
 const CLOUD_SKILL_NAME = "shortwind-cloud";
 
@@ -95,13 +98,16 @@ export function retireCloudSkill(env: HomeEnv = process.env as HomeEnv): string 
  * put it there. It names the path so the change is auditable, and points at the
  * replacement so the capability that vanished from their agent's skill list is
  * recoverable rather than merely gone.
+ *
+ * It points at the plugin and nothing else on purpose. An earlier draft also
+ * offered `shortwind cloud skill` as an escape hatch, which is true today and
+ * will not be: this text has to survive the removal of the namespace it was
+ * describing, or the cleanup ends up advertising a command that no longer runs.
  */
 export function retirementNotice(removed: string): string {
   return (
     `removed ${removed}\n` +
     `  The auto-installed skill is retired. Agent support now ships as a ` +
-    `portable plugin: ${REPLACEMENT_URL}\n` +
-    `  \`shortwind cloud skill\` still prints the SKILL if you want to place ` +
-    `one yourself.\n`
+    `portable plugin, installed deliberately: ${REPLACEMENT_URL}\n`
   );
 }
