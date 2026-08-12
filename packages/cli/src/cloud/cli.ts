@@ -24,7 +24,7 @@ import {
 import { runListDomains } from "./commands/list-domains.js";
 import { runApproveDomain } from "./commands/approve-domain.js";
 import { runSkill } from "./commands/skill.js";
-import { refreshCloudSkillIfStale } from "./skill-install.js";
+import { retireCloudSkill, retirementNotice } from "./skill-retire.js";
 import {
   ApiError,
   createApiClient,
@@ -88,11 +88,6 @@ function registerAuthVerbs(cli: CAC): void {
           process.stderr.write(
             `logged in as ${result.account.label} (active account: ${result.account.id})\n`,
           );
-          if (result.skillInstalled) {
-            process.stderr.write(
-              `agents can now discover Cloud — installed skill: ${result.skillInstalled}\n`,
-            );
-          }
         } else {
           process.stderr.write(`login ${result.reason}\n`);
           process.exitCode = 1;
@@ -116,11 +111,6 @@ function registerAuthVerbs(cli: CAC): void {
       process.stderr.write(
         `${result.created ? "created" : "already initialized"} Shortwind home at ${result.home}\n`,
       );
-      if (result.skillInstalled) {
-        process.stderr.write(
-          `agents can now discover Cloud — installed skill: ${result.skillInstalled}\n`,
-        );
-      }
     });
 
   cli
@@ -561,10 +551,13 @@ async function stepUpBindScope(endpoint?: string): Promise<StepUpOutcome> {
 }
 
 export async function run(argv: string[] = process.argv): Promise<void> {
-  // Self-heal a SKILL an older CLI installed, before the command runs: an agent
-  // reading stale instructions is the failure this guards against, and only a
-  // `cloud` invocation proves the CLI was upgraded. Silent and non-fatal.
-  refreshCloudSkillIfStale();
+  // Clean up the SKILL an older CLI installed into ~/.claude/skills/, before
+  // the command runs. This rides the path that used to self-heal that file,
+  // because it is the only one that reaches a machine whose owner will never
+  // log in again. Non-fatal, and it announces itself: removing something from
+  // a home directory silently is worse than having put it there.
+  const removed = retireCloudSkill();
+  if (removed) process.stderr.write(retirementNotice(removed));
   const cli = buildRealCli();
   // cac's parse() invokes the matched action but does NOT await it; parse
   // without running, then await the matched command so an async rejection
