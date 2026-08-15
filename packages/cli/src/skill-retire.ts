@@ -1,7 +1,21 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { HomeEnv } from "./home.js";
+
+/**
+ * The subset of process env this module reads (injected by tests).
+ *
+ * Declared here rather than imported for the same reason the module itself sits
+ * outside any hosting namespace: a cleanup shim must not be deletable as a side
+ * effect of deleting something else. Every other consumer of the module this
+ * type used to come from went out with the hosting client, so importing it
+ * would have left the shim standing on a file whose only remaining caller is
+ * the shim.
+ */
+export interface HomeEnv {
+  HOME?: string | undefined;
+  USERPROFILE?: string | undefined;
+}
 
 /**
  * Remove the cloud SKILL this CLI used to install into `~/.claude/skills/`.

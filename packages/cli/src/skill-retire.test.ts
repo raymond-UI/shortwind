@@ -17,8 +17,8 @@ import {
   cloudSkillStampPath,
   retireCloudSkill,
   retirementNotice,
+  type HomeEnv,
 } from "./skill-retire.js";
-import type { HomeEnv } from "./home.js";
 
 /**
  * Retiring the `~/.claude/skills/shortwind-cloud/` injection (#21).
@@ -41,7 +41,7 @@ afterEach(() => {
 function env(): HomeEnv {
   // HOME drives the ~/.claude/skills target, kept inside the sandbox so nothing
   // touches the developer's real home.
-  return { HOME: sandbox, SHORTWIND_HOME: path.join(sandbox, ".shortwind") };
+  return { HOME: sandbox };
 }
 
 /** Recreate what an older CLI left behind: SKILL.md, references/, the stamp. */
@@ -130,21 +130,34 @@ describe("retirementNotice", () => {
 
 /**
  * The shim can only run while it is reachable, and it is reachable for exactly
- * as long as two things hold. Both are about a future commit rather than this
- * one: the cloud namespace is being removed from this CLI, and the obvious way
- * to do that removes the cleanup with it and strands the directory forever.
+ * as long as two things hold. The cloud namespace has now been removed, so
+ * these guard against the next deletion rather than that one: nothing this
+ * module stands on may be deletable, and the call site may not quietly go.
  */
 describe("surviving the removal of the cloud namespace", () => {
   const DIR = path.dirname(fileURLToPath(import.meta.url));
   const src = (f: string) => readFileSync(path.join(DIR, f), "utf8");
 
-  it("lives outside cloud/, and pulls nothing out of it", () => {
+  it("stands on nothing in this tree", () => {
+    // Stronger than "no import from cloud/", which can no longer fail now that
+    // the directory is gone: the module imports node builtins only, so there is
+    // no file in the repo whose deletion can take it down. `HomeEnv` is
+    // declared inline for exactly this reason.
     expect(existsSync(path.join(DIR, "skill-retire.ts"))).toBe(true);
-    expect(src("skill-retire.ts")).not.toMatch(/from\s+"\.\/cloud\//);
+    const relative = [...src("skill-retire.ts").matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]!);
+    expect(relative.filter((s) => !s.startsWith("node:"))).toEqual([]);
   });
 
   it("is called from the top-level run(), not from a cloud verb", () => {
-    // `cli.ts` survives any amount of cloud deletion; `cloud/cli.ts` does not.
-    expect(src("cli.ts")).toContain("retireCloudSkill");
+    // Asserts the CALL, not the identifier: `cli.ts` names `retireCloudSkill`
+    // in a comment too, so a bare `toContain` stays green if the call is
+    // deleted. `cli.ts` survives any amount of deletion; a cloud verb did not.
+    expect(src("cli.ts")).toMatch(/retireCloudSkill\(\)/);
+  });
+
+  it("carries the AGENTS.md cleanup on the same always-runs path", () => {
+    // The other artifact an older CLI left in someone else's repo. It has the
+    // same one-shot, must-not-be-orphaned shape, so it gets the same carrier.
+    expect(src("cli.ts")).toMatch(/retireCloudGuidance\(/);
   });
 });

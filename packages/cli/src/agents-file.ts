@@ -33,6 +33,85 @@ function dynamicLine(): string {
 // Files coding agents read for project instructions, in preference order.
 const CANDIDATES = ["AGENTS.md", "CLAUDE.md"];
 
+// ---------------------------------------------------------------------------
+// Retiring the hosting pointer we used to write here.
+//
+// Between beta.20 and beta.26 this module appended a line naming
+// `shortwind cloud publish`. Those verbs are gone. Dropping the writer only
+// spares people who never ran those versions: everyone else has the line
+// committed to their repo, where an agent reads it on every task and runs a
+// command that no longer exists. So the line has to come back out.
+//
+// The marker is the published line's own text, which is the proof of
+// authorship: nothing but our writer produced it. A hand-written line quoting
+// the same dead command is removed too, and that is correct — it is equally
+// wrong.
+// ---------------------------------------------------------------------------
+
+const RETIRED_MARKER = "shortwind cloud publish";
+
+/**
+ * Drop every line carrying `marker`, and the blank line the removal would
+ * otherwise strand.
+ *
+ * The old writer used a blank-line separator when the file did not already end
+ * in one, so the retired line can sit alone in its own paragraph. Removing just
+ * the line would leave two consecutive blanks, i.e. our cleanup would be as
+ * visible in the diff as our mistake. Scanning backwards keeps the indices
+ * valid across splices.
+ */
+function stripMarkedLines(text: string, marker: string): { text: string; removed: boolean } {
+  const lines = text.split("\n");
+  let removed = false;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i]!.includes(marker)) continue;
+    removed = true;
+    const orphanedBlank =
+      i > 0 && i < lines.length - 1 && lines[i - 1]!.trim() === "" && lines[i + 1]!.trim() === "";
+    lines.splice(i, orphanedBlank ? 2 : 1);
+  }
+  return { text: lines.join("\n"), removed };
+}
+
+/**
+ * Remove the retired hosting pointer from this project's agent-instructions
+ * files. Returns the files actually rewritten (empty when there was nothing to
+ * do), so the caller can tell the user which of their files changed.
+ *
+ * Runs before every command rather than only on re-init: the people carrying
+ * the line are precisely the ones who already ran `init` and have no reason to
+ * run it again. It creates nothing, rewrites only a file that already contains
+ * the marker, and never throws — this fires in whatever directory the user
+ * happens to be in, and a read-only checkout must not take the CLI down.
+ */
+export async function retireCloudGuidance(cwd: string): Promise<string[]> {
+  const cleaned: string[] = [];
+  for (const name of CANDIDATES) {
+    const file = path.join(cwd, name);
+    try {
+      if (!existsSync(file)) continue;
+      const current = await readFile(file, "utf8");
+      if (!current.includes(RETIRED_MARKER)) continue;
+      const next = stripMarkedLines(current, RETIRED_MARKER);
+      if (!next.removed) continue;
+      await writeFile(file, next.text);
+      cleaned.push(file);
+    } catch {
+      // Unreadable, unwritable, or gone between the check and the read.
+    }
+  }
+  return cleaned;
+}
+
+/** The one-time notice shown when {@link retireCloudGuidance} rewrote a file. */
+export function guidanceRetirementNotice(cleaned: string[]): string {
+  return (
+    `removed a stale hosting instruction from ${cleaned.join(", ")}\n` +
+    `  It named \`shortwind cloud publish\`, a command this CLI no longer has, ` +
+    `and your coding agent would have tried to run it.\n`
+  );
+}
+
 export type AgentsFileAction = "appended" | "created" | "skipped";
 export type AgentsFileResult = {
   path: string | null;

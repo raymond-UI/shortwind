@@ -23,6 +23,7 @@ import { bench, formatBenchTable } from "./commands/bench.js";
 import { newFamily, NewFamilyError } from "./commands/new.js";
 import { reseal } from "./commands/reseal.js";
 import { retireCloudSkill, retirementNotice } from "./skill-retire.js";
+import { guidanceRetirementNotice, retireCloudGuidance } from "./agents-file.js";
 
 const KNOWN_PRESETS = ["starter", "app", "content", "all", "none"];
 export const DEFAULT_PRESET = "starter";
@@ -61,6 +62,13 @@ export async function run(argv: string[] = process.argv): Promise<void> {
   // one. Idempotent, silent when there is nothing to do, and never throws.
   const removed = retireCloudSkill();
   if (removed) process.stderr.write(retirementNotice(removed));
+
+  // Same cleanup, second artifact: the hosting line an older CLI appended to
+  // this project's AGENTS.md / CLAUDE.md. That one is the more durable of the
+  // two — it is committed to the user's git history — so it gets the same
+  // always-runs carrier rather than waiting for a re-init that will never come.
+  const cleaned = await retireCloudGuidance(process.cwd());
+  if (cleaned.length > 0) process.stderr.write(guidanceRetirementNotice(cleaned));
 
   const cli = cac("shortwind");
 
