@@ -27,15 +27,6 @@ const demoExpanded = expand(demoSource, registry, { mode: "html" });
 const sourceTokens = 55;
 const expandedTokens = 93;
 const shrink = Math.round(((expandedTokens - sourceTokens) / expandedTokens) * 100);
-
-// Cloud panel: a plain-HTML file (no @recipe tokens, so the transform leaves it
-// as literal source) shown publishing to a live URL. "Any HTML, recipes or not."
-const fileSnippet = [
-  `<div class="hero">`,
-  `  <h1>Launch</h1>`,
-  `  <p>You're live.</p>`,
-  `</div>`,
-].join("\n");
 ---
 
 <BaseLayout
@@ -65,7 +56,7 @@ const fileSnippet = [
       <span class="text-foreground">{shrink}% fewer tokens</span>.
     </p>
     <div class="sw-rise @row mt-8 flex-wrap justify-center gap-3" style="--d:240ms">
-      <a href="/cloud" class="@btn-primary">Deploy with Cloud →</a>
+      <a href="/docs/install" class="@btn-primary">Get started →</a>
       <a href="/docs" class="@btn-secondary">Read the docs</a>
     </div>
   </div>
@@ -116,60 +107,6 @@ const fileSnippet = [
         />
       </div>
     </section>
-  </div>
-
-  {/* ── Cloud: one file in, a live URL out ─────────────────────────────── */}
-  <div class="@wrapper mt-24 max-w-3xl">
-    <SectionRule label="Cloud" meta="optional" />
-    <div class="mx-auto mt-6 mb-6 max-w-lg text-center">
-      <h2 class="@heading-md font-mono text-balance">Ship the page, not just the CSS.</h2>
-    </div>
-
-    <div class="grid items-center gap-3 text-left sm:grid-cols-[1fr_auto_1fr]">
-      {/* the file you already have */}
-      <div class="sw-panel overflow-hidden rounded-lg border border-border">
-        <div class="@row border-b border-border bg-card px-3 py-2">
-          <span class="h-2 w-2 rounded-full bg-destructive/70"></span>
-          <span class="h-2 w-2 rounded-full bg-muted-foreground/40"></span>
-          <span class="h-2 w-2 rounded-full bg-term/70"></span>
-          <span class="@caption ml-2">page.html</span>
-        </div>
-        <pre class="overflow-x-auto bg-background p-4 font-mono text-[0.7rem] leading-6 text-foreground/75">{fileSnippet}</pre>
-      </div>
-
-      {/* publish */}
-      <div class="flex flex-col items-center justify-center gap-1 py-1 text-muted-foreground">
-        <span class="font-mono text-xl leading-none">
-          <span class="hidden sm:inline">→</span><span class="sm:hidden">↓</span>
-        </span>
-        <span class="@caption">publish</span>
-      </div>
-
-      {/* the live URL, actually rendered */}
-      <div class="sw-panel overflow-hidden rounded-lg border border-border">
-        <div class="@row gap-2 border-b border-border bg-card px-3 py-2">
-          <span class="h-2 w-2 rounded-full bg-destructive/70"></span>
-          <span class="h-2 w-2 rounded-full bg-muted-foreground/40"></span>
-          <span class="h-2 w-2 rounded-full bg-term/70"></span>
-          <span class="@caption ml-1 truncate text-foreground/70">your-page.shortwind.app</span>
-        </div>
-        <div class="bg-background p-4">
-          <div class="@card">
-            <p class="@eyebrow">Launch</p>
-            <h3 class="@heading-sm font-mono">You're live.</h3>
-            <p class="@muted">Served free from the edge.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <p class="@caption mx-auto mt-6 max-w-md text-center">
-      Any HTML, recipes or plain. No repo, no deploy config, page views never billed.
-    </p>
-    <div class="@row mt-5 flex-wrap justify-center gap-3">
-      <a href="/cloud" class="@btn-outline">Start free →</a>
-      <a href="/docs/cloud-quickstart" class="@btn-ghost">Quickstart</a>
-    </div>
   </div>
 
   {/* ── Steps · families · install ─────────────────────────────────────── */}

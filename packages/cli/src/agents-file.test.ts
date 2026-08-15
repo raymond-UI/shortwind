@@ -5,8 +5,7 @@ import path from "node:path";
 import { wireAgentsInstructions } from "./agents-file.js";
 
 // `wireAgentsInstructions` nudges coding agents from the project's
-// agent-instructions file. #171 added a cloud-hosting pointer so the same guide
-// names both the recipe palette AND `shortwind cloud` hosting.
+// agent-instructions file: the recipe palette, and the dynamic-class trap.
 
 let dir: string;
 const SKILL = "skills/shortwind/SKILL.md";
@@ -19,16 +18,23 @@ afterEach(() => {
 });
 
 describe("wireAgentsInstructions", () => {
-  it("creates AGENTS.md with the recipe, dynamic, and cloud-hosting pointers", async () => {
+  it("creates AGENTS.md with the recipe and dynamic-class pointers", async () => {
     const result = await wireAgentsInstructions(dir, path.join(dir, SKILL));
     expect(result.action).toBe("created");
     expect(result.path).toBe(path.join(dir, "AGENTS.md"));
     const body = readFileSync(path.join(dir, "AGENTS.md"), "utf8");
     expect(body).toContain("@recipe");
     expect(body).toContain("expandClassList");
-    // The cloud-hosting capability is named, pointing at the real invocation.
-    expect(body).toContain("shortwind cloud publish");
-    expect(body).toContain("shortwind cloud skill");
+  });
+
+  it("names no retired hosting namespace", async () => {
+    // This file writes into the USER's repo, where the line outlives the CLI
+    // that wrote it and gets read by an agent that will try to run it. The
+    // hosting verbs are gone, so nothing here may name them.
+    await wireAgentsInstructions(dir, path.join(dir, SKILL));
+    const body = readFileSync(path.join(dir, "AGENTS.md"), "utf8");
+    expect(body).not.toContain("shortwind cloud");
+    expect(body).not.toContain("shortwind deploy");
   });
 
   it("is idempotent — a fully-pointed file is left untouched", async () => {
@@ -39,19 +45,18 @@ describe("wireAgentsInstructions", () => {
     expect(readFileSync(path.join(dir, "AGENTS.md"), "utf8")).toBe(first);
   });
 
-  it("appends ONLY the cloud pointer to a file that predates it", async () => {
-    // An AGENTS.md carrying the older two pointers but not the cloud one.
+  it("appends ONLY the missing pointer to a file that predates it", async () => {
+    // An AGENTS.md carrying the older recipe pointer but not the dynamic one.
     const existing =
       `# AGENTS.md\n\n` +
-      `For UI, prefer Shortwind \`@recipe\` class names — full catalog in \`${SKILL}\`.\n` +
-      `Never build a recipe name dynamically … use the \`rc()\`/\`expandClassList\` helper.\n`;
+      `For UI, prefer Shortwind \`@recipe\` class names — full catalog in \`${SKILL}\`.\n`;
     writeFileSync(path.join(dir, "AGENTS.md"), existing);
     const result = await wireAgentsInstructions(dir, path.join(dir, SKILL));
     expect(result.action).toBe("appended");
     const body = readFileSync(path.join(dir, "AGENTS.md"), "utf8");
-    // The pre-existing lines are preserved exactly once, and the cloud line is added.
+    // The pre-existing line is preserved exactly once, and the missing one added.
     expect(body.startsWith(existing)).toBe(true);
-    expect(body).toContain("shortwind cloud publish");
+    expect(body).toContain("expandClassList");
     // Did not duplicate the recipe pointer.
     expect(body.match(/full catalog in/g)?.length).toBe(1);
   });
@@ -62,6 +67,6 @@ describe("wireAgentsInstructions", () => {
     expect(result.action).toBe("appended");
     expect(result.path).toBe(path.join(dir, "CLAUDE.md"));
     expect(existsSync(path.join(dir, "AGENTS.md"))).toBe(false);
-    expect(readFileSync(path.join(dir, "CLAUDE.md"), "utf8")).toContain("shortwind cloud publish");
+    expect(readFileSync(path.join(dir, "CLAUDE.md"), "utf8")).toContain("expandClassList");
   });
 });

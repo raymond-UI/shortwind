@@ -25,9 +25,6 @@ const LAYERS: Record<string, number> = {
   "@shortwind/cli": 3,
   web: 4,
   "@shortwind/eval": 4,
-  // The cloud server (apps/cloud) is a leaf consumer: it depends only on
-  // @shortwind/core (the CLI graduated out to @shortwind/cli). Top layer.
-  "@shortwind/cloud": 4,
 };
 
 function readPkg(dir: string): Pkg | null {

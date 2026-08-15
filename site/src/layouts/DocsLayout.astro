@@ -15,14 +15,12 @@ interface Props {
   description?: string;
   docs: Doc[];
   current: string;
-  product: "core" | "cloud";
   headings: Heading[];
   prev: Doc | null;
   next: Doc | null;
 }
-const { title, description, docs, current, product, headings, prev, next } =
+const { title, description, docs, current, headings, prev, next } =
   Astro.props;
-const isCloud = product === "cloud";
 ---
 
 {/* App shell (like /catalog and /playground): header fixed, nav · article · TOC
@@ -36,9 +34,9 @@ const isCloud = product === "cloud";
 
     {/* article — scrolls independently */}
     <article class="min-h-0 min-w-0 overflow-y-auto">
-      {/* mobile docs nav — the left sidebar (Core/Cloud switcher + page list) is
-          desktop-only, so below `lg` surface the same component as a no-JS
-          disclosure pinned to the top of the article scroll. */}
+      {/* mobile docs nav — the left sidebar (page list) is desktop-only, so
+          below `lg` surface the same component as a no-JS disclosure pinned to
+          the top of the article scroll. */}
       <details class="group border-b border-border lg:hidden">
         <summary class="sticky top-0 z-10 flex cursor-pointer list-none items-center justify-between bg-background/95 px-6 py-3 backdrop-blur [&::-webkit-details-marker]:hidden">
           <span class="flex items-center gap-2 font-mono text-sm">
@@ -56,13 +54,6 @@ const isCloud = product === "cloud";
               <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
             <span class="font-medium">Docs</span>
-            <span class="text-border">/</span>
-            <span class={isCloud ? "text-term" : "text-muted-foreground"}>
-              {isCloud ? "Cloud" : "Core"}
-            </span>
-            {isCloud && (
-              <span class="h-1.5 w-1.5 rounded-full bg-term" aria-hidden="true" />
-            )}
           </span>
           <svg
             class="text-muted-foreground transition-transform group-open:rotate-180"
@@ -86,13 +77,6 @@ const isCloud = product === "cloud";
         <header class="@stack-sm mb-8 border-b border-border pb-6">
           <p class="@eyebrow flex items-center gap-1.5">
             <span>Docs</span>
-            <span class="text-border">/</span>
-            <span class={isCloud ? "text-term" : undefined}>
-              {isCloud ? "Cloud" : "Core"}
-            </span>
-            {isCloud && (
-              <span class="h-1.5 w-1.5 rounded-full bg-term" aria-hidden="true" />
-            )}
           </p>
           <h1 class="@heading-xl">{title}</h1>
           {description && <p class="@lead">{description}</p>}

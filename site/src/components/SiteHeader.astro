@@ -7,9 +7,6 @@ const links = [
   { href: "/docs", label: "docs" },
   { href: "/catalog", label: "catalog" },
   { href: "/playground", label: "playground" },
-  // Cloud is a separate app under /cloud (the dashboard); link it so the
-  // hosting product is discoverable from the marketing site.
-  { href: "/cloud", label: "cloud" },
 ];
 const path = Astro.url.pathname;
 const isActive = (href: string) =>
@@ -27,7 +24,6 @@ const isActive = (href: string) =>
       {
         links.map((l) => (
           <a href={l.href} class={isActive(l.href) ? rc("@nav-link-active") : rc("@nav-link")}>
-            {l.label === "cloud" && <span class="@term mr-1" aria-hidden="true">•</span>}
             {l.label}
           </a>
         ))
