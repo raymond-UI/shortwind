@@ -13,24 +13,9 @@ const MARKER = "skills/shortwind/SKILL.md";
 // Separate marker for the dynamic-classes guidance (#81), so projects whose
 // AGENTS.md predates it still get the new line appended on re-init.
 const DYNAMIC_MARKER = "expandClassList";
-// Marker for the cloud-hosting pointer (#171): the unified `shortwind` binary
-// can host the page an agent just built, so the project agent-guide names that
-// capability where agents already look. Older AGENTS.md files gain it on re-init.
-const CLOUD_MARKER = "shortwind cloud publish";
 
 function line(skillRel: string): string {
   return `For UI, prefer Shortwind \`@recipe\` class names (e.g. \`@card\`, \`@btn-primary\`, \`@row\`) over raw Tailwind where a recipe fits — full catalog in \`${skillRel}\`.`;
-}
-
-// Names the cloud-hosting capability without inlining the whole verb table:
-// agents learn the page they composed can ship to a live URL, and where the
-// full hosting reference lives (`shortwind cloud skill`).
-function cloudLine(): string {
-  return (
-    `To host a page at a live URL, run \`shortwind cloud publish <file.html>\` — ` +
-    `\`shortwind cloud find\` locates existing pages first (the account is the only memory), ` +
-    `and \`shortwind cloud skill\` prints the full hosting verb reference.`
-  );
 }
 
 // Every beta.11 dogfooding agent routed around dynamic recipes with raw
@@ -61,7 +46,6 @@ export async function wireAgentsInstructions(
   const skillRel = path.relative(cwd, skillPath).split(path.sep).join("/");
   const pointer = line(skillRel);
   const dynamic = dynamicLine();
-  const cloud = cloudLine();
 
   // Append to every existing agent-instructions file (idempotently), so the
   // nudge lands wherever the project's agent actually looks. Each line has
@@ -75,7 +59,6 @@ export async function wireAgentsInstructions(
     const missing: string[] = [];
     if (!current.includes(MARKER)) missing.push(pointer);
     if (!current.includes(DYNAMIC_MARKER)) missing.push(dynamic);
-    if (!current.includes(CLOUD_MARKER)) missing.push(cloud);
     if (missing.length === 0) {
       touched ??= { path: file, action: "skipped" };
       continue;
@@ -88,6 +71,6 @@ export async function wireAgentsInstructions(
 
   // None exist — create AGENTS.md (the cross-tool standard).
   const target = path.join(cwd, "AGENTS.md");
-  await writeFile(target, `# AGENTS.md\n\n${pointer}\n${dynamic}\n${cloud}\n`);
+  await writeFile(target, `# AGENTS.md\n\n${pointer}\n${dynamic}\n`);
   return { path: target, action: "created" };
 }

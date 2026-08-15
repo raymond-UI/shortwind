@@ -33,14 +33,3 @@ also wires the plugin into your bundler config; on Next/Astro it prints the
 one-line snippet to paste.
 
 See [install](/docs/install) for the full walkthrough.
-
-## Core or Cloud?
-
-These docs cover two products, split by the switcher at the top of the sidebar:
-
-- **Core** (these pages) is the build-time class layer you install into your own
-  project. It compiles `@recipe` shorthand to plain Tailwind and ships nothing
-  new to the browser.
-- **Cloud** is agent-native hosting: publish an HTML file and get a live URL,
-  with recipes expanded server-side. If you want us to host the output rather
-  than build it yourself, start with [What is Cloud](/docs/cloud).

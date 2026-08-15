@@ -1,27 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  CREDENTIALS_FILENAME,
   HOME_DIRNAME,
   LOCK_FILENAME,
   RECIPES_DIRNAME,
-  addAccount,
   homePaths,
-  loadCredentials,
-  readActiveAccount,
-  readActiveCloudAccount,
   readHomeLockfile,
   resolveHome,
-  saveCredentials,
-  switchAccount,
   writeHomeLockfile,
-  type Credentials,
 } from "./home.js";
 
-// Each test gets its own throwaway sandbox so the credential store and the
-// SHORTWIND_HOME override never leak across cases.
+// Each test gets its own throwaway sandbox so the SHORTWIND_HOME override never
+// leaks across cases.
 let sandbox: string;
 beforeEach(() => {
   sandbox = mkdtempSync(path.join(tmpdir(), "sw-home-"));
@@ -80,185 +72,9 @@ describe("homePaths", () => {
     expect(p.root).toBe(root);
     expect(p.recipesDir).toBe(path.join(root, RECIPES_DIRNAME));
     expect(p.lockfile).toBe(path.join(root, RECIPES_DIRNAME, LOCK_FILENAME));
-    expect(p.credentials).toBe(path.join(root, CREDENTIALS_FILENAME));
   });
 });
 
-describe("credentials store — multi-account", () => {
-  function home() {
-    return path.join(sandbox, ".shortwind");
-  }
-
-  it("returns an empty store when none exists", () => {
-    const creds = loadCredentials(home());
-    expect(creds.active).toBeNull();
-    expect(creds.accounts).toEqual({});
-    expect(readActiveAccount(home())).toBeNull();
-  });
-
-  it("adds an account and makes it active on first login", () => {
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a", tokenType: "bearer" },
-    });
-    const creds = loadCredentials(home());
-    expect(creds.active).toBe("acct_alice");
-    expect(creds.accounts["acct_alice"]?.token.accessToken).toBe("tok_a");
-    expect(readActiveAccount(home())?.id).toBe("acct_alice");
-  });
-
-  it("adding a second account switches active to it (gh-auth-switch semantics)", () => {
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a", tokenType: "bearer" },
-    });
-    addAccount(home(), {
-      id: "acct_bob",
-      label: "bob@example.com",
-      token: { accessToken: "tok_b", tokenType: "bearer" },
-    });
-    const creds = loadCredentials(home());
-    expect(creds.active).toBe("acct_bob");
-    expect(Object.keys(creds.accounts).sort()).toEqual(["acct_alice", "acct_bob"]);
-    expect(readActiveAccount(home())?.id).toBe("acct_bob");
-  });
-
-  it("switchAccount updates only the active pointer, keeping all accounts", () => {
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a", tokenType: "bearer" },
-    });
-    addAccount(home(), {
-      id: "acct_bob",
-      label: "bob@example.com",
-      token: { accessToken: "tok_b", tokenType: "bearer" },
-    });
-    const after = switchAccount(home(), "acct_alice");
-    expect(after.active).toBe("acct_alice");
-    expect(readActiveAccount(home())?.id).toBe("acct_alice");
-    // Bob's token survives the switch.
-    expect(loadCredentials(home()).accounts["acct_bob"]?.token.accessToken).toBe("tok_b");
-  });
-
-  it("re-adding an existing account updates its token in place and re-activates it", () => {
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a1", tokenType: "bearer" },
-    });
-    addAccount(home(), {
-      id: "acct_bob",
-      label: "bob@example.com",
-      token: { accessToken: "tok_b", tokenType: "bearer" },
-    });
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a2", tokenType: "bearer" },
-    });
-    const creds = loadCredentials(home());
-    expect(creds.active).toBe("acct_alice");
-    expect(creds.accounts["acct_alice"]?.token.accessToken).toBe("tok_a2");
-    expect(Object.keys(creds.accounts).length).toBe(2);
-  });
-
-  it("switchAccount on an unknown account id throws (a caller bug)", () => {
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a", tokenType: "bearer" },
-    });
-    expect(() => switchAccount(home(), "acct_ghost")).toThrow();
-  });
-
-  it("persists the credentials file under the home root", () => {
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a", tokenType: "bearer" },
-    });
-    expect(existsSync(homePaths(home()).credentials)).toBe(true);
-    const raw = JSON.parse(readFileSync(homePaths(home()).credentials, "utf8")) as Credentials;
-    expect(raw.active).toBe("acct_alice");
-  });
-
-  it("tolerates a corrupt credentials file by treating it as empty", () => {
-    mkdirSync(home(), { recursive: true });
-    writeFileSync(homePaths(home()).credentials, "{ not json");
-    const creds = loadCredentials(home());
-    expect(creds.active).toBeNull();
-    expect(creds.accounts).toEqual({});
-  });
-
-  // Security hardening (#156): credentials.json holds bearer + refresh tokens,
-  // so it must be owner-only (0600) and live under an owner-only (0700) home.
-  // POSIX mode is unreliable on Windows, so skip there.
-  const itPosix = process.platform === "win32" ? it.skip : it;
-  itPosix("writes credentials 0600 under a 0700 home (owner-only secrets)", () => {
-    addAccount(home(), {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_a", tokenType: "bearer", refreshToken: "ref_a" },
-    });
-    const fileMode = statSync(homePaths(home()).credentials).mode & 0o777;
-    expect(fileMode).toBe(0o600);
-    const dirMode = statSync(home()).mode & 0o777;
-    expect(dirMode).toBe(0o700);
-  });
-
-  itPosix("re-clamps the credentials mode to 0600 on a subsequent save", () => {
-    const target = home();
-    saveCredentials(target, { version: 1, active: null, accounts: {} });
-    // Loosen the file deliberately, then a second save must lock it back down.
-    chmodSync(homePaths(target).credentials, 0o644);
-    saveCredentials(target, { version: 1, active: null, accounts: {} });
-    expect(statSync(homePaths(target).credentials).mode & 0o777).toBe(0o600);
-  });
-});
-
-describe("readActiveCloudAccount — credentials are machine-global", () => {
-  // Regression: the cloud verbs + `shortwind deploy` must use the GLOBAL login
-  // token even when run from inside a local recipe project. Reading the token
-  // from the local `recipes/` home falsely reported "not logged in" in exactly
-  // the projects deploy targets (those WITH recipes/).
-  it("reads the token from the global home even when cwd is a local recipe project", () => {
-    const globalHome = path.join(sandbox, HOME_DIRNAME);
-    addAccount(globalHome, {
-      id: "acct_alice",
-      label: "alice@example.com",
-      token: { accessToken: "tok_global", tokenType: "bearer" },
-    });
-
-    // A repo with its own recipes/ — resolveHome would pick this as a LOCAL home.
-    const repo = path.join(sandbox, "repo");
-    mkdirSync(path.join(repo, RECIPES_DIRNAME), { recursive: true });
-    const env = { HOME: sandbox };
-    expect(resolveHome({ cwd: repo, env }).kind).toBe("local");
-
-    // …but the credential lookup must still find the global account.
-    const account = readActiveCloudAccount(env);
-    expect(account?.id).toBe("acct_alice");
-    expect(account?.token.accessToken).toBe("tok_global");
-  });
-
-  it("returns null when the global home has no active account", () => {
-    expect(readActiveCloudAccount({ HOME: sandbox })).toBeNull();
-  });
-
-  it("honors SHORTWIND_HOME as the credential home", () => {
-    const pinned = path.join(sandbox, "pinned-home");
-    addAccount(pinned, {
-      id: "acct_pin",
-      label: "pin@example.com",
-      token: { accessToken: "tok_pin", tokenType: "bearer" },
-    });
-    const account = readActiveCloudAccount({ HOME: sandbox, SHORTWIND_HOME: pinned });
-    expect(account?.id).toBe("acct_pin");
-  });
-});
 
 describe("readHomeLockfile — corrupt-file handling (#156)", () => {
   function home() {

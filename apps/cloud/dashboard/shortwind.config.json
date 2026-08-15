@@ -1,5 +1,0 @@
-{
-  "registry": "bundled:@shortwind/catalog",
-  "recipesDir": "recipes",
-  "outputPath": "skills/shortwind/SKILL.md"
-}

@@ -17,13 +17,17 @@ import type { HomeEnv } from "./home.js";
  * CLI. So the injection is retired rather than ported, and this module exists
  * only to clean up after it.
  *
- * **This module deliberately lives outside `cloud/`, and must stay there.** The
- * cloud namespace is leaving this CLI, and it would take a cleanup shim living
- * inside it along on the way out — stranding the directory it was written to
- * delete on every machine that already has one. So the carrier is `run()` in
- * `cli.ts`, which cannot be deleted while the CLI exists, and which reaches
- * every user rather than only the ones who still type `shortwind cloud`. The
- * guards in `skill-retire.test.ts` fail if either half of that drifts.
+ * **This module deliberately lives outside any hosting namespace, and must stay
+ * there.** The `cloud` namespace has since been deleted from this CLI, and a
+ * cleanup shim living inside it would have gone out with it — stranding the
+ * directory it was written to delete on every machine that already has one. So
+ * the carrier is `run()` in `cli.ts`, which cannot be deleted while the CLI
+ * exists, and which reaches every user. The guards in `skill-retire.test.ts`
+ * fail if either half of that drifts.
+ *
+ * It therefore has to keep working with no hosting code left in the tree: the
+ * only trace it needs is the on-disk directory name and the marker string it
+ * looks for inside a SKILL.md it wrote.
  */
 const CLOUD_SKILL_NAME = "shortwind-cloud";
 
@@ -100,9 +104,10 @@ export function retireCloudSkill(env: HomeEnv = process.env as HomeEnv): string 
  * recoverable rather than merely gone.
  *
  * It points at the plugin and nothing else on purpose. An earlier draft also
- * offered `shortwind cloud skill` as an escape hatch, which is true today and
- * will not be: this text has to survive the removal of the namespace it was
- * describing, or the cleanup ends up advertising a command that no longer runs.
+ * offered `shortwind cloud skill` as an escape hatch. That namespace has since
+ * been removed from this CLI, which is exactly why the notice never named it:
+ * the cleanup outlives the thing it cleans up, and would otherwise be
+ * advertising a command that no longer runs.
  */
 export function retirementNotice(removed: string): string {
   return (
